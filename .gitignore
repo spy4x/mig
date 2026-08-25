@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+_fresh/
+dist/
+build/
+
+# Local data (runtime mount in production; also .gitkeep'd)
+data/
+!data/.gitkeep
+
+# Local config — never commit real env values
+.env
+.env.local
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*~
+
+# Logs
+*.log
+
+# Deno
+.deno/
+deno_dir/

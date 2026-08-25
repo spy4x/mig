@@ -1,0 +1,37 @@
+{
+  "nodeModulesDir": "manual",
+  "tasks": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "deno serve -A _fresh/server.js",
+    "check": "deno fmt --check . && deno lint . && deno check",
+    "fmt": "deno fmt .",
+    "lint": "deno lint .",
+    "test": "deno test -A",
+    "compile": "deno compile -A --output mig main.ts"
+  },
+  "lint": {
+    "rules": {
+      "tags": ["fresh", "recommended"],
+      "exclude": ["react-no-danger"]
+    }
+  },
+  "exclude": ["**/_fresh/*", "data/*", "!data/.gitkeep"],
+  "imports": {
+    "@/": "./",
+    "@std/dotenv": "jsr:@std/dotenv@^0.1.6",
+    "@std/ulid": "jsr:@std/ulid@^1.0.0",
+    "@std/zod": "jsr:@zod/zod@^4.0.0",
+    "@tailwindcss/vite": "npm:@tailwindcss/vite@^4.1.18",
+    "denomailer": "npm:denomailer@^1.6.4",
+    "fresh": "jsr:@fresh/core@^2.3.3",
+    "preact": "npm:preact@^10.29.1",
+    "@preact/signals": "npm:@preact/signals@^2.9.0"
+  },
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "lib": ["dom", "dom.iterable", "deno.ns", "deno.window"],
+    "strict": true
+  }
+}
