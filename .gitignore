@@ -25,3 +25,4 @@ data/
 # Deno
 .deno/
 deno_dir/
+bin/

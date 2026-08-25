@@ -4,15 +4,7 @@
 .opencode
 .idea
 .vscode
-*.md
-!README.md
-!LICENSE
-Dockerfile
-.dockerignore
-.woodpecker.yml
 data/
 .env
-.env.example
-_fresh/
-node_modules/
-deno.lock
+Dockerfile
+.dockerignore
