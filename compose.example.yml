@@ -1,0 +1,28 @@
+# Example docker-compose for local development or single-host deployment.
+# Copy to compose.yml, fill in env values (or use .env), then `docker compose up -d`.
+
+services:
+  mig:
+    image: ghcr.io/spy4x/mig:latest
+    container_name: mig
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "wget --spider -q http://localhost:8080/health || exit 1",
+      ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.2"

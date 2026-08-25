@@ -5,8 +5,8 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![GitHub](https://img.shields.io/badge/github-spy4x%2Fmig-181717?logo=github)](https://github.com/spy4x/mig)
 
-**mig** (миг — Russian for "moment") is a tiny self-hosted meeting
-scheduler. One owner, one URL, one feature: book a time slot.
+**mig** (миг — Russian for "moment") is a tiny self-hosted meeting scheduler.
+One owner, one URL, one feature: book a time slot.
 
 ```
 ┌──────────┐    ┌──────────┐    ┌──────────┐
@@ -23,43 +23,44 @@ scheduler. One owner, one URL, one feature: book a time slot.
 
 ## Why mig?
 
-Calendly alternatives are heavyweight (cal.com = Next.js + Postgres +
-Redis, CloudMeet = Cloudflare + D1 + OAuth). Mig is a single Deno
-binary that reads its config from env vars and stores bookings in a
-JSON file. No DB, no OAuth, no admin UI.
+Calendly alternatives are heavyweight (cal.com = Next.js + Postgres + Redis,
+CloudMeet = Cloudflare + D1 + OAuth). Mig is a single Deno binary that reads its
+config from env vars and stores bookings in a JSON file. No DB, no OAuth, no
+admin UI.
 
 **Use it if:**
+
 - You want to put a "book a meeting with me" link on your personal site
 - You don't need round-robin, payments, multiple event types, or teams
 - You enjoy owning your data in a file you can `cat`
 
 **Don't use it if:**
+
 - You need a team scheduler, payments, or calendar sync
 - You need to scale to thousands of bookings per day
 
 ## Features
 
-- **One owner, one URL.** No accounts, no login. Owner defined via
-  `HOST_NAME` + `HOST_EMAIL` env vars.
-- **IaaC.** Working hours, blocked dates, slot duration, meeting URL,
-  SMTP credentials — all env vars. No admin UI to configure.
+- **One owner, one URL.** No accounts, no login. Owner defined via `HOST_NAME` +
+  `HOST_EMAIL` env vars.
+- **IaaC.** Working hours, blocked dates, slot duration, meeting URL, SMTP
+  credentials — all env vars. No admin UI to configure.
 - **JSON storage + atomic write.** Bookings live in `data/bookings.json`,
-  written via temp-file-then-rename. Single process; in-memory mutex
-  serialises writes.
-- **Static meeting link.** One `MEETING_URL` (Google Meet, Miratalk,
-  Whereby, etc.) embedded in every confirmation email.
-- **ICS attachment.** Every confirmation includes a `.ics` file so the
-  guest can add the meeting to their calendar in one click.
-- **Cancellation by link.** Both owner and guest get a cancellable
-  link in their email. SHA-256 HMAC of a random token; stateless.
-- **Timezone-aware.** Host's TZ from env. Guest's TZ auto-detected
-  in the browser and rendered in emails alongside host time.
-- **Iframe-ready.** `/embed` route strips chrome for use inside
-  another page.
-- **Dark + light theme.** Tailwind v4, follows OS preference, toggle
-  persists in localStorage.
-- **Modern stack.** Fresh 2 (Preact + JSX), Tailwind v4, single
-  binary via `deno compile`.
+  written via temp-file-then-rename. Single process; in-memory mutex serialises
+  writes.
+- **Static meeting link.** One `MEETING_URL` (Google Meet, Miratalk, Whereby,
+  etc.) embedded in every confirmation email.
+- **ICS attachment.** Every confirmation includes a `.ics` file so the guest can
+  add the meeting to their calendar in one click.
+- **Cancellation by link.** Both owner and guest get a cancellable link in their
+  email. SHA-256 HMAC of a random token; stateless.
+- **Timezone-aware.** Host's TZ from env. Guest's TZ auto-detected in the
+  browser and rendered in emails alongside host time.
+- **Iframe-ready.** `/embed` route strips chrome for use inside another page.
+- **Dark + light theme.** Tailwind v4, follows OS preference, toggle persists in
+  localStorage.
+- **Modern stack.** Fresh 2 (Preact + JSX), Tailwind v4, single binary via
+  `deno compile`.
 
 ## Quick start
 
@@ -119,32 +120,33 @@ See `.env.example` for the full list of env vars.
 
 ## Configuration
 
-| Env var | Required | Default | Description |
-|---|---|---|---|
-| `HOST_NAME` | yes | — | Owner's display name |
-| `HOST_EMAIL` | yes | — | Owner's email (receives booking + cancel notifications) |
-| `HOST_TZ` | yes | — | IANA timezone, e.g. `Europe/Berlin` |
-| `MEETING_URL` | yes | — | Static meeting URL embedded in every confirmation |
-| `WEEKLY_AVAILABILITY` | yes | — | Comma-separated `DAY HH:MM-HH:MM` list, e.g. `MON-FRI 09:00-17:00` (see below) |
-| `SLOT_DURATION_MIN` | yes | — | Slot length in minutes (e.g. 30) |
-| `CANCEL_SECRET` | yes | — | Random 32+ byte secret for HMAC sign/verify |
-| `SMTP_HOST` | yes | — | SMTP server hostname |
-| `SMTP_PORT` | yes | `587` | SMTP port |
-| `SMTP_USER` | yes | — | SMTP username |
-| `SMTP_PASS` | yes | — | SMTP password |
-| `SMTP_FROM` | yes | — | From address (`Name <addr@example.com>`) |
-| `PUBLIC_URL` | yes | — | Absolute URL where mig is reachable (for links in emails) |
-| `MIN_NOTICE_HOURS` | no | `6` | Minimum hours from now until first bookable slot |
-| `BOOKING_HORIZON_DAYS` | no | `60` | Maximum days ahead bookable |
-| `BLOCKED_DATES` | no | — | Blocked dates, see syntax below |
-| `RATE_LIMIT_PER_5MIN` | no | `1` | Max bookings per IP per 5 minutes |
-| `THEME` | no | `auto` | `light`, `dark`, or `auto` (follow OS) |
-| `PORT` | no | `8080` | HTTP listen port |
+| Env var                | Required | Default | Description                                                                    |
+| ---------------------- | -------- | ------- | ------------------------------------------------------------------------------ |
+| `HOST_NAME`            | yes      | —       | Owner's display name                                                           |
+| `HOST_EMAIL`           | yes      | —       | Owner's email (receives booking + cancel notifications)                        |
+| `HOST_TZ`              | yes      | —       | IANA timezone, e.g. `Europe/Berlin`                                            |
+| `MEETING_URL`          | yes      | —       | Static meeting URL embedded in every confirmation                              |
+| `WEEKLY_AVAILABILITY`  | yes      | —       | Comma-separated `DAY HH:MM-HH:MM` list, e.g. `MON-FRI 09:00-17:00` (see below) |
+| `SLOT_DURATION_MIN`    | yes      | —       | Slot length in minutes (e.g. 30)                                               |
+| `CANCEL_SECRET`        | yes      | —       | Random 32+ byte secret for HMAC sign/verify                                    |
+| `SMTP_HOST`            | yes      | —       | SMTP server hostname                                                           |
+| `SMTP_PORT`            | yes      | `587`   | SMTP port                                                                      |
+| `SMTP_USER`            | yes      | —       | SMTP username                                                                  |
+| `SMTP_PASS`            | yes      | —       | SMTP password                                                                  |
+| `SMTP_FROM`            | yes      | —       | From address (`Name <addr@example.com>`)                                       |
+| `PUBLIC_URL`           | yes      | —       | Absolute URL where mig is reachable (for links in emails)                      |
+| `MIN_NOTICE_HOURS`     | no       | `6`     | Minimum hours from now until first bookable slot                               |
+| `BOOKING_HORIZON_DAYS` | no       | `60`    | Maximum days ahead bookable                                                    |
+| `BLOCKED_DATES`        | no       | —       | Blocked dates, see syntax below                                                |
+| `RATE_LIMIT_PER_5MIN`  | no       | `1`     | Max bookings per IP per 5 minutes                                              |
+| `THEME`                | no       | `auto`  | `light`, `dark`, or `auto` (follow OS)                                         |
+| `PORT`                 | no       | `8080`  | HTTP listen port                                                               |
 
 ### `WEEKLY_AVAILABILITY` syntax
 
-Each entry: `DAY HH:MM-HH:MM`. `DAY` is `MON`/`TUE`/`WED`/`THU`/`FRI`/`SAT`/`SUN`.
-A range `MON-FRI` expands to all weekdays. Multiple ranges comma-separated.
+Each entry: `DAY HH:MM-HH:MM`. `DAY` is
+`MON`/`TUE`/`WED`/`THU`/`FRI`/`SAT`/`SUN`. A range `MON-FRI` expands to all
+weekdays. Multiple ranges comma-separated.
 
 ```
 MON-FRI 09:00-17:00          # weekdays, 9-17
@@ -154,8 +156,8 @@ MON-THU 10:00-20:00,FRI 09:00-15:00      # different hours per day
 
 ### `BLOCKED_DATES` syntax
 
-Single dates or ranges. Both `DD.MM.YYYY` and `YYYY-MM-DD` accepted.
-Inclusive on both ends. Comma-separated, whitespace tolerant.
+Single dates or ranges. Both `DD.MM.YYYY` and `YYYY-MM-DD` accepted. Inclusive
+on both ends. Comma-separated, whitespace tolerant.
 
 ```
 2026-12-24,2026-12-25,2026-12-26          # three single dates
@@ -165,8 +167,8 @@ Inclusive on both ends. Comma-separated, whitespace tolerant.
 
 ## Architecture
 
-Single-process Deno app. JSON file + atomic rename is the only
-persistence. SMTP is the only network dependency at runtime.
+Single-process Deno app. JSON file + atomic rename is the only persistence. SMTP
+is the only network dependency at runtime.
 
 ```
 Request → Fresh route → lib/* (pure) → bookings.mutate() (mutex)
@@ -176,9 +178,8 @@ Request → Fresh route → lib/* (pure) → bookings.mutate() (mutex)
                                   denomailer → SMTP → owner + guest
 ```
 
-Mutations are serialised by an `AsyncMutex`. Reads are lock-free
-(memoised in memory; reloaded from disk on cold start and after
-every mutation).
+Mutations are serialised by an `AsyncMutex`. Reads are lock-free (memoised in
+memory; reloaded from disk on cold start and after every mutation).
 
 ## Compile (standalone binary)
 
