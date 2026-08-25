@@ -1,5 +1,5 @@
 # Build stage — deno + nodejs.
-FROM denoland/deno:debian-2.9.5 AS build
+FROM denoland/deno:debian-2.9.0 AS build
 
 WORKDIR /src
 
@@ -38,7 +38,7 @@ RUN deno install --allow-scripts || true
 RUN deno task build
 
 # Runtime — deno:debian + ca-certs for SMTP TLS.
-FROM denoland/deno:debian-2.9.5
+FROM denoland/deno:debian-2.9.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates wget \
@@ -59,4 +59,6 @@ ENV DATA_PATH=/data/bookings.json
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --spider -q http://localhost:${PORT}/health || exit 1
 
-CMD deno serve -A --unstable-temporal --port=${PORT} _fresh/server.js
+# Run via deno serve with the prebuilt bundle. Falls back to deno run
+# main.ts if the bundle path is missing (developer mode).
+CMD deno serve -A --port=${PORT} _fresh/server.js

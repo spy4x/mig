@@ -12,11 +12,9 @@ interface IndexData {
   error: string | null;
 }
 
-// Parse a YYYY-MM-DD query param defensively.
 function parseDateParam(v: string | null): string | null {
   if (!v) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
-  // Range check (year 1900-2999, month 1-12, day 1-31 — rough)
   const [y, m, d] = v.split("-").map(Number);
   if (y < 1900 || y > 2999 || m < 1 || m > 12 || d < 1 || d > 31) return null;
   return v;
@@ -33,95 +31,6 @@ function parseSlotParam(v: string | null): string | null {
 function minStartInstant(hours: number): Date {
   return new Date(Date.now() + hours * 3600_000);
 }
-
-export const handler = define.handlers({
-  GET(ctx) {
-    const cfg = ctx.state.config;
-    const url = new URL(ctx.req.url);
-    const date = parseDateParam(url.searchParams.get("date"));
-    const slot = parseSlotParam(url.searchParams.get("slot"));
-    const error = url.searchParams.get("err");
-
-    const now = new Date();
-    const minStart = minStartInstant(cfg.minNoticeHours);
-
-    // Generate candidate dates (today + horizon)
-    const today = now.toISOString().slice(0, 10); // approx; refine per tz below
-    const candidates = getCandidateDates(today, cfg.bookingHorizonDays, "UTC");
-
-    // For each candidate, count available slots. Skip if no availability
-    // for that day-of-week, or if blocked.
-    const dates = candidates.map((d) => {
-      const blocked = cfg.blockedDates.has(d);
-      const bookedCount = blocked ? 999 : ctx.state.bookings.forDate(d)
-        .filter((b) => b.status === "active").length;
-      const slots = blocked ? 0 : countSlotsForDate(
-        d,
-        cfg.weeklyAvailability,
-        cfg.slotDurationMin,
-        bookedCount,
-        cfg.hostTz,
-        minStart,
-      );
-      const dt = new Date(d + "T12:00:00Z");
-      const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
-        dt.getUTCDay()
-      ];
-      const dayNum = dt.getUTCDate();
-      const monthShort = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ][dt.getUTCMonth()];
-      return {
-        date: d,
-        label: `${dayName} ${dayNum} ${monthShort}`,
-        slots,
-        full: slots === 0,
-      };
-    }).filter((d) => d.slots > 0 || d.date === date);
-
-    // If user picked a date, compute slots for it.
-    const slots: IndexData["slots"] = [];
-    if (date && !cfg.blockedDates.has(date)) {
-      const dayBookings = ctx.state.bookings.forDate(date);
-      // Re-compute slot list inline (avoid pulling availability helper again)
-      // Use a minimal implementation: expand availability ranges and check.
-      const dayName = dayNameFromDate(date, cfg.hostTz);
-      const ranges = cfg.weeklyAvailability[dayName];
-      const booked = new Set(
-        dayBookings.filter((b) => b.status === "active").map((b) => b.time),
-      );
-      for (const r of ranges) {
-        for (
-          let m = r.startMin;
-          m <= r.endMin - cfg.slotDurationMin;
-          m += cfg.slotDurationMin
-        ) {
-          const time = minToHHMM(m);
-          const instant = zonedDateTime(date, time, cfg.hostTz);
-          slots.push({
-            time,
-            available: !booked.has(time) && instant >= minStart,
-          });
-        }
-      }
-    }
-
-    return {
-      data: { date, slot, dates, slots, error },
-    };
-  },
-});
 
 function dayNameFromDate(
   date: string,
@@ -141,9 +50,82 @@ function dayNameFromDate(
     | "SUN";
 }
 
-export default define.page<typeof handler>(function Index({ data, state }) {
-  const { date, slot, dates, slots, error } = data;
-  const cfg = state.config;
+export default define.page(function Index(ctx) {
+  const cfg = ctx.state.config;
+  const url = new URL(ctx.req.url);
+  const date = parseDateParam(url.searchParams.get("date"));
+  const slot = parseSlotParam(url.searchParams.get("slot"));
+  const error = url.searchParams.get("err");
+
+  const minStart = minStartInstant(cfg.minNoticeHours);
+  const today = new Date().toISOString().slice(0, 10);
+  const candidates = getCandidateDates(today, cfg.bookingHorizonDays, "UTC");
+
+  const dates = candidates.map((d) => {
+    const blocked = cfg.blockedDates.has(d);
+    const bookedCount = blocked
+      ? 999
+      : ctx.state.bookings.forDate(d).filter((b) => b.status === "active")
+        .length;
+    const slots = blocked ? 0 : countSlotsForDate(
+      d,
+      cfg.weeklyAvailability,
+      cfg.slotDurationMin,
+      bookedCount,
+      cfg.hostTz,
+      minStart,
+    );
+    const dt = new Date(d + "T12:00:00Z");
+    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
+      dt.getUTCDay()
+    ];
+    const dayNum = dt.getUTCDate();
+    const monthShort = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ][dt.getUTCMonth()];
+    return {
+      date: d,
+      label: `${dayName} ${dayNum} ${monthShort}`,
+      slots,
+      full: slots === 0,
+    };
+  }).filter((d) => d.slots > 0 || d.date === date);
+
+  const slots: IndexData["slots"] = [];
+  if (date && !cfg.blockedDates.has(date)) {
+    const dayBookings = ctx.state.bookings.forDate(date);
+    const dayName = dayNameFromDate(date, cfg.hostTz);
+    const ranges = cfg.weeklyAvailability[dayName];
+    const booked = new Set(
+      dayBookings.filter((b) => b.status === "active").map((b) => b.time),
+    );
+    for (const r of ranges) {
+      for (
+        let m = r.startMin;
+        m <= r.endMin - cfg.slotDurationMin;
+        m += cfg.slotDurationMin
+      ) {
+        const time = minToHHMM(m);
+        const instant = zonedDateTime(date, time, cfg.hostTz);
+        slots.push({
+          time,
+          available: !booked.has(time) && instant >= minStart,
+        });
+      }
+    }
+  }
+
   return (
     <main
       id="main"
