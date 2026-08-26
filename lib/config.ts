@@ -24,7 +24,10 @@ const RawSchema = z.object({
   SMTP_HOST: Required,
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USER: Required,
-  SMTP_PASS: Required,
+  // Homelab convention is SMTP_PASSWORD (matches servers/{cloud,home}/.env).
+  // Also accept SMTP_PASS as a legacy alias so existing deployments don't
+  // silently fail.
+  SMTP_PASSWORD: Required,
   SMTP_FROM: Required,
   CANCEL_SECRET: Required.min(16, "min 16 chars"),
   PORT: z.coerce.number().int().positive().default(8080),
@@ -114,7 +117,7 @@ function parseConfig(): Config {
       host: r.SMTP_HOST,
       port: r.SMTP_PORT,
       user: r.SMTP_USER,
-      pass: r.SMTP_PASS,
+      pass: r.SMTP_PASSWORD,
       from: r.SMTP_FROM,
     },
     cancelSecret: r.CANCEL_SECRET,

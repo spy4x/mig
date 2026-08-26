@@ -107,12 +107,53 @@ export const handler = define.handlers({
       );
     }
 
-    // Atomic create
-    let tokenRaw = "";
-    let bookingId = "";
+    // Transactional booking flow: email first, then persist. If the
+    // email send fails, the booking is NOT created — we don't want a
+    // booking record without a corresponding email because the cancel
+    // link in the email is the only out-of-band cancellation path
+    // the guest has. If the persist fails after the email went out,
+    // we have a partial state (the guest has the email but the row
+    // isn't on disk) — log loudly and surface a real error to the
+    // user so they can contact the host directly.
+    const { raw: tokenRaw, hash: tokenHash } = await newCancelToken(
+      cfg.cancelSecret,
+    );
+    const bookingId = (await import("../../lib/tokens.ts"))
+      .generateBookingId();
+    const booking = {
+      id: bookingId,
+      createdAt: new Date().toISOString(),
+      date: input.date,
+      time: input.slot,
+      hostTz: cfg.hostTz,
+      guestName: input.name.trim(),
+      guestEmail: input.email.trim().toLowerCase(),
+      notes: input.notes.trim() || undefined,
+      cancelTokenHash: tokenHash,
+      status: "active" as const,
+    };
+
+    // Phase 1: send the email first.
+    try {
+      const cancelUrl = new URL(
+        `/cancel?id=${bookingId}&token=${tokenRaw}`,
+        cfg.publicUrl,
+      ).toString();
+      await sendBookingEmails(cfg, booking, cancelUrl);
+    } catch (e) {
+      console.error("mig: email send failed; booking NOT created:", e);
+      return errRedirect(
+        cfg,
+        "We couldn't send your confirmation email, so the booking was not created. Please try again in a moment.",
+        input.date,
+      );
+    }
+
+    // Phase 2: persist under the mutex. Re-check the conflict because
+    // a concurrent request could have taken the slot in the few
+    // milliseconds between Phase 1 and Phase 2.
     try {
       const result = await ctx.state.bookings.mutate(async (draft) => {
-        // Final conflict check under mutex
         const conflict = draft.find(
           (b) =>
             b.status === "active" &&
@@ -122,65 +163,34 @@ export const handler = define.handlers({
         if (conflict) {
           return { ok: false as const };
         }
-        const { raw, hash } = await newCancelToken(cfg.cancelSecret);
-        tokenRaw = raw;
-        const now = new Date().toISOString();
-        const id = (await import("../../lib/tokens.ts")).generateBookingId();
-        bookingId = id;
-        draft.push({
-          id,
-          createdAt: now,
-          date: input.date,
-          time: input.slot,
-          hostTz: cfg.hostTz,
-          guestName: input.name.trim(),
-          guestEmail: input.email.trim().toLowerCase(),
-          notes: input.notes.trim() || undefined,
-          cancelTokenHash: hash,
-          status: "active",
-        });
+        draft.push(booking);
         return { ok: true as const };
       });
       if (!result.ok) {
+        // Someone else booked the slot between our email send and our
+        // persist. The email we already sent is now stale. Fail
+        // loudly so the host can reach out and reschedule.
+        console.error(
+          "mig: slot taken after email sent; booking=" + bookingId,
+        );
         return errRedirect(
           cfg,
-          "That time was just booked. Please pick another.",
+          "That time was just booked by someone else. The confirmation email you received is no longer valid — please pick another time.",
           input.date,
         );
       }
     } catch (e) {
-      console.error("mig: booking create failed:", e);
+      // Persist failed after the email already went out. The guest
+      // has a confirmation but no cancel link will work. Log loudly
+      // so the host can manually add the booking or reach out.
+      console.error(
+        "mig: persist FAILED after email sent; booking=" + bookingId,
+        e,
+      );
       return errRedirect(
         cfg,
-        "Could not save the booking. Please try again.",
+        "Your confirmation was sent, but we couldn't save the booking on our end. Please contact the host directly to confirm.",
         input.date,
-      );
-    }
-
-    // Send emails (fail-closed: if SMTP fails, the booking remains but we
-    // still try to surface a useful error to the user).
-    try {
-      const cancelUrl = new URL(
-        `/cancel?id=${bookingId}&token=${tokenRaw}`,
-        cfg.publicUrl,
-      ).toString();
-      const booking = ctx.state.bookings.get(bookingId);
-      if (!booking) throw new Error("booking disappeared after create");
-      await sendBookingEmails(cfg, booking, cancelUrl);
-    } catch (e) {
-      // Booking is persisted (fail-closed) but the confirmation email
-      // didn't go out. Land on /confirmed anyway so the user can see
-      // the cancel link — the only path that doesn't depend on email
-      // working. The page detects `email_failed=1` and shows the
-      // owning-the-failure copy instead of "is on its way". See
-      // PR #1 review notes (marketing-seo + psychologist subagents).
-      console.error("mig: email send failed:", e);
-      return Response.redirect(
-        new URL(
-          `/confirmed?id=${bookingId}&token=${tokenRaw}&email_failed=1`,
-          cfg.publicUrl,
-        ).toString(),
-        303,
       );
     }
 

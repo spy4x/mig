@@ -80,7 +80,7 @@ docker run -d --name mig \
   -e SMTP_HOST=smtp.example.com \
   -e SMTP_PORT=587 \
   -e SMTP_USER=jane@example.com \
-  -e SMTP_PASS=<REDACTED:SMTP_PASS> \
+  -e SMTP_PASSWORD=<REDACTED:SMTP_PASSWORD> \
   -e SMTP_FROM="Bookings <book@example.com>" \
   -e CANCEL_SECRET=$(openssl rand -base64 32) \
   -e PUBLIC_URL=https://meet.example.com \
@@ -110,7 +110,7 @@ services:
       SMTP_HOST: "smtp.example.com"
       SMTP_PORT: "587"
       SMTP_USER: "jane@example.com"
-      SMTP_PASS: "<REDACTED:SMTP_PASS>"
+      SMTP_PASSWORD: "<REDACTED:SMTP_PASSWORD>"
       SMTP_FROM: "Bookings <book@example.com>"
       CANCEL_SECRET: "<REDACTED:CANCEL_SECRET>"
       PUBLIC_URL: "https://meet.example.com"
@@ -132,7 +132,7 @@ See `.env.example` for the full list of env vars.
 | `SMTP_HOST`            | yes      | —       | SMTP server hostname                                                           |
 | `SMTP_PORT`            | yes      | `587`   | SMTP port                                                                      |
 | `SMTP_USER`            | yes      | —       | SMTP username                                                                  |
-| `SMTP_PASS`            | yes      | —       | SMTP password                                                                  |
+| `SMTP_PASSWORD`        | yes      | —       | SMTP password. Wrap in single quotes if it contains shell-special characters. |
 | `SMTP_FROM`            | yes      | —       | From address (`Name <addr@example.com>`)                                       |
 | `PUBLIC_URL`           | yes      | —       | Absolute URL where mig is reachable (for links in emails)                      |
 | `MIN_NOTICE_HOURS`     | no       | `6`     | Minimum hours from now until first bookable slot                               |

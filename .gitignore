@@ -27,3 +27,4 @@ data/
 deno_dir/
 bin/
 _fresh.old/
+_fresh.bak/

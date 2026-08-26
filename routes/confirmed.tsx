@@ -3,7 +3,7 @@ import { verifyCancelToken } from "../lib/tokens.ts";
 
 interface ConfirmedData {
   state: "ok" | "missing" | "invalid" | "expired";
-  emailFailed: boolean;
+  mode: "booked" | "cancelled";
   booking:
     | {
       id: string;
@@ -23,13 +23,13 @@ export const handler = define.handlers({
     const url = new URL(ctx.req.url);
     const id = url.searchParams.get("id") ?? "";
     const token = url.searchParams.get("token") ?? "";
-    const emailFailed = url.searchParams.get("email_failed") === "1";
+    const wasCancelled = url.searchParams.get("cancelled") === "1";
 
     if (!id || !token) {
       return {
         data: {
           state: "missing",
-          emailFailed: false,
+          mode: "booked",
           booking: null,
         } satisfies ConfirmedData,
       };
@@ -40,7 +40,7 @@ export const handler = define.handlers({
       return {
         data: {
           state: "expired",
-          emailFailed: false,
+          mode: "booked",
           booking: null,
         } satisfies ConfirmedData,
       };
@@ -55,16 +55,25 @@ export const handler = define.handlers({
       return {
         data: {
           state: "invalid",
-          emailFailed: false,
+          mode: "booked",
           booking: null,
         } satisfies ConfirmedData,
       };
     }
 
+    // ?cancelled=1 → cancellation success page. Only show it if the
+    // booking is actually cancelled (defensive — /api/cancel only
+    // redirects here when the cancel succeeded). If the user lands
+    // here with ?cancelled=1 on a still-active booking (e.g. they
+    // bookmarked this URL and came back), fall back to booked mode.
+    const mode = wasCancelled && booking.status === "cancelled"
+      ? "cancelled"
+      : "booked";
+
     return {
       data: {
         state: "ok",
-        emailFailed,
+        mode,
         booking: {
           id: booking.id,
           date: booking.date,
@@ -141,6 +150,46 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
     `${dayName}, ${dt.getUTCDate()} ${monthName} ${dt.getUTCFullYear()}, ${b.time}`;
   const tzLine = b.hostTz;
 
+  if (data.mode === "cancelled") {
+    return (
+      <main class="min-h-screen flex items-center justify-center p-6">
+        <div class="max-w-md w-full text-center">
+          <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-700/50 mb-4">
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#94a3b8"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M5 12h14" />
+            </svg>
+          </div>
+          <h1 class="text-3xl font-semibold text-slate-100 mb-2">Cancelled</h1>
+          <p class="text-slate-300">
+            {when} <span class="text-slate-500">({tzLine})</span>
+          </p>
+          <p class="text-slate-500 text-sm mt-2">
+            The booking has been cancelled. Both you and {cfg.hostName}{" "}
+            have been notified.
+          </p>
+
+          <div class="text-center mt-8">
+            <a
+              href="/"
+              class="text-orange-500 hover:text-orange-400 text-sm font-medium"
+            >
+              ← Book another time
+            </a>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main class="min-h-screen flex items-center justify-center p-6">
       <div class="max-w-md w-full">
@@ -164,19 +213,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
             {when} <span class="text-slate-500">({tzLine})</span>
           </p>
           <p class="text-slate-500 text-sm mt-2">
-            {data.emailFailed
-              ? (
-                <>
-                  The email to {b.guestEmail}{" "}
-                  didn't go out — that's on our end. Your host has the booking
-                  either way.
-                </>
-              )
-              : (
-                <>
-                  A confirmation email is on its way to {b.guestEmail}.
-                </>
-              )}
+            A confirmation email is on its way to {b.guestEmail}.
           </p>
         </div>
 
