@@ -61,14 +61,13 @@ export const handler = define.handlers({
       };
     }
 
-    // ?cancelled=1 → cancellation success page. Only show it if the
-    // booking is actually cancelled (defensive — /api/cancel only
-    // redirects here when the cancel succeeded). If the user lands
-    // here with ?cancelled=1 on a still-active booking (e.g. they
-    // bookmarked this URL and came back), fall back to booked mode.
-    const mode = wasCancelled && booking.status === "cancelled"
-      ? "cancelled"
-      : "booked";
+    // ?cancelled=1 → cancellation success page. The actual source of
+    // truth is the booking status: a cancelled booking should always
+    // show the cancelled view, whether the user landed here via
+    // /api/cancel's redirect (with ?cancelled=1) or via a bookmark
+    // (without). A booked URL pointing at a now-cancelled booking
+    // shouldn't lie and show "Booked!" again.
+    const mode = booking.status === "cancelled" ? "cancelled" : "booked";
 
     return {
       data: {
