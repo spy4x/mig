@@ -1,6 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#0f172a" />
-  <text x="16" y="22" text-anchor="middle"
-    font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="20"
-    font-weight="600" fill="#f97316">m</text>
+  <!-- mig favicon — a stylized "m" with a clock-hand slash. Warm orange
+       wordmark on a soft dark ground; the slash reads as both the
+       letterform's middle stroke and a minute hand sweeping. -->
+  <rect width="32" height="32" rx="8" fill="#0a0a0b" />
+  <g fill="none" stroke="#fb923c" stroke-width="2.4" stroke-linecap="round"
+    stroke-linejoin="round">
+    <!-- left stroke of the m -->
+    <path d="M7 22 L7 13" />
+    <!-- middle V of the m — shortens into a clock hand -->
+    <path d="M7 13 L11 17" />
+    <path d="M11 17 L11 22" />
+    <!-- right stroke of the m, rotated like a minute hand -->
+    <path d="M11 17 L25 11" />
+  </g>
 </svg>

@@ -163,7 +163,7 @@ export const handler = define.handlers({
     // a concurrent request could have taken the slot in the few
     // milliseconds between Phase 1 and Phase 2.
     try {
-      const result = await ctx.state.bookings.mutate(async (draft) => {
+      const result = await ctx.state.bookings.mutate((draft) => {
         const conflict = draft.find(
           (b) =>
             b.status === "active" &&

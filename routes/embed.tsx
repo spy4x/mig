@@ -1,18 +1,11 @@
 import { define } from "../lib/utils.ts";
-import { BookingPicker } from "../components/BookingPicker.tsx";
+import { Picker } from "../components/Picker.tsx";
 import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
-import { minToHHMM, zonedDateTime } from "../lib/tz.ts";
+import { isoDateInTz, minToHHMM, zonedDateTime } from "../lib/tz.ts";
 
 interface DateCell {
   date: string;
-  dayShort: string;
-  dayNum: number;
-  monthShort: string;
-  monthName: string;
-  year: number;
-  monthIdx: number;
   slots: number;
-  full: boolean;
 }
 
 interface EmbedData {
@@ -21,16 +14,29 @@ interface EmbedData {
   dates: DateCell[];
   selectedDateLabel: string | null;
   slots: Array<{ time: string; available: boolean }>;
+  monthAnchor: string;
 }
 
 function parseDateParam(v: string | null): string | null {
-  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  if (!v) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
   return v;
 }
 
 function parseSlotParam(v: string | null): string | null {
-  if (!v || !/^\d{2}:\d{2}$/.test(v)) return null;
+  if (!v) return null;
+  if (!/^\d{2}:\d{2}$/.test(v)) return null;
   return v;
+}
+
+function parseMonthParam(v: string | null): string | null {
+  if (!v) return null;
+  const m = v.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+  if (!m) return null;
+  const yyyy = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  if (yyyy < 1900 || yyyy > 2999 || mm < 1 || mm > 12) return null;
+  return `${m[1]}-${m[2]}-01`;
 }
 
 function minStartInstant(hours: number): Date {
@@ -55,60 +61,34 @@ function dayNameFromDate(
     | "SUN";
 }
 
-const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTH_SHORT = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-const MONTH_NAME = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-const DAY_NAME = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-
 export const handler = define.handlers({
   GET(ctx) {
     const cfg = ctx.state.config;
     const url = new URL(ctx.req.url);
     const date = parseDateParam(url.searchParams.get("date"));
     const slot = parseSlotParam(url.searchParams.get("slot"));
+    const monthParam = parseMonthParam(url.searchParams.get("month"));
 
     const minStart = minStartInstant(cfg.minNoticeHours);
-    const today = new Date().toISOString().slice(0, 10);
-    const candidates = getCandidateDates(today, cfg.bookingHorizonDays, "UTC");
+    const today = isoDateInTz(new Date(), cfg.hostTz);
+    const candidates = getCandidateDates(
+      today,
+      cfg.bookingHorizonDays,
+      cfg.hostTz,
+    );
 
-    const dates = candidates.map((d) => {
+    const monthAnchor = monthParam
+      ? monthParam
+      : date
+      ? date.slice(0, 8) + "01"
+      : today.slice(0, 8) + "01";
+
+    const dates: DateCell[] = candidates.map((d) => {
       const blocked = cfg.blockedDates.has(d);
-      const bookedCount = blocked ? 999 : ctx.state.bookings.forDate(d)
-        .filter((b) => b.status === "active").length;
+      const bookedCount = blocked
+        ? 999
+        : ctx.state.bookings.forDate(d).filter((b) => b.status === "active")
+          .length;
       const slots = blocked ? 0 : countSlotsForDate(
         d,
         cfg.weeklyAvailability,
@@ -117,29 +97,19 @@ export const handler = define.handlers({
         cfg.hostTz,
         minStart,
       );
-      const dt = new Date(d + "T12:00:00Z");
-      const dayShort = DAY_SHORT[dt.getUTCDay()];
-      const dayNum = dt.getUTCDate();
-      const monthIdx = dt.getUTCMonth();
-      return {
-        date: d,
-        dayShort,
-        dayNum,
-        monthShort: MONTH_SHORT[monthIdx],
-        monthName: MONTH_NAME[monthIdx],
-        year: dt.getUTCFullYear(),
-        monthIdx,
-        slots,
-        full: slots === 0,
-      };
-    }).filter((d) => d.slots > 0 || d.date === date);
+      return { date: d, slots };
+    });
 
     let selectedDateLabel: string | null = null;
     if (date) {
-      const dt = new Date(date + "T12:00:00Z");
-      selectedDateLabel = `${DAY_NAME[dt.getUTCDay()]}, ${dt.getUTCDate()} ${
-        MONTH_NAME[dt.getUTCMonth()]
-      } ${dt.getUTCFullYear()}`;
+      const dt = zonedDateTime(date, "12:00", cfg.hostTz);
+      selectedDateLabel = new Intl.DateTimeFormat("en-GB", {
+        timeZone: cfg.hostTz,
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }).format(dt);
     }
 
     const slots: EmbedData["slots"] = [];
@@ -166,26 +136,51 @@ export const handler = define.handlers({
       }
     }
 
-    return { data: { date, slot, dates, selectedDateLabel, slots } };
+    return {
+      data: { date, slot, dates, selectedDateLabel, slots, monthAnchor },
+    };
   },
 });
 
+/*
+  Embed variant — used inside an <iframe> on someone else's site.
+
+  Differences from /:
+    - No header chrome, no footer, no theme toggle (parent page owns
+      the theme; the iframe inherits its color-scheme automatically).
+    - Tighter padding — embedders get a smaller drop-in.
+    - Same booking flow, same URL contract.
+
+  Auto-sizing: the parent page should set `style="width:100%;max-width:36rem"`
+  on the iframe and listen to postMessage if they want dynamic height.
+*/
 export default define.page<typeof handler>(function Embed({ data, state }) {
-  const { date, slot, dates, selectedDateLabel, slots } = data;
+  const { date, slot, dates, selectedDateLabel, slots, monthAnchor } = data;
   const cfg = state.config;
+
   return (
-    <main class="min-h-screen p-3 sm:p-4">
-      <h1 class="text-lg font-semibold text-slate-100 mb-3">
-        Book {cfg.hostName}
-      </h1>
-      <BookingPicker
-        dates={dates}
-        slots={slots}
-        selectedDate={date}
-        selectedDateLabel={selectedDateLabel}
-        selectedSlot={slot}
-        durationMin={cfg.slotDurationMin}
-      />
-    </main>
+    <div class="min-h-dvh bg-surface text-ink">
+      <main class="px-4 sm:px-5 py-4 sm:py-5">
+        <header class="mb-4 flex items-baseline justify-between gap-3">
+          <h1 class="text-base font-semibold tracking-(--tracking-tight) text-ink">
+            Book {cfg.hostName}
+          </h1>
+          <span class="text-[11px] text-ink-subtle tnum">{cfg.hostTz}</span>
+        </header>
+
+        <Picker
+          dates={dates}
+          slots={slots}
+          selectedDate={date}
+          selectedDateLabel={selectedDateLabel}
+          selectedSlot={slot}
+          monthAnchor={monthAnchor}
+          durationMin={cfg.slotDurationMin}
+          hostName={cfg.hostName}
+          hostTz={cfg.hostTz}
+          error={null}
+        />
+      </main>
+    </div>
   );
 });

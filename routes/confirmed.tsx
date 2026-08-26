@@ -1,5 +1,7 @@
 import { define } from "../lib/utils.ts";
 import { verifyCancelToken } from "../lib/tokens.ts";
+import { Header } from "../components/Header.tsx";
+import { Footer } from "../components/Footer.tsx";
 
 interface ConfirmedData {
   state: "ok" | "missing" | "invalid" | "expired";
@@ -23,7 +25,6 @@ export const handler = define.handlers({
     const url = new URL(ctx.req.url);
     const id = url.searchParams.get("id") ?? "";
     const token = url.searchParams.get("token") ?? "";
-    const wasCancelled = url.searchParams.get("cancelled") === "1";
 
     if (!id || !token) {
       return {
@@ -87,194 +88,240 @@ export const handler = define.handlers({
   },
 });
 
+function formatWhen(date: string, time: string, tz: string): string {
+  const dt = new Date(date + "T" + time + ":00Z");
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(dt);
+}
+
 export default define.page<typeof handler>(function Confirmed({ data, state }) {
   const cfg = state.config;
 
   if (data.state !== "ok" || !data.booking) {
+    const title = data.state === "invalid"
+      ? "Invalid or expired link"
+      : data.state === "missing"
+      ? "Link missing parameters"
+      : "Booking not found";
+    const body = data.state === "invalid"
+      ? "The link you used has been tampered with or is no longer valid."
+      : "Check the URL and try again, or contact the host.";
     return (
-      <main class="min-h-screen flex items-center justify-center p-6">
-        <div class="text-center max-w-md">
-          <h1 class="text-2xl font-semibold text-slate-100 mb-2">
-            {data.state === "invalid"
-              ? "Invalid or expired link"
-              : data.state === "missing"
-              ? "Link missing parameters"
-              : "Booking not found"}
-          </h1>
-          <p class="text-slate-400 mb-6">
-            {data.state === "invalid"
-              ? "The link you used has been tampered with or is no longer valid."
-              : "Check the URL and try again, or contact the host."}
-          </p>
-          <a
-            href="/"
-            class="inline-block px-5 py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-medium transition-colors"
-          >
-            Back to booking
-          </a>
-        </div>
-      </main>
+      <div class="min-h-dvh flex flex-col">
+        <Header hostName={cfg.hostName} hostTz={cfg.hostTz} compact />
+        <main class="flex-1 grid place-items-center px-6 py-16">
+          <div class="max-w-sm text-center">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
+              {title}
+            </h1>
+            <p class="text-sm text-ink-muted mb-6">{body}</p>
+            <a
+              href="/"
+              class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            >
+              Back to booking
+            </a>
+          </div>
+        </main>
+        <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+      </div>
     );
   }
 
   const b = data.booking;
-  // "Thursday, 28 August 2026, 10:00" in the host's timezone.
-  const dt = new Date(b.date + "T" + b.time + ":00Z");
-  const dayName = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-  ][dt.getUTCDay()];
-  const monthName = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ][
-    dt.getUTCMonth()
-  ];
-  const when =
-    `${dayName}, ${dt.getUTCDate()} ${monthName} ${dt.getUTCFullYear()}, ${b.time}`;
+  const when = formatWhen(b.date, b.time, b.hostTz);
   const tzLine = b.hostTz;
 
   if (data.mode === "cancelled") {
     return (
-      <main class="min-h-screen flex items-center justify-center p-6">
-        <div class="max-w-md w-full text-center">
-          <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-700/50 mb-4">
-            <svg
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#94a3b8"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M5 12h14" />
-            </svg>
+      <div class="min-h-dvh flex flex-col">
+        <Header hostName={cfg.hostName} hostTz={cfg.hostTz} compact />
+        <main class="flex-1 grid place-items-center px-6 py-16">
+          <div class="max-w-sm w-full">
+            <div class="text-center mb-8">
+              <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-surface-sunken text-ink-subtle mb-5">
+                <svg
+                  width="26"
+                  height="26"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12h14" />
+                </svg>
+              </div>
+              <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
+                Booking cancelled
+              </h1>
+              <p class="text-sm text-ink-muted tnum">{when}</p>
+              <p class="text-xs text-ink-subtle tnum mt-0.5">{tzLine}</p>
+              <p class="text-sm text-ink-muted mt-4">
+                Both you and {cfg.hostName} have been notified.
+              </p>
+            </div>
+            <div class="text-center">
+              <a
+                href="/"
+                class="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              >
+                Book another time
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              </a>
+            </div>
           </div>
-          <h1 class="text-3xl font-semibold text-slate-100 mb-2">Cancelled</h1>
-          <p class="text-slate-300">
-            {when} <span class="text-slate-500">({tzLine})</span>
-          </p>
-          <p class="text-slate-500 text-sm mt-2">
-            The booking has been cancelled. Both you and {cfg.hostName}{" "}
-            have been notified.
-          </p>
+        </main>
+        <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+      </div>
+    );
+  }
 
-          <div class="text-center mt-8">
+  return (
+    <div class="min-h-dvh flex flex-col">
+      <Header hostName={cfg.hostName} hostTz={cfg.hostTz} compact />
+      <main class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
+        <div class="max-w-md w-full">
+          <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300 mb-5">
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </div>
+            <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
+              You're booked
+            </h1>
+            <p class="text-sm text-ink-muted tnum">{when}</p>
+            <p class="text-xs text-ink-subtle tnum mt-0.5">{tzLine}</p>
+            <p class="text-sm text-ink-muted mt-4">
+              A confirmation email is on its way to{" "}
+              <span class="text-ink font-medium">{b.guestEmail}</span>.
+            </p>
+          </div>
+
+          <div class="rounded-2xl border border-line bg-surface-raised divide-y divide-line">
+            <Detail label="Duration" value={`${cfg.slotDurationMin} minutes`} />
+            <Detail
+              label="Meeting link"
+              value={
+                <a
+                  href={cfg.meetingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-brand-600 dark:text-brand-300 hover:underline break-all text-right"
+                >
+                  {cfg.meetingUrl}
+                </a>
+              }
+            />
+            <Detail
+              label="Timezone"
+              value={
+                <div class="text-right">
+                  <div class="text-ink tnum">{tzLine}</div>
+                  <div class="text-xs text-ink-subtle mt-0.5">
+                    Detected from your browser
+                  </div>
+                </div>
+              }
+            />
+          </div>
+
+          <div class="mt-6 text-center">
+            <a
+              href={`/cancel?id=${b.id}&token=${b.cancelToken}`}
+              class="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-red-600 dark:hover:text-red-300 transition-colors focus:outline-none focus-visible:underline"
+            >
+              Need to cancel?
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </a>
+          </div>
+
+          <div class="mt-8 text-center">
             <a
               href="/"
-              class="text-orange-500 hover:text-orange-400 text-sm font-medium"
+              class="text-sm font-medium text-brand-600 dark:text-brand-300 hover:underline"
             >
               ← Book another time
             </a>
           </div>
         </div>
       </main>
-    );
-  }
-
-  return (
-    <main class="min-h-screen flex items-center justify-center p-6">
-      <div class="max-w-md w-full">
-        <div class="text-center mb-8">
-          <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-500/10 mb-4">
-            <svg
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#f97316"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M20 6 9 17l-5-5" />
-            </svg>
-          </div>
-          <h1 class="text-3xl font-semibold text-slate-100 mb-2">Booked!</h1>
-          <p class="text-slate-300">
-            {when} <span class="text-slate-500">({tzLine})</span>
-          </p>
-          <p class="text-slate-500 text-sm mt-2">
-            A confirmation email is on its way to {b.guestEmail}.
-          </p>
-        </div>
-
-        <div class="border-t border-slate-700 my-6"></div>
-
-        <div>
-          <h2 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-4">
-            Meeting details
-          </h2>
-          <div class="space-y-3 text-sm">
-            <div class="flex items-baseline justify-between gap-4">
-              <span class="text-slate-500">Duration</span>
-              <span class="text-slate-200 text-right">
-                {cfg.slotDurationMin} minutes
-              </span>
-            </div>
-            <div class="flex items-baseline justify-between gap-4">
-              <span class="text-slate-500">Meeting link</span>
-              <a
-                href={cfg.meetingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-orange-500 hover:text-orange-400 break-all text-right"
-              >
-                {cfg.meetingUrl}
-              </a>
-            </div>
-            <div class="flex items-baseline justify-between gap-4">
-              <span class="text-slate-500">Your timezone</span>
-              <span class="text-slate-200 text-right">
-                {tzLine}
-                <span class="block text-xs text-slate-500 mt-0.5">
-                  Detected from your browser.
-                </span>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div class="border-t border-slate-700 my-6"></div>
-
-        <div>
-          <h2 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">
-            Need to cancel?
-          </h2>
-          <a
-            href={`/cancel?id=${b.id}&token=${b.cancelToken}`}
-            class="inline-block px-5 py-2.5 rounded-lg border border-red-500/50 text-red-300 hover:bg-red-500/10 hover:border-red-500 font-medium transition-colors"
-          >
-            Cancel this booking
-          </a>
-        </div>
-
-        <div class="text-center mt-8">
-          <a
-            href="/"
-            class="text-orange-500 hover:text-orange-400 text-sm font-medium"
-          >
-            ← Book another time
-          </a>
-        </div>
-      </div>
-    </main>
+      <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+    </div>
   );
 });
+
+function Detail(
+  { label, value }: { label: string; value: preact.ComponentChildren },
+) {
+  return (
+    <div class="flex items-center justify-between gap-4 px-5 py-3.5">
+      <span class="text-sm text-ink-muted">{label}</span>
+      <span class="text-sm text-ink">{value}</span>
+    </div>
+  );
+}
