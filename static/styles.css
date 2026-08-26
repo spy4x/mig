@@ -1,19 +1,183 @@
 @import "tailwindcss";
 
+/*
+  Design tokens.
+
+  Strategy: use Tailwind v4's @theme to define a `brand` (orange) palette
+  + lean on the built-in neutral palettes (zinc for dark, stone for light)
+  so light + dark have their own personality instead of one palette flipped.
+
+  Dark mode is enabled by the bootstrap script in lib/theme.ts which
+  adds `class="dark"` to <html> when the resolved theme is dark. We hook
+  into that with a custom `dark` variant so any `dark:` utility works.
+*/
+
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  --color-accent: #f97316;
-  --color-accent-hover: #ea580c;
+  /* Brand — warm orange, tuned for both surfaces. 500 is the primary
+     accent on light surfaces; 400 on dark. */
+  --color-brand-50: oklch(0.97 0.02 55);
+  --color-brand-100: oklch(0.93 0.05 55);
+  --color-brand-200: oklch(0.87 0.10 55);
+  --color-brand-300: oklch(0.80 0.15 50);
+  --color-brand-400: oklch(0.72 0.18 45);
+  --color-brand-500: oklch(0.65 0.21 40);
+  --color-brand-600: oklch(0.57 0.20 38);
+  --color-brand-700: oklch(0.48 0.17 35);
+  --color-brand-800: oklch(0.40 0.13 32);
+  --color-brand-900: oklch(0.32 0.09 30);
+
+  /* Surfaces — light defaults; .dark overrides below. */
+  --color-surface: oklch(0.99 0.003 80);
+  --color-surface-raised: oklch(1 0 0);
+  --color-surface-sunken: oklch(0.97 0.005 80);
+  --color-line: oklch(0.92 0.005 80);
+  --color-line-strong: oklch(0.86 0.008 80);
+
+  /* Text on the surfaces above. */
+  --color-ink: oklch(0.18 0.01 60);
+  --color-ink-muted: oklch(0.42 0.012 60);
+  --color-ink-subtle: oklch(0.58 0.012 60);
+
+  /* Focus ring — uses brand so all interactive surfaces share the same
+     keyboard cue. */
+  --color-ring: var(--color-brand-500);
+
+  /* Spacing tweak — slightly tighter base for a denser modern feel. */
+  --tracking-display: -0.022em;
+  --tracking-tight: -0.012em;
+
+  /* Animations — fast, restrained. */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --duration-snappy: 160ms;
+  --duration-default: 220ms;
+
+  /* Font — system stack keeps the binary lean. Inter / SF Pro / Segoe
+     are all geometric enough to feel modern. */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", "SF Pro Text",
+    "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas,
+    monospace;
 }
 
+/* Dark mode surface overrides. The .dark class is applied to <html> by
+   the bootstrap script before first paint. */
 @layer base {
+  .dark {
+    --color-surface: oklch(0.16 0.012 260);
+    --color-surface-raised: oklch(0.20 0.014 260);
+    --color-surface-sunken: oklch(0.13 0.012 260);
+    --color-line: oklch(0.27 0.014 260);
+    --color-line-strong: oklch(0.33 0.016 260);
+
+    --color-ink: oklch(0.96 0.005 80);
+    --color-ink-muted: oklch(0.72 0.012 80);
+    --color-ink-subtle: oklch(0.54 0.012 80);
+
+    --color-ring: var(--color-brand-400);
+  }
+
   html {
-    color-scheme: dark light;
+    color-scheme: light dark;
   }
+
+  html,
   body {
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
-  /* Number cells (dates, times) should be tabular for clean alignment */
-  .tabular-nums {
-    font-variant-numeric: tabular-nums;
+
+  body {
+    /* Slight OpenType feature pack for cleaner headings + tabular nums
+       wherever we need them. */
+    font-feature-settings:
+      "ss01" on,
+      "cv11" on;
   }
+
+  /* Tabular numerals by default — most numbers in the UI are times or
+     dates, and lining figures look better than old-style in those slots. */
+  .tnum {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* Soft scrollbars on supporting platforms (mostly macOS). */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 999px;
+    border: 2px solid var(--color-surface);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-subtle);
+  }
+
+  /* Hide the spinner on number inputs — never used in the booking flow
+     but harmless to standardise. */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Honour reduced-motion preference — kill our scroll/opacity
+     transitions for users who want it. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Step-level reveal animation. Each step (date / time / details)
+   fades + lifts in when it becomes visible. The animation is small
+   and short — visible enough to feel intentional, not so loud that
+   it competes with the content. */
+@keyframes mig-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.step-in {
+  animation: mig-step-in var(--duration-default) var(--ease-out-quart);
+}
+
+/* Tiny pulse on the selected day cell, repeated a few times so it
+   reads as "this is what you chose" without being annoying. Stops
+   after one cycle of 3 pulses. */
+@keyframes mig-cell-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(249 115 22 / 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgb(249 115 22 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(249 115 22 / 0);
+  }
+}
+
+.selected-pulse {
+  animation: mig-cell-pulse 1.4s var(--ease-out-quart) 2;
 }

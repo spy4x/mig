@@ -30,15 +30,43 @@ function icsEscape(s: string): string {
     .replaceAll("\n", "\\n");
 }
 
-// 75-octet line folding per RFC 5545 §3.1.
+// 75-octet line folding per RFC 5545 §3.1. We prefer to break at a
+// space when one exists within the last ~20 chars of the chunk,
+// rather than splitting mid-word. The space is included in the
+// current chunk (so the next chunk's leading whitespace — which
+// the client strips on unfold — doesn't eat the original space
+// and collapse words together).
 function fold(line: string): string {
   if (line.length <= 75) return line;
   const chunks: string[] = [];
-  let i = 0;
-  while (i < line.length) {
-    chunks.push((i === 0 ? "" : " ") + line.slice(i, i + 73));
-    i += 73;
+  let remaining = line;
+  const firstMax = 75; // first chunk has no leading space
+  const contMax = 74; // continuation chunks have a leading space (1 octet)
+  while (remaining.length > firstMax) {
+    const limit = chunks.length === 0 ? firstMax : contMax;
+    let breakAt = -1;
+    // Search backwards for a space inside the chunk window. The
+    // floor (limit - 20) avoids breaking in the middle of a
+    // long URL just because it has no spaces anywhere.
+    for (let i = Math.min(limit, remaining.length) - 1; i > limit - 20; i--) {
+      if (remaining[i] === " ") {
+        breakAt = i;
+        break;
+      }
+    }
+    if (breakAt === -1) {
+      chunks.push(remaining.slice(0, limit));
+      remaining = (chunks.length === 0 ? "" : " ") + remaining.slice(limit);
+    } else {
+      // Include the space at breakAt in the current chunk. The
+      // continuation line's leading whitespace (the 1-octet
+      // continuation indicator) is what gets stripped on unfold,
+      // not this space.
+      chunks.push(remaining.slice(0, breakAt + 1));
+      remaining = " " + remaining.slice(breakAt + 1);
+    }
   }
+  chunks.push(remaining);
   return chunks.join("\r\n");
 }
 
@@ -53,9 +81,39 @@ export function generateIcs(
   );
 
   const summary = `Meeting with ${config.hostName}`;
-  const description = `Booked via mig (${config.publicUrl})\n` +
-    `Meeting link: ${config.meetingUrl}\n` +
-    `Cancel: ${cancelUrl}`;
+
+  // DESCRIPTION — keep paragraphs on separate lines so most calendar
+  // clients render them as actual line breaks. RFC 5545 §3.1 requires
+  // us to escape `\\`, `;`, `,`, and `\n`; `icsEscape` handles that
+  // before we ever set the field.
+  //
+  // Sections (each on its own logical line, separated by escaped
+  // \n so the output reads well in clients that render it):
+  //   1. When: human-readable date + time
+  //   2. The meeting URL on its own line — no "Join:" label, so a
+  //      fold boundary mid-line doesn't split a short word off the
+  //      URL and make it ambiguous in the rendered description
+  //   3. Notes: guest's notes, if any
+  //   4. Cancel URL — wrapped in a single trailing line so the URL
+  //      and its label travel together
+  const when = formatDateTimeLong(booking.date, booking.time, booking.hostTz);
+
+  const descLines: string[] = [
+    `Meeting with ${config.hostName}`,
+    when,
+    "",
+    config.meetingUrl,
+  ];
+  if (booking.notes && booking.notes.trim()) {
+    descLines.push("", booking.notes.trim());
+  }
+  descLines.push(
+    "",
+    "Booked via mig",
+    `Cancel: ${cancelUrl}`,
+  );
+  const description = descLines.join("\n");
+
   const location = config.meetingUrl;
 
   const lines = [
@@ -85,9 +143,10 @@ export function generateIcs(
   return lines.map(fold).join("\r\n") + "\r\n";
 }
 
-// Convenience wrapper to produce a human-readable summary in the email.
+// Convenience wrapper to produce a human-readable summary used in
+// emails and copy-able strings. We deliberately do NOT include the
+// host timezone here — that's a host detail that doesn't belong in
+// visitor-facing strings.
 export function meetingSummary(booking: Booking): string {
-  return `${
-    formatDateTimeLong(booking.date, booking.time, booking.hostTz)
-  } (${booking.hostTz})`;
+  return formatDateTimeLong(booking.date, booking.time, booking.hostTz);
 }

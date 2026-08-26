@@ -1,5 +1,7 @@
 import { define } from "../lib/utils.ts";
 import { verifyCancelToken } from "../lib/tokens.ts";
+import { Header } from "../components/Header.tsx";
+import { Footer } from "../components/Footer.tsx";
 
 interface CancelData {
   state: "ok" | "missing" | "invalid" | "not-found" | "already-cancelled";
@@ -90,6 +92,30 @@ export const handler = define.handlers({
   },
 });
 
+function formatWhen(date: string, time: string, tz: string): string {
+  const dt = new Date(date + "T" + time + ":00Z");
+  // Date only — time is hidden behind the action; the email and
+  // ICS attachment carry the precise moment in UTC, so a calendar
+  // app can put it in the visitor's local zone.
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(dt);
+}
+
+function formatTime(date: string, time: string, tz: string): string {
+  const dt = new Date(date + "T" + time + ":00Z");
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(dt);
+}
+
 export default define.page<typeof handler>(function Cancel({ data, state }) {
   const cfg = state.config;
   const errStates: Array<typeof data.state> = [
@@ -118,103 +144,129 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
         },
         "already-cancelled": {
           title: "Already cancelled",
-          body: `This booking was cancelled on ${
-            data.cancelledAt
-              ? new Date(data.cancelledAt).toLocaleString("en-GB", {
+          body: data.cancelledAt
+            ? `This booking was cancelled on ${
+              new Date(data.cancelledAt).toLocaleString("en-GB", {
                 dateStyle: "medium",
                 timeStyle: "short",
               })
-              : "an earlier date"
-          }.`,
+            }.`
+            : "This booking was cancelled on an earlier date.",
         },
       };
     const msg = messages[data.state];
     return (
-      <main class="min-h-screen flex items-center justify-center p-6">
-        <div class="max-w-md w-full text-center">
-          <h1 class="text-2xl font-semibold text-slate-100 mb-2">
-            {msg.title}
-          </h1>
-          <p class="text-slate-400 mb-6">{msg.body}</p>
-          <a
-            href="/"
-            class="inline-block px-5 py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-medium transition-colors"
-          >
-            Back to booking
-          </a>
-        </div>
-      </main>
+      <div class="min-h-dvh flex flex-col">
+        <Header compact />
+        <main class="flex-1 grid place-items-center px-6 py-16">
+          <div class="max-w-sm text-center">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
+              {msg.title}
+            </h1>
+            <p class="text-sm text-ink-muted mb-6">{msg.body}</p>
+            <a
+              href="/"
+              class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            >
+              Back to booking
+            </a>
+          </div>
+        </main>
+        <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+      </div>
     );
   }
 
   const b = data.booking!;
   const token = data.token!;
-  const dt = new Date(b.date + "T" + b.time + ":00Z");
-  const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
-    dt.getUTCDay()
-  ];
-  const monthShort = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ][dt.getUTCMonth()];
-  const when =
-    `${dayName} ${dt.getUTCDate()} ${monthShort} ${dt.getUTCFullYear()}, ${b.time} (${b.hostTz})`;
+  const whenDate = formatWhen(b.date, b.time, b.hostTz);
+  const whenTime = formatTime(b.date, b.time, b.hostTz);
 
   return (
-    <main class="min-h-screen flex items-center justify-center p-6">
-      <div class="max-w-md w-full bg-slate-800/50 border border-slate-700 rounded-xl p-8">
-        <h1 class="text-2xl font-semibold text-slate-100 mb-2">
-          Cancel your booking?
-        </h1>
-        <p class="text-slate-300 mb-1">{when}</p>
-        <p class="text-slate-500 text-sm mb-6">with {cfg.hostName}</p>
+    <div class="min-h-dvh flex flex-col">
+      <Header compact />
+      <main class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
+        <div class="max-w-md w-full">
+          <div class="rounded-2xl border border-line bg-surface-raised overflow-hidden">
+            <div class="px-6 pt-6 pb-5 border-b border-line">
+              <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
+                Cancel your booking?
+              </h1>
+              <p class="text-sm text-ink-muted tnum">{whenDate}</p>
+              <p class="text-sm text-ink tnum">{whenTime}</p>
+              <p class="text-xs text-ink-subtle mt-1">
+                with {cfg.hostName}
+              </p>
+            </div>
 
-        <form method="POST" action="/api/cancel" class="space-y-4">
-          <input type="hidden" name="id" value={b.id} />
-          <input type="hidden" name="token" value={token} />
-          <div>
-            <label
-              for="reason"
-              class="block text-sm font-medium text-slate-300 mb-1.5"
+            <form
+              method="POST"
+              action="/api/cancel"
+              class="px-6 py-5 space-y-4"
             >
-              Reason <span class="text-slate-500 font-normal">(optional)</span>
-            </label>
-            <textarea
-              id="reason"
-              name="reason"
-              rows={3}
-              maxLength={500}
-              placeholder="Let the other person know why (optional)."
-              class="w-full px-3 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors resize-y"
-            />
+              <input type="hidden" name="id" value={b.id} />
+              <input type="hidden" name="token" value={token} />
+
+              <div>
+                <label
+                  for="reason"
+                  class="block text-sm font-medium text-ink mb-1.5"
+                >
+                  Reason
+                  <span class="text-ink-subtle font-normal ml-1">
+                    (optional)
+                  </span>
+                </label>
+                <textarea
+                  id="reason"
+                  name="reason"
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Let the other person know why (optional)."
+                  class="block w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle/70 transition-colors focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-y"
+                />
+              </div>
+
+              <div class="flex items-center justify-end gap-2 pt-2">
+                <a
+                  href="/"
+                  class="px-4 py-2 rounded-lg text-sm font-medium text-ink-muted hover:bg-surface-sunken transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                >
+                  Keep booking
+                </a>
+                <button
+                  type="submit"
+                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-500 hover:bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
+                >
+                  Cancel booking
+                </button>
+              </div>
+            </form>
           </div>
 
-          <div class="flex items-center justify-end gap-3 pt-2">
-            <a
-              href="/"
-              class="px-5 py-2.5 rounded-lg text-slate-300 hover:bg-slate-700 transition-colors font-medium"
-            >
-              Keep booking
-            </a>
-            <button
-              type="submit"
-              class="px-5 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-            >
-              Cancel booking
-            </button>
-          </div>
-        </form>
-      </div>
-    </main>
+          <p class="text-xs text-ink-subtle text-center mt-4">
+            This will notify both you and {cfg.hostName}.
+          </p>
+        </div>
+      </main>
+      <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+    </div>
   );
 });

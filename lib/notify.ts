@@ -29,7 +29,7 @@ export interface NtfyConfig {
   token: string;
 }
 
-export function ntfyConfigFromEnv(config: Config): NtfyConfig | null {
+export function ntfyConfigFromEnv(_config: Config): NtfyConfig | null {
   const url = Deno.env.get("NTFY_URL")?.trim();
   const topic = Deno.env.get("NTFY_TOPIC")?.trim();
   const token = Deno.env.get("NTFY_TOKEN")?.trim();
@@ -71,6 +71,7 @@ export async function notify(
   // constructor: headers is not a valid ByteString" from the
   // fetch internals.
   const safe = (s: string): string =>
+    // deno-lint-ignore no-control-regex
     s.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, (c) => {
       // Map common non-ASCII punctuation to ASCII fallbacks so
       // titles still read well ("mig: cancelled by guest - Bob"
