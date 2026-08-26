@@ -20,7 +20,11 @@ export default define.page(function App({ Component, state }) {
               `:root{color-scheme:dark light}html,body{background:#0f172a;color:#e2e8f0;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}`,
           }}
         />
-        <link rel="stylesheet" href="/styles.css" />
+        {
+          /* Tailwind CSS is bundled by Vite via the import in main.ts
+            and injected by Fresh's runtime at <link rel="stylesheet"
+            href="/assets/styles-…css">. No manual link needed. */
+        }
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript() }} />
       </head>
       <body class="h-full bg-slate-900 text-slate-200">
