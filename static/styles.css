@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accent: #f97316;
+  --color-accent-hover: #ea580c;
+}
+
+@layer base {
+  html {
+    color-scheme: dark light;
+  }
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  /* Number cells (dates, times) should be tabular for clean alignment */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}

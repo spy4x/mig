@@ -3,7 +3,8 @@
 ## Stack
 
 - **Language:** TypeScript on Deno 2.x
-- **Framework:** [Fresh 2](https://fresh.deno.dev/) (Preact + JSX, islands architecture)
+- **Framework:** [Fresh 2](https://fresh.deno.dev/) (Preact + JSX, islands
+  architecture)
 - **Styling:** Tailwind CSS v4 (utility classes only — no custom CSS files)
 - **Container:** Alpine-based, single binary via `deno compile`
 - **CI:** Woodpecker (deno fmt + lint + check + test)
@@ -13,16 +14,16 @@
 
 ## Invariants
 
-- **One owner, no auth.** Single-tenant by design — owner is defined by
-  env vars (`HOST_NAME`, `HOST_EMAIL`). No login, no admin UI, no DB.
+- **One owner, no auth.** Single-tenant by design — owner is defined by env vars
+  (`HOST_NAME`, `HOST_EMAIL`). No login, no admin UI, no DB.
 - **Configuration is code.** All booking behaviour (working hours, blocked
-  dates, slot duration, notice horizon, meeting URL, SMTP creds) lives
-  in environment variables. Changing behaviour = restarting the container.
-- **Stateless cancel tokens.** Cancellation links carry a SHA-256 HMAC of
-  a random token; the raw token goes only in the email. No per-booking
-  revoke — rotate `CANCEL_SECRET` to invalidate all.
-- **No background jobs.** Everything is request/response. No cron, no
-  reminder worker. v1 has no reminder emails.
+  dates, slot duration, notice horizon, meeting URL, SMTP creds) lives in
+  environment variables. Changing behaviour = restarting the container.
+- **Stateless cancel tokens.** Cancellation links carry a SHA-256 HMAC of a
+  random token; the raw token goes only in the email. No per-booking revoke —
+  rotate `CANCEL_SECRET` to invalidate all.
+- **No background jobs.** Everything is request/response. No cron, no reminder
+  worker. v1 has no reminder emails.
 - **Single instance only.** In-memory mutex serialises writes within the
   process. Multi-replica deployment is out of scope.
 
@@ -62,15 +63,15 @@ src/
 
 ## Conventions
 
-- **Idiomatic TypeScript:** `deno fmt` clean, `deno lint` clean,
-  `deno check` clean. Never commit with failures.
+- **Idiomatic TypeScript:** `deno fmt` clean, `deno lint` clean, `deno check`
+  clean. Never commit with failures.
 - **Indent:** 2 spaces, double quotes, no semis, 100-col.
 - **Money/IDs as strings** — never numbers.
-- **Functional over OO.** Small pure functions; class only when state
-  genuinely needs encapsulation (`AsyncMutex`, `BookingsStore`).
-- **Errors as data** — return `{ ok: true, value } | { ok: false, error }`
-  for expected failure modes (validation, conflict). `throw` only for
-  programmer errors and truly exceptional cases.
+- **Functional over OO.** Small pure functions; class only when state genuinely
+  needs encapsulation (`AsyncMutex`, `BookingsStore`).
+- **Errors as data** — return `{ ok: true, value } | { ok: false, error }` for
+  expected failure modes (validation, conflict). `throw` only for programmer
+  errors and truly exceptional cases.
 - **No third-party deps without justification.** Fresh, Preact, Tailwind,
   denomailer, zod are the budget. Anything else needs a comment.
 - **Concurrency:** every mutation goes through `bookings.mutate()` which
@@ -78,8 +79,8 @@ src/
 
 ## Env vars
 
-See `.env.example` for the full list. All vars validated at startup —
-the process exits 1 if any required var is missing or malformed.
+See `.env.example` for the full list. All vars validated at startup — the
+process exits 1 if any required var is missing or malformed.
 
 ## Commands
 
@@ -95,6 +96,7 @@ deno task compile      # deno compile → single binary
 ## CI
 
 Woodpecker pipeline (`.woodpecker.yml`) on `denoland/deno:alpine`:
+
 - `deno fmt --check`
 - `deno lint`
 - `deno check **/*.ts **/*.tsx`
@@ -105,6 +107,6 @@ Woodpecker pipeline (`.woodpecker.yml`) on `denoland/deno:alpine`:
 
 - **NEVER commit plaintext secrets.** `.env` is gitignored.
 - **NEVER hardcode real domains, emails, or hosts.** Templates only.
-- **Single-process assumption.** No multi-instance; do not add
-  distributed locks or external stores.
+- **Single-process assumption.** No multi-instance; do not add distributed locks
+  or external stores.
 - **No background jobs in v1.** Reminders come later, if ever.

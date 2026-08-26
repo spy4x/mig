@@ -4,15 +4,25 @@
 .opencode
 .idea
 .vscode
-*.md
-!README.md
-!LICENSE
-Dockerfile
-.dockerignore
-.woodpecker.yml
 data/
 .env
-.env.example
-_fresh/
-node_modules/
+.env.*
+Dockerfile
+.dockerignore
+# Don't ship local node_modules into the build image. The Dockerfile
+# runs `npm install` (then `deno install --allow-scripts`) inside
+# /src with a clean layout. If we COPY a host-managed node_modules in,
+# the `mv node_modules /src/node_modules` step merges with the stale
+# tree and vite ends up bundling preact twice — Preact's renderer's
+# `vnode.type === S` check then fails because vnodes use one Fragment
+# reference and the renderer checks against the other. Symptom: every
+# HTML page route renders an empty <body> (77-byte response with the
+# head/body fallback shell).
+node_modules
+# Don't ship stale build output into a fresh build. Same merge
+# failure mode as node_modules above.
+_fresh
+# deno.lock is intentionally absent during the npm-install step
+# (Dockerfile does `rm -f deno.lock` before that), and removing it
+# from the build context saves a few KB.
 deno.lock
