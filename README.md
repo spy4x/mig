@@ -143,6 +143,9 @@ See `.env.example` for the full list of env vars.
 | `PORT`                 | no       | `8080`  | HTTP listen port                                                               |
 | `HIDE_FOOTER` → `HIDE_BRANDING` | no | `false` | Set `true` to hide the "Powered by mig" footer + GitHub link. Renamed from `HIDE_FOOTER`; old name still works. |
 | `GITHUB_URL`           | no       | (see)   | Override the URL the footer links to. Defaults to `https://github.com/spy4x/mig` |
+| `NTFY_URL`             | no       | —       | NTFY server base URL (e.g. `https://ntfy.example.com`). All three NTFY vars must be set to enable. |
+| `NTFY_TOPIC`           | no       | —       | NTFY topic to publish to when booking email fails.                              |
+| `NTFY_TOKEN`           | no       | —       | NTFY bearer token.                                                                |
 
 ### `WEEKLY_AVAILABILITY` syntax
 
