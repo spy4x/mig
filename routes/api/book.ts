@@ -11,14 +11,15 @@ import { clientIp, humanRetry } from "../../lib/ratelimit.ts";
 import { zonedDateTime } from "../../lib/tz.ts";
 import { BookingSchema } from "./_validators.ts";
 
-function errRedirect(message: string, date?: string): Response {
+function errRedirect(
+  cfg: { publicUrl: string },
+  message: string,
+  date?: string,
+): Response {
   const params = new URLSearchParams({ err: message });
   if (date) params.set("date", date);
   return Response.redirect(
-    new URL(`/?${params.toString()}`, "http://x").toString().replace(
-      "http://x",
-      "",
-    ),
+    new URL(`/?${params.toString()}`, cfg.publicUrl).toString(),
     303,
   );
 }
@@ -32,6 +33,7 @@ export const handler = define.handlers({
     const limit = ctx.state.rateLimiter.check(ip);
     if (!limit.ok) {
       return errRedirect(
+        cfg,
         `Too many attempts. Try again in ${humanRetry(limit.retryAfterMs)}.`,
       );
     }
@@ -47,6 +49,7 @@ export const handler = define.handlers({
     });
     if (!parsed.success) {
       return errRedirect(
+        cfg,
         parsed.error.issues[0]?.message ?? "Invalid form data.",
       );
     }
@@ -69,7 +72,7 @@ export const handler = define.handlers({
     const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000);
     const slotInstant = zonedDateTime(input.date, input.slot, cfg.hostTz);
     if (slotInstant < minStart) {
-      return errRedirect("That time is no longer available.", input.date);
+      return errRedirect(cfg, "That time is no longer available.", input.date);
     }
 
     // Check slot is in availability
@@ -89,6 +92,7 @@ export const handler = define.handlers({
     );
     if (!inAvail) {
       return errRedirect(
+        cfg,
         "That time is outside availability hours.",
         input.date,
       );
@@ -96,7 +100,11 @@ export const handler = define.handlers({
 
     // Blocked date?
     if (cfg.blockedDates.has(input.date)) {
-      return errRedirect("That date is not available for booking.", input.date);
+      return errRedirect(
+        cfg,
+        "That date is not available for booking.",
+        input.date,
+      );
     }
 
     // Atomic create
@@ -135,6 +143,7 @@ export const handler = define.handlers({
       });
       if (!result.ok) {
         return errRedirect(
+          cfg,
           "That time was just booked. Please pick another.",
           input.date,
         );
@@ -142,6 +151,7 @@ export const handler = define.handlers({
     } catch (e) {
       console.error("mig: booking create failed:", e);
       return errRedirect(
+        cfg,
         "Could not save the booking. Please try again.",
         input.date,
       );
