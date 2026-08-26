@@ -26,10 +26,10 @@ export function Logo({
     >
       <rect width="32" height="32" rx="8" fill="#fb923c" />
       <path
-        d="M8 23 L8 14 L12 18 L16 14 L16 23"
+        d="M7 23 L7 13.5 C7 11.8 7.9 10.5 9.5 10.5 C10.8 10.5 11.8 11.1 12.6 12.1 L16 16.5 L19.4 12.1 C20.2 11.1 21.2 10.5 22.5 10.5 C24.1 10.5 25 11.8 25 13.5 L25 23"
         fill="none"
         stroke="#ffffff"
-        stroke-width="2.6"
+        stroke-width="2.2"
         stroke-linecap="round"
         stroke-linejoin="round"
       />
