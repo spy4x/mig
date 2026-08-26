@@ -3,6 +3,7 @@
 import { define } from "../../lib/utils.ts";
 import { verifyCancelToken } from "../../lib/tokens.ts";
 import { sendCancellationEmails } from "../../lib/email.ts";
+import { notifyBookingCancelled } from "../../lib/notify.ts";
 
 export const handler = define.handlers({
   async POST(ctx) {
@@ -75,6 +76,9 @@ export const handler = define.handlers({
     } catch (e) {
       console.error("mig: cancellation email failed:", e);
     }
+
+    // NTFY push for the cancellation (subject to NTFY_MODE).
+    await notifyBookingCancelled(cfg, updated, cancelledBy, reason);
 
     return Response.redirect(
       new URL(`/confirmed?id=${id}&token=${token}&cancelled=1`, cfg.publicUrl)

@@ -7,7 +7,10 @@
 import { define } from "../../lib/utils.ts";
 import { newCancelToken } from "../../lib/tokens.ts";
 import { sendBookingEmails } from "../../lib/email.ts";
-import { notifyBookingEmailFailed } from "../../lib/notify.ts";
+import {
+  notifyBookingEmailFailed,
+  notifyBookingSucceeded,
+} from "../../lib/notify.ts";
 import { clientIp, humanRetry } from "../../lib/ratelimit.ts";
 import { zonedDateTime } from "../../lib/tz.ts";
 import { BookingSchema } from "./_validators.ts";
@@ -200,6 +203,10 @@ export const handler = define.handlers({
         input.date,
       );
     }
+
+    // Booking persisted and email sent — fire the success notification
+    // (subject to NTFY_MODE in lib/notify.ts).
+    await notifyBookingSucceeded(cfg, booking);
 
     return Response.redirect(
       new URL(`/confirmed?id=${bookingId}&token=${tokenRaw}`, cfg.publicUrl)
