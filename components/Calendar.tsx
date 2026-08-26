@@ -14,6 +14,9 @@
   Month navigation: prev/next arrows flanking the header. Both are
   hidden when their target month has no bookable days — there's no
   point in showing a button that goes nowhere.
+
+  hostTz is used purely for date arithmetic (DST-safe month start,
+  weekday for the first row). It is never displayed.
 */
 
 import { addDays, isoDateInTz } from "../lib/tz.ts";
@@ -39,12 +42,21 @@ function startOfMonth(iso: string): string {
   return iso.slice(0, 8) + "01";
 }
 
+function shiftMonth(yyyymmdd: string, n: number): string {
+  // Advance/regress a YYYY-MM-DD string by `n` months, clamping the
+  // day-of-month to the new month's last day. We do not use this for
+  // day arithmetic — only for month navigation URLs, which always
+  // land on day 01.
+  const y = Number(yyyymmdd.slice(0, 4));
+  const m = Number(yyyymmdd.slice(5, 7));
+  const total = (y * 12 + (m - 1)) + n;
+  const newY = Math.floor(total / 12);
+  const newM = (total % 12) + 1;
+  return `${newY}-${String(newM).padStart(2, "0")}-01`;
+}
+
 function monthLabel(iso: string, tz: string): string {
-  // "August 2026" — month long + year numeric. We use the host tz so
-  // the label matches the calendar grid below it.
   const dt = new Date(iso + "T12:00:00Z");
-  // Get the month/year in the host tz by formatting in UTC (since the
-  // grid anchors on noon UTC anyway, this is safe for month labels).
   return new Intl.DateTimeFormat("en-US", {
     month: "long",
     year: "numeric",
@@ -53,7 +65,6 @@ function monthLabel(iso: string, tz: string): string {
 }
 
 function monthFirstDow(iso: string, tz: string): number {
-  // Returns 0..6 for Mon..Sun — index into DOW_SHORT.
   const dt = new Date(iso + "T12:00:00Z");
   const w = new Intl.DateTimeFormat("en-GB", {
     timeZone: tz,
@@ -64,7 +75,6 @@ function monthFirstDow(iso: string, tz: string): number {
 }
 
 function isBefore(a: string, b: string): boolean {
-  // ISO date string comparison is lexicographic.
   return a < b;
 }
 
@@ -79,15 +89,14 @@ export function Calendar(props: CalendarProps) {
   const firstOfMonth = startOfMonth(monthAnchor);
   const firstDow = monthFirstDow(firstOfMonth, hostTz); // 0=Mon..6=Sun
 
-  // We render 6 weeks (42 cells) so the grid height is stable. The
-  // month after the current one is the next-month peek row.
+  // 6-week grid (42 cells) — height is stable across months. Last
+  // week may bleed into next month, which is the common "peek"
+  // pattern in calendar UIs.
   const cells: Array<{ date: string; inMonth: boolean }> = [];
-  // Backfill to the Mon of the week containing day 1.
   for (let i = firstDow; i > 0; i--) {
     const d = addDays(firstOfMonth, -i, hostTz);
     cells.push({ date: d, inMonth: false });
   }
-  // Forward into the month — 31 is a safe upper bound; we trim later.
   let dayCursor = firstOfMonth;
   while (cells.length < 42) {
     cells.push({
@@ -95,31 +104,21 @@ export function Calendar(props: CalendarProps) {
       inMonth: dayCursor.slice(0, 7) === firstOfMonth.slice(0, 7),
     });
     dayCursor = addDays(dayCursor, 1, hostTz);
-    if (
-      dayCursor.slice(0, 7) !== firstOfMonth.slice(0, 7) && cells.length >= 35
-    ) {
-      // We've left the month and have enough rows — keep going to
-      // fill the 6-week grid but mark out-of-month.
-      if (cells.length >= 42) break;
-    }
   }
-  // Trim trailing leading-month cells if we already have 6 weeks but
-  // the last week is entirely next-month — leave them; that's the
-  // common "peek" pattern.
 
-  const prevMonth = addDays(firstOfMonth, -1, hostTz).slice(0, 7) + "-01";
-  const nextMonth = (() => {
-    const d = addDays(firstOfMonth, 28, hostTz);
-    return d.slice(0, 7) + "-01";
-  })();
-  const prevHasContent = !isBefore(prevMonth, minDate.slice(0, 7) + "-01") ||
-    Object.keys(slotsByDate).some((k) =>
-      k.slice(0, 7) === prevMonth.slice(0, 7)
-    );
-  const nextHasContent = !isAfter(nextMonth, maxDate.slice(0, 7) + "-01") ||
-    Object.keys(slotsByDate).some((k) =>
-      k.slice(0, 7) === nextMonth.slice(0, 7)
-    );
+  // Month navigation — strictly +1/-1 month arithmetic, no "add 28
+  // days" tricks (those don't always land on the same month).
+  const prevMonth = shiftMonth(firstOfMonth, -1);
+  const nextMonth = shiftMonth(firstOfMonth, +1);
+  const prevMonthKey = prevMonth.slice(0, 7);
+  const nextMonthKey = nextMonth.slice(0, 7);
+  const minMonthKey = minDate.slice(0, 7);
+  const maxMonthKey = maxDate.slice(0, 7);
+
+  const prevHasContent = !isBefore(prevMonthKey, minMonthKey) ||
+    Object.keys(slotsByDate).some((k) => k.slice(0, 7) === prevMonthKey);
+  const nextHasContent = !isAfter(nextMonthKey, maxMonthKey) ||
+    Object.keys(slotsByDate).some((k) => k.slice(0, 7) === nextMonthKey);
 
   const today = isoDateInTz(new Date(), hostTz);
 

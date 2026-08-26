@@ -88,7 +88,10 @@ export const handler = define.handlers({
   },
 });
 
-function formatWhen(date: string, time: string, tz: string): string {
+// Date-only format used on the success page — no tz label leaks.
+// The ICS attachment carries the precise UTC instant so any
+// calendar client can place it in the visitor's local zone.
+function formatWhenShort(date: string, time: string, tz: string): string {
   const dt = new Date(date + "T" + time + ":00Z");
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: tz,
@@ -96,9 +99,6 @@ function formatWhen(date: string, time: string, tz: string): string {
     day: "numeric",
     month: "long",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
   }).format(dt);
 }
 
@@ -116,7 +116,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
       : "Check the URL and try again, or contact the host.";
     return (
       <div class="min-h-dvh flex flex-col">
-        <Header hostName={cfg.hostName} hostTz={cfg.hostTz} compact />
+        <Header compact />
         <main class="flex-1 grid place-items-center px-6 py-16">
           <div class="max-w-sm text-center">
             <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
@@ -154,13 +154,12 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
   }
 
   const b = data.booking;
-  const when = formatWhen(b.date, b.time, b.hostTz);
-  const tzLine = b.hostTz;
+  const when = formatWhenShort(b.date, b.time, b.hostTz);
 
   if (data.mode === "cancelled") {
     return (
       <div class="min-h-dvh flex flex-col">
-        <Header hostName={cfg.hostName} hostTz={cfg.hostTz} compact />
+        <Header compact />
         <main class="flex-1 grid place-items-center px-6 py-16">
           <div class="max-w-sm w-full">
             <div class="text-center mb-8">
@@ -183,7 +182,6 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
                 Booking cancelled
               </h1>
               <p class="text-sm text-ink-muted tnum">{when}</p>
-              <p class="text-xs text-ink-subtle tnum mt-0.5">{tzLine}</p>
               <p class="text-sm text-ink-muted mt-4">
                 Both you and {cfg.hostName} have been notified.
               </p>
@@ -219,7 +217,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
 
   return (
     <div class="min-h-dvh flex flex-col">
-      <Header hostName={cfg.hostName} hostTz={cfg.hostTz} compact />
+      <Header compact />
       <main class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
         <div class="max-w-md w-full">
           <div class="text-center mb-8">
@@ -242,7 +240,6 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
               You're booked
             </h1>
             <p class="text-sm text-ink-muted tnum">{when}</p>
-            <p class="text-xs text-ink-subtle tnum mt-0.5">{tzLine}</p>
             <p class="text-sm text-ink-muted mt-4">
               A confirmation email is on its way to{" "}
               <span class="text-ink font-medium">{b.guestEmail}</span>.
@@ -262,17 +259,6 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
                 >
                   {cfg.meetingUrl}
                 </a>
-              }
-            />
-            <Detail
-              label="Timezone"
-              value={
-                <div class="text-right">
-                  <div class="text-ink tnum">{tzLine}</div>
-                  <div class="text-xs text-ink-subtle mt-0.5">
-                    Detected from your browser
-                  </div>
-                </div>
               }
             />
           </div>

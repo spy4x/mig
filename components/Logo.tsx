@@ -1,6 +1,6 @@
-// mig wordmark + favicon mark. SVG so it scales crisply at any size and
-// inherits `currentColor` for theme integration. The mark is the same
-// clock-hand "m" used in /favicon.svg, just rendered at display sizes.
+// mig wordmark + favicon mark. SVG so it scales crisply at any size.
+// Inherits `currentColor` so it themes correctly in light/dark mode.
+// Same path as /favicon.svg, rendered at display size.
 
 interface LogoProps {
   size?: number;
@@ -9,9 +9,12 @@ interface LogoProps {
   class?: string;
 }
 
-export function Logo(
-  { size = 28, withWord = true, href, class: cls }: LogoProps,
-) {
+export function Logo({
+  size = 28,
+  withWord = true,
+  href,
+  class: cls,
+}: LogoProps) {
   const svg = (
     <svg
       width={size}
@@ -21,24 +24,15 @@ export function Logo(
       aria-hidden="true"
       class={cls}
     >
-      <rect
-        width="32"
-        height="32"
-        rx="8"
-        fill="currentColor"
-        fill-opacity="0.06"
-      />
-      <g
-        stroke="currentColor"
-        stroke-width="2.4"
+      <rect width="32" height="32" rx="8" fill="#fb923c" />
+      <path
+        d="M8 23 L8 14 L12 18 L16 14 L16 23"
+        fill="none"
+        stroke="#ffffff"
+        stroke-width="2.6"
         stroke-linecap="round"
         stroke-linejoin="round"
-      >
-        <path d="M7 22 L7 13" />
-        <path d="M7 13 L11 17" />
-        <path d="M11 17 L11 22" />
-        <path d="M11 17 L25 11" />
-      </g>
+      />
     </svg>
   );
 
@@ -55,7 +49,7 @@ export function Logo(
   return (
     <a
       href={href}
-      class="inline-flex items-center hover:opacity-80 transition-opacity"
+      class="inline-flex items-center hover:opacity-80 transition-opacity focus:outline-none focus-visible:opacity-80"
     >
       {inner}
     </a>

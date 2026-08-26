@@ -3,10 +3,13 @@
   which redirects to /confirmed?id=...&token=... on success or back
   to /?err=... on failure.
 
-  The submit button is wrapped in an island (BookingSubmit) so we can
-  disable it + show a spinner during submission without losing the
-  no-JS fallback. The form's <button> still works fine without the
-  island — it's the same <button type="submit"> element either way.
+  The submit button label includes both date and time ("Confirm —
+  Fri, 28 Aug, 14:00") so the user can sanity-check their pick right
+  up to the click. The button is hydrated into the BookingSubmit
+  island so we can show a spinner while the form is in flight.
+
+  No-JS fallback: without the island the button is still a real
+  <button type="submit"> with the same label.
 */
 
 import BookingSubmit from "../islands/BookingSubmit.tsx";
@@ -14,18 +17,25 @@ import BookingSubmit from "../islands/BookingSubmit.tsx";
 interface BookingFormProps {
   date: string;
   slot: string;
+  dateLabel: string;
   durationMin: number;
   hostName: string;
   /** Server-rendered inline error from ?err= query param. */
   error?: string | null;
+  /** Pre-computed confirm button label — "Confirm — Fri, 28 Aug,
+   *  14:00". Computed by the route so it stays in lockstep with
+   *  the rest of the host-local time presentation. */
+  confirmLabel: string;
 }
 
 export function BookingForm({
   date,
   slot,
+  dateLabel: _dateLabel,
   durationMin,
   hostName,
   error,
+  confirmLabel,
 }: BookingFormProps) {
   return (
     <div class="rounded-2xl border border-line bg-surface-raised overflow-hidden">
@@ -101,9 +111,7 @@ export function BookingForm({
         </div>
 
         <div class="pt-1">
-          <BookingSubmit slot={slot}>
-            Confirm — {slot}
-          </BookingSubmit>
+          <BookingSubmit label={confirmLabel} />
           <p class="text-xs text-ink-subtle mt-2.5">
             We'll send a confirmation email with a calendar invite.
           </p>
@@ -112,6 +120,11 @@ export function BookingForm({
     </div>
   );
 }
+
+// "Fri, 28 Aug, 14:00" — short enough to fit on one line in the
+// button at mobile widths. The TZ used here is the browser's local
+// TZ because that's what the visitor sees on screen — they should be
+// able to verify the date/time they're agreeing to.
 
 interface FieldProps {
   label: string;

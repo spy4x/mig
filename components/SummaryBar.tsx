@@ -30,12 +30,12 @@ interface SummaryBarProps {
   slot: string | null;
 }
 
-function nextHref(state: "date", date: string | null): string {
+function nextHref(date: string | null): string {
   if (date) return `/?date=${date}`;
   return "/";
 }
 
-function nextLabel(state: "date"): string {
+function nextLabel(): string {
   return "Pick a time";
 }
 
@@ -79,10 +79,10 @@ export function SummaryBar(props: SummaryBarProps) {
 
   const cta = (
     <a
-      href={nextHref(state, date)}
+      href={nextHref(date)}
       class="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 active:bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
     >
-      {nextLabel(state)}
+      {nextLabel()}
       <svg
         width="14"
         height="14"

@@ -1,48 +1,40 @@
 import { useState } from "preact/hooks";
-import type { JSX } from "preact";
 
 /*
   Booking submit island.
 
-  Wraps the submit <button> so we can show a spinner + disable the
-  button while the form is in flight. The form's POST goes to /api/book
-  which always responds with a 303 redirect — so this button never
-  needs to "succeed", it just needs to be visibly busy until the
-  navigation kicks in.
+  Shows a spinner while the form is in flight so the visitor gets
+  feedback between click and the redirect landing on /confirmed.
 
-  No-JS fallback: if the island never hydrates, the button is still a
-  real <button type="submit"> with the same label and submits normally.
-  We avoid putting the spinner markup on the server because that would
-  leak into the no-JS path and confuse screen readers.
+  Subtle bug we just fixed: an earlier version set `disabled={busy}`
+  on the button during the click handler. Preact re-renders
+  synchronously inside the event, so by the time the browser
+  checked the button to fire the form's submit event, the button
+  was disabled — and the form never submitted. We now keep the
+  button enabled and rely on aria-busy + a visual swap for the
+  in-flight state. The page navigates away a few hundred ms later
+  so the visual-only state is fine.
 */
 
 interface Props {
-  slot: string;
-  children: preact.ComponentChildren;
+  /** Full button label, e.g. "Confirm — Fri, 28 Aug, 14:00". */
+  label: string;
 }
 
-export default function BookingSubmit({ slot, children }: Props) {
+export default function BookingSubmit({ label }: Props) {
   const [busy, setBusy] = useState(false);
 
-  function onClick(e: JSX.TargetedMouseEvent<HTMLButtonElement>) {
-    const form = (e.currentTarget as HTMLButtonElement).form;
-    if (form && !form.checkValidity()) {
-      // Let the browser show native validation messages.
-      return;
-    }
+  function onClick() {
     setBusy(true);
-    // We deliberately don't preventDefault — the form submission
-    // proceeds normally. Worst case: the spinner shows for a few
-    // hundred ms while the browser navigates away.
+    // Do NOT preventDefault — the native form submit must proceed.
   }
 
   return (
     <button
       type="submit"
       onClick={onClick}
-      disabled={busy}
       aria-busy={busy ? "true" : undefined}
-      class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 active:bg-brand-600 disabled:bg-brand-400 disabled:cursor-wait px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-(--duration-snappy) hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
+      class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 active:bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-(--duration-snappy) hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
     >
       {busy
         ? (
@@ -51,12 +43,7 @@ export default function BookingSubmit({ slot, children }: Props) {
             <span>Confirming…</span>
           </>
         )
-        : <span>{children}</span>}
-      {
-        /* Visually hidden but always rendered so screen readers hear
-         the time even when the spinner replaces the visible label. */
-      }
-      <span class="sr-only">at {slot}</span>
+        : <span>{label}</span>}
     </button>
   );
 }

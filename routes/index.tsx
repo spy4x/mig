@@ -14,6 +14,7 @@ interface IndexData {
   slots: Array<{ time: string; available: boolean }>;
   error: string | null;
   monthAnchor: string;
+  confirmLabel: string | null;
 }
 
 function parseDateParam(v: string | null): string | null {
@@ -33,7 +34,6 @@ function parseSlotParam(v: string | null): string | null {
 }
 
 function parseMonthParam(v: string | null): string | null {
-  // Accept both "YYYY-MM" and "YYYY-MM-DD" (anchor on the 1st).
   if (!v) return null;
   const m = v.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
   if (!m) return null;
@@ -63,6 +63,26 @@ function dayNameFromDate(
     | "FRI"
     | "SAT"
     | "SUN";
+}
+
+// Compact "Fri, 28 Aug, 14:00" used in the confirm-button label.
+// Computed once in the route (host-local) and passed down so the
+// form + button stay in lockstep with what's already on screen.
+function formatConfirmLabel(date: string, slot: string, tz: string): string {
+  const dt = zonedDateTime(date, slot, tz);
+  const weekday = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    weekday: "short",
+  }).format(dt);
+  const day = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    day: "numeric",
+  }).format(dt);
+  const month = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    month: "short",
+  }).format(dt);
+  return `Confirm — ${weekday}, ${day} ${month}, ${slot}`;
 }
 
 export default define.page(function Index(ctx) {
@@ -150,19 +170,22 @@ export default define.page(function Index(ctx) {
     ? "date"
     : "none";
 
+  const confirmLabel = date && slot
+    ? formatConfirmLabel(date, slot, cfg.hostTz)
+    : null;
+
   return (
     <div class="min-h-dvh flex flex-col">
-      <Header hostName={cfg.hostName} hostTz={cfg.hostTz} />
+      <Header />
 
       <main id="main" class="flex-1">
-        <div class="mx-auto w-full max-w-2xl px-4 sm:px-6 pt-8 sm:pt-12 pb-24 md:pb-16">
+        <div class="mx-auto w-full max-w-2xl px-4 sm:px-6 pt-10 sm:pt-14 pb-24 md:pb-16">
           <Hero
             hostName={cfg.hostName}
-            hostTz={cfg.hostTz}
             durationMin={cfg.slotDurationMin}
           />
 
-          <div class="mt-6">
+          <div class="mt-8 sm:mt-10">
             <Picker
               dates={dates}
               slots={slots}
@@ -174,6 +197,7 @@ export default define.page(function Index(ctx) {
               hostName={cfg.hostName}
               hostTz={cfg.hostTz}
               error={error}
+              confirmLabel={confirmLabel}
             />
           </div>
         </div>
@@ -191,24 +215,28 @@ export default define.page(function Index(ctx) {
   );
 });
 
+/*
+  Hero — bigger, more confident type. The host name is the hero
+  (no pun intended); the "Book a meeting" line is a small uppercase
+  eyebrow above it. The description sits underneath, sized for
+  comfortable reading without competing with the headline.
+*/
 function Hero(
-  { hostName, hostTz, durationMin }: {
+  { hostName, durationMin }: {
     hostName: string;
-    hostTz: string;
     durationMin: number;
   },
 ) {
   return (
-    <section class="space-y-2.5">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-600 dark:text-brand-300">
-        Book a meeting
+    <section class="space-y-5">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-600 dark:text-brand-300">
+        Book a meeting with
       </p>
-      <h1 class="text-[26px] sm:text-3xl font-semibold tracking-(--tracking-display) text-ink leading-[1.1] text-balance">
+      <h1 class="text-[34px] sm:text-[40px] font-semibold tracking-(--tracking-display) text-ink leading-[1.05] -mt-2">
         {hostName}
       </h1>
-      <p class="text-sm text-ink-muted max-w-md">
-        {durationMin}-minute call. Pick a time that works for you —{" "}
-        <span class="text-ink-subtle">shown in {hostTz}.</span>
+      <p class="text-base sm:text-[17px] text-ink-muted leading-relaxed max-w-md -mt-1">
+        A {durationMin}-minute call. Pick a time that works for you.
       </p>
     </section>
   );

@@ -3,16 +3,23 @@
 
   URL-driven so it works without JS:
     /                      → step 1: pick a date
-    /?date=YYYY-MM-DD       → step 2: pick a time
-    /?date=...&slot=HH:MM   → step 3: enter details
+    /?date=YYYY-MM-DD      → step 2: pick a time
+    /?date=…&slot=HH:MM    → step 3: enter details
+    /?month=YYYY-MM-DD     → calendar showing that month (step 1 only)
+
+  Once a date or slot is picked, the full picker (calendar / slot
+  grid) collapses into a compact summary card with a Change link.
+  This keeps the page focused — the user doesn't see a wall of dates
+  after they've already picked one.
 
   All three steps render on the same page (no multi-page navigation);
-  the URL is the state. This means the browser back button does the
-  right thing and the user can bookmark/share any step.
+  the URL is the state. The browser back button does the right thing.
 */
 
 import { Calendar } from "./Calendar.tsx";
 import { TimeSlots } from "./TimeSlots.tsx";
+import { DateCard } from "./DateCard.tsx";
+import { TimeCard } from "./TimeCard.tsx";
 import { BookingForm } from "./BookingForm.tsx";
 
 interface DateCell {
@@ -36,6 +43,9 @@ interface PickerProps {
   hostName: string;
   hostTz: string;
   error: string | null;
+  /** "Fri, 28 Aug, 14:00" — host-local. Computed by the route so the
+   *  button label matches what's already on screen. */
+  confirmLabel: string | null;
 }
 
 export function Picker(props: PickerProps) {
@@ -50,6 +60,7 @@ export function Picker(props: PickerProps) {
     hostName,
     hostTz,
     error,
+    confirmLabel,
   } = props;
 
   const slotsByDate: Record<string, number> = {};
@@ -66,7 +77,7 @@ export function Picker(props: PickerProps) {
 
   return (
     <div class="space-y-5 sm:space-y-7">
-      {/* Step 1 — calendar */}
+      {/* Step 1 — date */}
       <section aria-labelledby="step-date">
         <StepHeader
           step={1}
@@ -74,23 +85,27 @@ export function Picker(props: PickerProps) {
           active
         />
         <div class="mt-3">
-          <Calendar
-            monthAnchor={monthAnchor}
-            minDate={minDate || new Date().toISOString().slice(0, 10)}
-            maxDate={maxDate || new Date().toISOString().slice(0, 10)}
-            slotsByDate={slotsByDate}
-            selectedDate={selectedDate}
-            hostTz={hostTz}
-          />
-          {hasDate && (
-            <div class="mt-3 flex justify-end step-in">
-              <ChangeLink href="/" label="Choose a different date" />
-            </div>
-          )}
+          {hasDate
+            ? (
+              <DateCard
+                date={selectedDate!}
+                dateLabel={selectedDateLabel ?? selectedDate!}
+              />
+            )
+            : (
+              <Calendar
+                monthAnchor={monthAnchor}
+                minDate={minDate || new Date().toISOString().slice(0, 10)}
+                maxDate={maxDate || new Date().toISOString().slice(0, 10)}
+                slotsByDate={slotsByDate}
+                selectedDate={selectedDate}
+                hostTz={hostTz}
+              />
+            )}
         </div>
       </section>
 
-      {/* Step 2 — time slots (only after date picked) */}
+      {/* Step 2 — time (only after date picked) */}
       {hasDate && (
         <section
           aria-labelledby="step-time"
@@ -102,20 +117,30 @@ export function Picker(props: PickerProps) {
             active
           />
           <div class="mt-3">
-            <TimeSlots
-              date={selectedDate!}
-              dateLabel={selectedDateLabel ?? selectedDate!}
-              slots={slots}
-              selectedSlot={selectedSlot}
-            />
-            {hasSlot && (
-              <div class="mt-3 flex justify-end step-in">
-                <ChangeLink
-                  href={`/?date=${selectedDate}`}
-                  label="Choose a different time"
+            {hasSlot
+              ? (
+                <TimeCard
+                  date={selectedDate!}
+                  slot={selectedSlot!}
+                  dateLabel={selectedDateLabel ?? selectedDate!}
                 />
-              </div>
-            )}
+              )
+              : slots.length > 0
+              ? (
+                <TimeSlots
+                  date={selectedDate!}
+                  dateLabel={selectedDateLabel ?? selectedDate!}
+                  slots={slots}
+                  selectedSlot={selectedSlot}
+                />
+              )
+              : (
+                <div class="rounded-2xl border border-line bg-surface-raised px-5 py-10 text-center">
+                  <p class="text-sm text-ink-muted">
+                    No available times on {selectedDateLabel ?? selectedDate}.
+                  </p>
+                </div>
+              )}
           </div>
         </section>
       )}
@@ -131,9 +156,11 @@ export function Picker(props: PickerProps) {
             <BookingForm
               date={selectedDate!}
               slot={selectedSlot!}
+              dateLabel={selectedDateLabel ?? selectedDate!}
               durationMin={durationMin}
               hostName={hostName}
               error={error}
+              confirmLabel={confirmLabel ?? `Confirm — ${selectedSlot}`}
             />
           </div>
         </section>
@@ -169,29 +196,5 @@ function StepHeader(
         {label}
       </h2>
     </div>
-  );
-}
-
-function ChangeLink({ href, label }: { href: string; label: string }) {
-  return (
-    <a
-      href={href}
-      class="inline-flex items-center gap-1 text-xs font-medium text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline"
-    >
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2.4"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path d="m15 18-6-6 6-6" />
-      </svg>
-      {label}
-    </a>
   );
 }

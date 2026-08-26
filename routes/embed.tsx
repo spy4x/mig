@@ -158,14 +158,32 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
   const { date, slot, dates, selectedDateLabel, slots, monthAnchor } = data;
   const cfg = state.config;
 
+  // Pre-compute the confirm label for the picker.
+  const confirmLabel = (() => {
+    if (!date || !slot) return null;
+    const dt = zonedDateTime(date, slot, cfg.hostTz);
+    const weekday = new Intl.DateTimeFormat("en-GB", {
+      timeZone: cfg.hostTz,
+      weekday: "short",
+    }).format(dt);
+    const day = new Intl.DateTimeFormat("en-GB", {
+      timeZone: cfg.hostTz,
+      day: "numeric",
+    }).format(dt);
+    const month = new Intl.DateTimeFormat("en-GB", {
+      timeZone: cfg.hostTz,
+      month: "short",
+    }).format(dt);
+    return `Confirm — ${weekday}, ${day} ${month}, ${slot}`;
+  })();
+
   return (
     <div class="min-h-dvh bg-surface text-ink">
       <main class="px-4 sm:px-5 py-4 sm:py-5">
-        <header class="mb-4 flex items-baseline justify-between gap-3">
+        <header class="mb-4">
           <h1 class="text-base font-semibold tracking-(--tracking-tight) text-ink">
             Book {cfg.hostName}
           </h1>
-          <span class="text-[11px] text-ink-subtle tnum">{cfg.hostTz}</span>
         </header>
 
         <Picker
@@ -179,6 +197,7 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
           hostName={cfg.hostName}
           hostTz={cfg.hostTz}
           error={null}
+          confirmLabel={confirmLabel}
         />
       </main>
     </div>

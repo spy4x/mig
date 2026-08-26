@@ -10,7 +10,7 @@ export default define.page(function Error(
   const message = error?.message ?? "Unexpected error.";
   return (
     <div class="min-h-dvh flex flex-col">
-      {cfg && <Header hostName={cfg.hostName} hostTz={cfg.hostTz} compact />}
+      {cfg && <Header compact />}
       <main class="flex-1 grid place-items-center px-6 py-16">
         <div class="max-w-sm text-center">
           <p class="text-xs font-medium uppercase tracking-[0.18em] text-red-500 mb-3">

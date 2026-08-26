@@ -94,12 +94,22 @@ export const handler = define.handlers({
 
 function formatWhen(date: string, time: string, tz: string): string {
   const dt = new Date(date + "T" + time + ":00Z");
+  // Date only — time is hidden behind the action; the email and
+  // ICS attachment carry the precise moment in UTC, so a calendar
+  // app can put it in the visitor's local zone.
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: tz,
-    weekday: "short",
+    weekday: "long",
     day: "numeric",
-    month: "short",
+    month: "long",
     year: "numeric",
+  }).format(dt);
+}
+
+function formatTime(date: string, time: string, tz: string): string {
+  const dt = new Date(date + "T" + time + ":00Z");
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -147,7 +157,7 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
     const msg = messages[data.state];
     return (
       <div class="min-h-dvh flex flex-col">
-        <Header hostName={cfg.hostName} hostTz={cfg.hostTz} compact />
+        <Header compact />
         <main class="flex-1 grid place-items-center px-6 py-16">
           <div class="max-w-sm text-center">
             <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
@@ -186,11 +196,12 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
 
   const b = data.booking!;
   const token = data.token!;
-  const when = formatWhen(b.date, b.time, b.hostTz);
+  const whenDate = formatWhen(b.date, b.time, b.hostTz);
+  const whenTime = formatTime(b.date, b.time, b.hostTz);
 
   return (
     <div class="min-h-dvh flex flex-col">
-      <Header hostName={cfg.hostName} hostTz={cfg.hostTz} compact />
+      <Header compact />
       <main class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
         <div class="max-w-md w-full">
           <div class="rounded-2xl border border-line bg-surface-raised overflow-hidden">
@@ -198,7 +209,8 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
               <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
                 Cancel your booking?
               </h1>
-              <p class="text-sm text-ink-muted tnum">{when}</p>
+              <p class="text-sm text-ink-muted tnum">{whenDate}</p>
+              <p class="text-sm text-ink tnum">{whenTime}</p>
               <p class="text-xs text-ink-subtle mt-1">
                 with {cfg.hostName}
               </p>

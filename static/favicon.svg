@@ -1,16 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- mig favicon — a stylized "m" with a clock-hand slash. Warm orange
-       wordmark on a soft dark ground; the slash reads as both the
-       letterform's middle stroke and a minute hand sweeping. -->
-  <rect width="32" height="32" rx="8" fill="#0a0a0b" />
-  <g fill="none" stroke="#fb923c" stroke-width="2.4" stroke-linecap="round"
-    stroke-linejoin="round">
-    <!-- left stroke of the m -->
-    <path d="M7 22 L7 13" />
-    <!-- middle V of the m — shortens into a clock hand -->
-    <path d="M7 13 L11 17" />
-    <path d="M11 17 L11 22" />
-    <!-- right stroke of the m, rotated like a minute hand -->
-    <path d="M11 17 L25 11" />
-  </g>
+  <!-- mig favicon — rounded orange square with a clean lowercase
+       "m" mark. Drawn as a single path with rounded joins so it
+       stays readable at favicon sizes. -->
+  <rect width="32" height="32" rx="8" fill="#fb923c" />
+  <path
+    d="M8 23 L8 14 L12 18 L16 14 L16 23"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="2.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
 </svg>
