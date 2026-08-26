@@ -5,8 +5,9 @@
   and an "embed" link. No socials, no language picker. The page is
   supposed to feel personal, not corporate.
 
-  `pb-*` keeps the footer text off the screen edge on short pages
-  where the layout doesn't push it down naturally.
+  `pb-6` keeps the footer text off the screen edge on short pages
+  where the layout doesn't push it down naturally — small enough
+  that the footer still feels attached to the content, not floating.
 */
 
 interface FooterProps {
@@ -17,7 +18,7 @@ interface FooterProps {
 export function Footer({ githubUrl, hidden = false }: FooterProps) {
   if (hidden) return null;
   return (
-    <footer class="mt-16 pt-6 pb-10 sm:pb-14 border-t border-line">
+    <footer class="mt-16 pt-6 pb-6 border-t border-line">
       <div class="mx-auto max-w-2xl px-4 sm:px-6 flex items-center justify-between text-xs text-ink-subtle">
         <a
           href={githubUrl}
