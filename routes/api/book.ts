@@ -7,6 +7,7 @@
 import { define } from "../../lib/utils.ts";
 import { newCancelToken } from "../../lib/tokens.ts";
 import { sendBookingEmails } from "../../lib/email.ts";
+import { notifyBookingEmailFailed } from "../../lib/notify.ts";
 import { clientIp, humanRetry } from "../../lib/ratelimit.ts";
 import { zonedDateTime } from "../../lib/tz.ts";
 import { BookingSchema } from "./_validators.ts";
@@ -141,7 +142,13 @@ export const handler = define.handlers({
       ).toString();
       await sendBookingEmails(cfg, booking, cancelUrl);
     } catch (e) {
-      console.error("mig: email send failed; booking NOT created:", e);
+      const msg = (e as Error).message;
+      console.error("mig: email send failed; booking NOT created:", msg);
+      // Optional NTFY push so the host gets a heads-up outside the
+      // email channel. Fire-and-forget — we don't await the NTFY
+      // response before redirecting the user, so a slow NTFY won't
+      // add latency to the page.
+      await notifyBookingEmailFailed(cfg, booking, msg);
       return errRedirect(
         cfg,
         "We couldn't send your confirmation email, so the booking was not created. Please try again in a moment.",

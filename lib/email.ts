@@ -116,21 +116,35 @@ export async function sendCancellationEmails(
   const when = formatDateTimeShort(booking.date, booking.time, booking.hostTz);
   const reasonText = reason?.trim() || "(no reason given)";
 
+  // Each recipient gets a "Cancelled by:" line in their own frame of
+  // reference: "you" when they themselves cancelled, or the
+  // canceller's name (+ email) when the other party did. This avoids
+  // the old "Cancelled by: the guest" line that left the host
+  // wondering which guest it was.
+  const guestBody = `The meeting scheduled for ${when} (${booking.hostTz}) ` +
+    `with ${config.hostName} has been cancelled.`;
+  const hostBody = `The meeting scheduled for ${when} (${booking.hostTz}) ` +
+    `with ${booking.guestName} has been cancelled.`;
+  const guestCancellerLabel = cancelledBy === "guest"
+    ? "you"
+    : `${config.hostName}`;
+  const hostCancellerLabel = cancelledBy === "guest"
+    ? `${booking.guestName} <${booking.guestEmail}>`
+    : "you";
+
   await sendEmail(config, {
     to: booking.guestEmail,
     subject: `Your booking on ${when} was cancelled`,
     text: cancellationText({
       greeting: `Hi ${booking.guestName},`,
-      body: `The meeting scheduled for ${when} (${booking.hostTz}) ` +
-        `with ${config.hostName} has been cancelled.`,
-      cancelledBy,
+      body: guestBody,
+      cancellerLabel: guestCancellerLabel,
       reason: reasonText,
     }),
     html: cancellationHtml({
       greeting: `Hi ${booking.guestName},`,
-      body: `The meeting scheduled for ${when} (${booking.hostTz}) ` +
-        `with ${config.hostName} has been cancelled.`,
-      cancelledBy,
+      body: guestBody,
+      cancellerLabel: guestCancellerLabel,
       reason: reasonText,
     }),
   });
@@ -140,16 +154,14 @@ export async function sendCancellationEmails(
     subject: `Booking cancelled: ${booking.guestName}, ${when}`,
     text: cancellationText({
       greeting: `Hi ${config.hostName},`,
-      body: `The meeting scheduled for ${when} (${booking.hostTz}) ` +
-        `with ${booking.guestName} has been cancelled.`,
-      cancelledBy,
+      body: hostBody,
+      cancellerLabel: hostCancellerLabel,
       reason: reasonText,
     }),
     html: cancellationHtml({
       greeting: `Hi ${config.hostName},`,
-      body: `The meeting scheduled for ${when} (${booking.hostTz}) ` +
-        `with ${booking.guestName} has been cancelled.`,
-      cancelledBy,
+      body: hostBody,
+      cancellerLabel: hostCancellerLabel,
       reason: reasonText,
     }),
   });
@@ -261,7 +273,7 @@ function ownerHtml(
 function cancellationText(opts: {
   greeting: string;
   body: string;
-  cancelledBy: "owner" | "guest";
+  cancellerLabel: string;
   reason: string;
 }): string {
   return [
@@ -269,7 +281,7 @@ function cancellationText(opts: {
     "",
     opts.body,
     "",
-    `Cancelled by: ${opts.cancelledBy === "guest" ? "the guest" : "you"}`,
+    `Cancelled by: ${opts.cancellerLabel}`,
     `Reason: ${opts.reason}`,
     `Cancelled at: ${new Date().toISOString()}`,
     "",
@@ -280,7 +292,7 @@ function cancellationText(opts: {
 function cancellationHtml(opts: {
   greeting: string;
   body: string;
-  cancelledBy: "owner" | "guest";
+  cancellerLabel: string;
   reason: string;
 }): string {
   return htmlWrap(`
@@ -288,9 +300,7 @@ function cancellationHtml(opts: {
     <p>${esc(opts.body)}</p>
     <table style="border-collapse:collapse;margin:16px 0">
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Cancelled by</td>
-          <td style="padding:4px 0">${
-    esc(opts.cancelledBy === "guest" ? "the guest" : "you")
-  }</td></tr>
+          <td style="padding:4px 0">${esc(opts.cancellerLabel)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Reason</td>
           <td style="padding:4px 0">${esc(opts.reason)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Cancelled at</td>
