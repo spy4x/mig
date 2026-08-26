@@ -19,6 +19,16 @@ RUN rm -f deno.lock
 
 # Pull deps via npm in an empty /tmp dir so there's no project context
 # to confuse the resolver. --omit=optional skips optional platform binaries.
+#
+# IMPORTANT: this `mv` step assumes /src/node_modules is empty. The
+# host's node_modules must not be carried into the build context —
+# it's excluded via .dockerignore. If it ever leaks back in (e.g.
+# someone adds a host that doesn't honour .dockerignore), the npm
+# tree merges with the Deno `manual`-layout host tree, vite resolves
+# preact via two paths, and Preact's `vnode.type === S` Fragment
+# check silently fails at render time. Symptom: 77-byte HTML
+# responses with empty <body> on every page route. Don't remove the
+# dockerignore entries without a replacement.
 RUN mkdir /tmp/npm-install && cd /tmp/npm-install && \
     npm install --no-save --ignore-scripts --no-audit --no-fund \
       --omit=optional \
