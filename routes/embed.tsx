@@ -3,10 +3,23 @@ import { BookingPicker } from "../components/BookingPicker.tsx";
 import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
 import { minToHHMM, zonedDateTime } from "../lib/tz.ts";
 
+interface DateCell {
+  date: string;
+  dayShort: string;
+  dayNum: number;
+  monthShort: string;
+  monthName: string;
+  year: number;
+  monthIdx: number;
+  slots: number;
+  full: boolean;
+}
+
 interface EmbedData {
   date: string | null;
   slot: string | null;
-  dates: Array<{ date: string; label: string; slots: number; full: boolean }>;
+  dates: DateCell[];
+  selectedDateLabel: string | null;
   slots: Array<{ time: string; available: boolean }>;
 }
 
@@ -42,6 +55,45 @@ function dayNameFromDate(
     | "SUN";
 }
 
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+const MONTH_NAME = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+const DAY_NAME = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
 export const handler = define.handlers({
   GET(ctx) {
     const cfg = ctx.state.config;
@@ -66,31 +118,29 @@ export const handler = define.handlers({
         minStart,
       );
       const dt = new Date(d + "T12:00:00Z");
-      const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
-        dt.getUTCDay()
-      ];
+      const dayShort = DAY_SHORT[dt.getUTCDay()];
       const dayNum = dt.getUTCDate();
-      const monthShort = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ][dt.getUTCMonth()];
+      const monthIdx = dt.getUTCMonth();
       return {
         date: d,
-        label: `${dayName} ${dayNum} ${monthShort}`,
+        dayShort,
+        dayNum,
+        monthShort: MONTH_SHORT[monthIdx],
+        monthName: MONTH_NAME[monthIdx],
+        year: dt.getUTCFullYear(),
+        monthIdx,
         slots,
         full: slots === 0,
       };
     }).filter((d) => d.slots > 0 || d.date === date);
+
+    let selectedDateLabel: string | null = null;
+    if (date) {
+      const dt = new Date(date + "T12:00:00Z");
+      selectedDateLabel = `${DAY_NAME[dt.getUTCDay()]}, ${dt.getUTCDate()} ${
+        MONTH_NAME[dt.getUTCMonth()]
+      } ${dt.getUTCFullYear()}`;
+    }
 
     const slots: EmbedData["slots"] = [];
     if (date && !cfg.blockedDates.has(date)) {
@@ -116,12 +166,12 @@ export const handler = define.handlers({
       }
     }
 
-    return { data: { date, slot, dates, slots } };
+    return { data: { date, slot, dates, selectedDateLabel, slots } };
   },
 });
 
 export default define.page<typeof handler>(function Embed({ data, state }) {
-  const { date, slot, dates, slots } = data;
+  const { date, slot, dates, selectedDateLabel, slots } = data;
   const cfg = state.config;
   return (
     <main class="min-h-screen p-3 sm:p-4">
@@ -132,10 +182,9 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
         dates={dates}
         slots={slots}
         selectedDate={date}
+        selectedDateLabel={selectedDateLabel}
         selectedSlot={slot}
         durationMin={cfg.slotDurationMin}
-        hostTz={cfg.hostTz}
-        publicUrl={cfg.publicUrl}
       />
     </main>
   );

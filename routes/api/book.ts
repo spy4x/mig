@@ -169,19 +169,15 @@ export const handler = define.handlers({
       await sendBookingEmails(cfg, booking, cancelUrl);
     } catch (e) {
       // Booking is persisted (fail-closed) but the confirmation email
-      // didn't go out. We have no other notification path in v1, so the
-      // message is honest: the booking is on file, no email was sent,
-      // and the host is *not* automatically notified — they'll only
-      // see it via `docker logs hl-mig` or by manually inspecting
-      // /data/bookings.json.
+      // didn't go out. Land on /confirmed anyway so the user can see
+      // the cancel link — the only path that doesn't depend on email
+      // working. The page detects `email_failed=1` and shows the
+      // owning-the-failure copy instead of "is on its way". See
+      // PR #1 review notes (marketing-seo + psychologist subagents).
       console.error("mig: email send failed:", e);
       return Response.redirect(
         new URL(
-          `/?err=${
-            encodeURIComponent(
-              "Booking saved, but we couldn't send a confirmation email. The host has not been notified automatically — please contact them to confirm.",
-            )
-          }&date=${input.date}`,
+          `/confirmed?id=${bookingId}&token=${tokenRaw}&email_failed=1`,
           cfg.publicUrl,
         ).toString(),
         303,

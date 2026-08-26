@@ -1,10 +1,18 @@
-// Booking picker — server-rendered. Date cells and slot cells are plain
-// <a> links; only the booking form (last step) is a real <form> POSTing
-// to /api/book. Zero JS required for full booking flow.
+// Booking picker — server-rendered. Three states, all URL-driven so
+// the full booking flow works without JS:
+//
+//   /                      → "1. Pick a date" (vertical month grid)
+//   /?date=2026-09-15      → date card + "2. Pick a time"
+//   /?date=…&slot=14:00    → date card + time card + "3. Your details"
 
 interface DateCell {
   date: string;
-  label: string;
+  dayShort: string;
+  dayNum: number;
+  monthShort: string;
+  monthName: string;
+  year: number;
+  monthIdx: number;
   slots: number;
   full: boolean;
 }
@@ -18,44 +26,82 @@ interface BookingPickerProps {
   dates: DateCell[];
   slots: SlotCell[];
   selectedDate: string | null;
+  selectedDateLabel: string | null;
   selectedSlot: string | null;
   durationMin: number;
-  hostTz: string;
-  publicUrl: string;
 }
 
 export function BookingPicker(props: BookingPickerProps) {
-  const { dates, slots, selectedDate, selectedSlot, durationMin } = props;
+  const {
+    dates,
+    slots,
+    selectedDate,
+    selectedDateLabel,
+    selectedSlot,
+    durationMin,
+  } = props;
+
+  // Group dates by year + month so the layout reads top-to-bottom,
+  // month by month. With a 14-day horizon this is at most 2 months.
+  const months: Array<
+    { year: number; monthIdx: number; monthName: string; cells: DateCell[] }
+  > = [];
+  for (const d of dates) {
+    let bucket = months.find(
+      (m) => m.year === d.year && m.monthIdx === d.monthIdx,
+    );
+    if (!bucket) {
+      bucket = {
+        year: d.year,
+        monthIdx: d.monthIdx,
+        monthName: d.monthName,
+        cells: [],
+      };
+      months.push(bucket);
+    }
+    bucket.cells.push(d);
+  }
+
+  const hasDate = !!selectedDate;
+  const hasSlot = !!selectedSlot;
+
   return (
     <div class="space-y-8">
-      {/* Step 1 — Pick a date */}
+      {/* Step 1 — date card OR date picker */}
       <section>
-        <h2 class="text-lg font-semibold text-slate-100 mb-3">
-          <span class="text-orange-500 mr-2">1.</span>Pick a date
+        <h2 class="text-lg font-semibold text-slate-100 mb-3 flex items-center gap-2">
+          <span class="text-orange-500">1.</span>
+          {hasDate ? "Date" : "Pick a date"}
         </h2>
-        <DateStrip dates={dates} selected={selectedDate} />
-        {dates.length === 0 && (
-          <p class="text-slate-500 text-sm mt-3">
-            No available dates in the booking window.
-          </p>
-        )}
+        {hasDate
+          ? (
+            <DateCard
+              label={selectedDateLabel ?? selectedDate}
+              changeHref="/"
+            />
+          )
+          : <MonthGrid months={months} />}
       </section>
 
-      {/* Step 2 — Pick a time */}
-      {selectedDate && (
+      {/* Step 2 — slot card (after slot picked) OR slot grid (after date picked) */}
+      {hasDate && (
         <section>
-          <h2 class="text-lg font-semibold text-slate-100 mb-1">
-            <span class="text-orange-500 mr-2">2.</span>Pick a time
+          <h2 class="text-lg font-semibold text-slate-100 mb-3 flex items-center gap-2">
+            <span class="text-orange-500">2.</span>
+            {hasSlot ? "Time" : "Pick a time"}
           </h2>
-          <p class="text-slate-500 text-sm mb-3">
-            Times shown in your browser's timezone.
-          </p>
-          {slots.length > 0
+          {hasSlot
+            ? (
+              <SlotCard
+                time={selectedSlot!}
+                changeHref={`/?date=${selectedDate}`}
+              />
+            )
+            : slots.length > 0
             ? (
               <SlotGrid
                 slots={slots}
-                date={selectedDate}
-                selected={selectedSlot}
+                date={selectedDate!}
               />
             )
             : (
@@ -66,102 +112,197 @@ export function BookingPicker(props: BookingPickerProps) {
         </section>
       )}
 
-      {/* Step 3 — Your details */}
-      {selectedDate && selectedSlot && (
+      {/* Step 3 — form (after date+slot picked) */}
+      {hasDate && hasSlot && (
         <section>
-          <h2 class="text-lg font-semibold text-slate-100 mb-3">
-            <span class="text-orange-500 mr-2">3.</span>Your details
+          <h2 class="text-lg font-semibold text-slate-100 mb-3 flex items-center gap-2">
+            <span class="text-orange-500">3.</span>
+            Your details
           </h2>
-          <BookingForm
-            date={selectedDate}
-            slot={selectedSlot}
-            durationMin={durationMin}
-          />
+          <BookingForm date={selectedDate!} slot={selectedSlot!} />
         </section>
+      )}
+
+      {
+        /* Hidden copy of the duration — the post-pick cards reference this
+          in their "X minutes" hint. Not rendered when no pick yet. */
+      }
+      {hasDate && hasSlot && (
+        <p class="text-slate-500 text-xs -mt-6">
+          {durationMin}-minute call.
+        </p>
       )}
     </div>
   );
 }
 
-function DateStrip(
-  { dates, selected }: { dates: DateCell[]; selected: string | null },
-) {
+// ─── Date picker — vertical, grouped by month, no horizontal scroll ──
+
+function MonthGrid({
+  months,
+}: {
+  months: Array<
+    { year: number; monthIdx: number; monthName: string; cells: DateCell[] }
+  >;
+}) {
+  if (months.length === 0) {
+    return (
+      <p class="text-slate-500 text-sm">
+        No available dates in the booking window.
+      </p>
+    );
+  }
   return (
-    <div class="overflow-x-auto -mx-1 pb-2">
-      <div class="flex gap-2 px-1 min-w-min">
-        {dates.map((d) => {
-          const isSelected = d.date === selected;
-          const [dayName, dayNum, monthShort] = d.label.split(" ");
-          const inner = (
-            <>
-              <div class="text-[10px] uppercase tracking-wider text-slate-500 font-medium">
-                {dayName}
-              </div>
-              <div class="text-xl font-semibold tabular-nums leading-tight">
-                {dayNum}
-              </div>
-              <div class="text-[10px] text-slate-500">{monthShort}</div>
-              <div
-                class={`text-[10px] mt-1 ${
-                  isSelected ? "text-white/80" : "text-slate-500"
-                }`}
-              >
-                {d.slots > 0
-                  ? `${d.slots} slot${d.slots === 1 ? "" : "s"}`
-                  : "—"}
-              </div>
-            </>
-          );
-          const baseClass =
-            "shrink-0 w-20 h-24 rounded-xl border flex flex-col items-center justify-center transition-all duration-150 select-none";
-          if (d.full) {
-            return (
-              <div
-                key={d.date}
-                class={`${baseClass} border-slate-800 text-slate-600 cursor-not-allowed`}
-              >
-                {inner}
-              </div>
-            );
-          }
-          return (
-            <a
-              key={d.date}
-              href={isSelected ? "/" : `/?date=${d.date}`}
-              aria-current={isSelected ? "page" : undefined}
-              class={`${baseClass} ${
-                isSelected
-                  ? "bg-orange-500 border-orange-500 text-white"
-                  : "border-slate-700 hover:border-slate-600 hover:bg-slate-800/60 text-slate-200"
-              }`}
-            >
-              {inner}
-            </a>
-          );
-        })}
-      </div>
+    <div class="space-y-6">
+      {months.map((m) => (
+        <div key={`${m.year}-${m.monthIdx}`}>
+          <h3 class="text-sm font-medium text-slate-400 uppercase tracking-wider mb-2">
+            {m.monthName} {m.year}
+          </h3>
+          <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-2">
+            {m.cells.map((d) => <DayCell key={d.date} d={d} />)}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-function SlotGrid(
-  { slots, date, selected }: {
-    slots: SlotCell[];
-    date: string;
-    selected: string | null;
-  },
-) {
+function DayCell({ d }: { d: DateCell }) {
+  const baseClass =
+    "flex flex-col items-center justify-center rounded-lg border px-2 py-3 transition-colors select-none text-center min-h-[68px]";
+  if (d.full) {
+    return (
+      <div
+        class={`${baseClass} border-slate-800 text-slate-600 cursor-not-allowed`}
+        title="No slots available"
+      >
+        <div class="text-[10px] uppercase tracking-wider text-slate-600">
+          {d.dayShort}
+        </div>
+        <div class="text-xl font-semibold tabular-nums leading-tight">
+          {d.dayNum}
+        </div>
+      </div>
+    );
+  }
   return (
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+    <a
+      href={`/?date=${d.date}`}
+      class={`${baseClass} border-slate-700 hover:border-slate-600 hover:bg-slate-800/60 text-slate-200`}
+    >
+      <div class="text-[10px] uppercase tracking-wider text-slate-500">
+        {d.dayShort}
+      </div>
+      <div class="text-xl font-semibold tabular-nums leading-tight">
+        {d.dayNum}
+      </div>
+      <div class="text-[10px] text-slate-500 mt-0.5">
+        {d.slots} slot{d.slots === 1 ? "" : "s"}
+      </div>
+    </a>
+  );
+}
+
+// ─── Picked date / time card with a "Change" link ───
+
+function DateCard({
+  label,
+  changeHref,
+}: {
+  label: string;
+  changeHref: string;
+}) {
+  return (
+    <div class="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-orange-500/40 bg-orange-500/5">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="shrink-0 w-8 h-8 rounded-md bg-orange-500/15 flex items-center justify-center">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#f97316"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+        </div>
+        <span class="text-slate-100 font-medium truncate">{label}</span>
+      </div>
+      <a
+        href={changeHref}
+        class="shrink-0 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+      >
+        Change
+      </a>
+    </div>
+  );
+}
+
+function SlotCard({
+  time,
+  changeHref,
+}: {
+  time: string;
+  changeHref: string;
+}) {
+  return (
+    <div class="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-orange-500/40 bg-orange-500/5">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="shrink-0 w-8 h-8 rounded-md bg-orange-500/15 flex items-center justify-center">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#f97316"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+        </div>
+        <span class="text-slate-100 font-medium tabular-nums">{time}</span>
+      </div>
+      <a
+        href={changeHref}
+        class="shrink-0 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+      >
+        Change
+      </a>
+    </div>
+  );
+}
+
+// ─── Slot grid (shown after date picked, before slot picked) ───
+
+function SlotGrid({
+  slots,
+  date,
+}: {
+  slots: SlotCell[];
+  date: string;
+}) {
+  return (
+    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
       {slots.map((s) => {
-        const isSelected = s.time === selected;
+        const isSelected = s.time === null; // unreachable, kept for shape
         const baseClass =
-          "px-3 py-2.5 rounded-lg border text-sm font-medium tabular-nums transition-all duration-150 select-none text-center";
+          "px-3 py-2.5 rounded-lg border text-sm font-medium tabular-nums transition-colors select-none text-center";
         if (!s.available) {
           return (
             <div
               key={s.time}
               class={`${baseClass} border-slate-800 bg-slate-800/30 text-slate-600 line-through cursor-not-allowed`}
+              title="Already booked or in the past"
             >
               {s.time}
             </div>
@@ -170,9 +311,7 @@ function SlotGrid(
         return (
           <a
             key={s.time}
-            href={isSelected
-              ? `/?date=${date}`
-              : `/?date=${date}&slot=${encodeURIComponent(s.time)}`}
+            href={`/?date=${date}&slot=${encodeURIComponent(s.time)}`}
             class={`${baseClass} ${
               isSelected
                 ? "bg-orange-500 border-orange-500 text-white"
@@ -187,13 +326,9 @@ function SlotGrid(
   );
 }
 
-function BookingForm(
-  { date, slot }: {
-    date: string;
-    slot: string;
-    durationMin: number;
-  },
-) {
+// ─── Booking form (shown after date+slot picked) ───
+
+function BookingForm({ date, slot }: { date: string; slot: string }) {
   return (
     <form
       method="POST"
@@ -237,7 +372,7 @@ function BookingForm(
           required
           autocomplete="email"
           placeholder="jane@example.com"
-          class="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors"
+          class="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder:text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors"
         />
       </div>
 
@@ -259,9 +394,11 @@ function BookingForm(
       </div>
 
       {
-        /* Honeypot — offscreen, tabindex -1, aria-hidden. Real users never
-          fill this. Bots skip CSS-hidden fields; absolute-positioning offscreen
-          is the trick. */
+        /*
+        Honeypot — offscreen, tabindex -1, aria-hidden. Real users never
+        fill this. Bots skip CSS-hidden fields; absolute-positioning offscreen
+        is the trick.
+      */
       }
       <div
         aria-hidden="true"

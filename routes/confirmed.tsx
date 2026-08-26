@@ -3,6 +3,7 @@ import { verifyCancelToken } from "../lib/tokens.ts";
 
 interface ConfirmedData {
   state: "ok" | "missing" | "invalid" | "expired";
+  emailFailed: boolean;
   booking:
     | {
       id: string;
@@ -11,6 +12,7 @@ interface ConfirmedData {
       hostTz: string;
       guestName: string;
       guestEmail: string;
+      cancelToken: string;
     }
     | null;
 }
@@ -21,17 +23,26 @@ export const handler = define.handlers({
     const url = new URL(ctx.req.url);
     const id = url.searchParams.get("id") ?? "";
     const token = url.searchParams.get("token") ?? "";
+    const emailFailed = url.searchParams.get("email_failed") === "1";
 
     if (!id || !token) {
       return {
-        data: { state: "missing", booking: null } satisfies ConfirmedData,
+        data: {
+          state: "missing",
+          emailFailed: false,
+          booking: null,
+        } satisfies ConfirmedData,
       };
     }
 
     const booking = ctx.state.bookings.get(id);
     if (!booking) {
       return {
-        data: { state: "expired", booking: null } satisfies ConfirmedData,
+        data: {
+          state: "expired",
+          emailFailed: false,
+          booking: null,
+        } satisfies ConfirmedData,
       };
     }
 
@@ -42,13 +53,18 @@ export const handler = define.handlers({
     );
     if (!ok) {
       return {
-        data: { state: "invalid", booking: null } satisfies ConfirmedData,
+        data: {
+          state: "invalid",
+          emailFailed: false,
+          booking: null,
+        } satisfies ConfirmedData,
       };
     }
 
     return {
       data: {
         state: "ok",
+        emailFailed,
         booking: {
           id: booking.id,
           date: booking.date,
@@ -56,6 +72,7 @@ export const handler = define.handlers({
           hostTz: booking.hostTz,
           guestName: booking.guestName,
           guestEmail: booking.guestEmail,
+          cancelToken: token,
         },
       } satisfies ConfirmedData,
     };
@@ -93,26 +110,36 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
   }
 
   const b = data.booking;
+  // "Thursday, 28 August 2026, 10:00" in the host's timezone.
   const dt = new Date(b.date + "T" + b.time + ":00Z");
-  const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
-    dt.getUTCDay()
-  ];
-  const monthShort = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
+  const dayName = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ][dt.getUTCDay()];
+  const monthName = [
+    "January",
+    "February",
+    "March",
+    "April",
     "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ][dt.getUTCMonth()];
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ][
+    dt.getUTCMonth()
+  ];
   const when =
-    `${dayName} ${dt.getUTCDate()} ${monthShort} ${dt.getUTCFullYear()}, ${b.time} (${b.hostTz})`;
+    `${dayName}, ${dt.getUTCDate()} ${monthName} ${dt.getUTCFullYear()}, ${b.time}`;
+  const tzLine = b.hostTz;
 
   return (
     <main class="min-h-screen flex items-center justify-center p-6">
@@ -133,32 +160,74 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
             </svg>
           </div>
           <h1 class="text-3xl font-semibold text-slate-100 mb-2">Booked!</h1>
-          <p class="text-slate-300">{when}</p>
+          <p class="text-slate-300">
+            {when} <span class="text-slate-500">({tzLine})</span>
+          </p>
           <p class="text-slate-500 text-sm mt-2">
-            A confirmation email is on its way to {b.guestEmail}.
+            {data.emailFailed
+              ? (
+                <>
+                  The email to {b.guestEmail}{" "}
+                  didn't go out — that's on our end. Your host has the booking
+                  either way.
+                </>
+              )
+              : (
+                <>
+                  A confirmation email is on its way to {b.guestEmail}.
+                </>
+              )}
           </p>
         </div>
 
-        <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-6 space-y-4">
-          <div>
-            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">
-              Meeting link
+        <div class="border-t border-slate-700 my-6"></div>
+
+        <div>
+          <h2 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-4">
+            Meeting details
+          </h2>
+          <div class="space-y-3 text-sm">
+            <div class="flex items-baseline justify-between gap-4">
+              <span class="text-slate-500">Duration</span>
+              <span class="text-slate-200 text-right">
+                {cfg.slotDurationMin} minutes
+              </span>
             </div>
-            <a
-              href={cfg.meetingUrl}
-              class="text-orange-500 hover:text-orange-400 break-all text-sm"
-            >
-              {cfg.meetingUrl}
-            </a>
+            <div class="flex items-baseline justify-between gap-4">
+              <span class="text-slate-500">Meeting link</span>
+              <a
+                href={cfg.meetingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-orange-500 hover:text-orange-400 break-all text-right"
+              >
+                {cfg.meetingUrl}
+              </a>
+            </div>
+            <div class="flex items-baseline justify-between gap-4">
+              <span class="text-slate-500">Your timezone</span>
+              <span class="text-slate-200 text-right">
+                {tzLine}
+                <span class="block text-xs text-slate-500 mt-0.5">
+                  Detected from your browser.
+                </span>
+              </span>
+            </div>
           </div>
-          <div>
-            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">
-              Duration
-            </div>
-            <div class="text-slate-200 text-sm">
-              {cfg.slotDurationMin} minutes
-            </div>
-          </div>
+        </div>
+
+        <div class="border-t border-slate-700 my-6"></div>
+
+        <div>
+          <h2 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">
+            Need to cancel?
+          </h2>
+          <a
+            href={`/cancel?id=${b.id}&token=${b.cancelToken}`}
+            class="inline-block px-5 py-2.5 rounded-lg border border-red-500/50 text-red-300 hover:bg-red-500/10 hover:border-red-500 font-medium transition-colors"
+          >
+            Cancel this booking
+          </a>
         </div>
 
         <div class="text-center mt-8">
@@ -166,7 +235,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
             href="/"
             class="text-orange-500 hover:text-orange-400 text-sm font-medium"
           >
-            Book another time →
+            ← Book another time
           </a>
         </div>
       </div>

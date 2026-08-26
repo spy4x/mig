@@ -136,12 +136,12 @@ See `.env.example` for the full list of env vars.
 | `SMTP_FROM`            | yes      | —       | From address (`Name <addr@example.com>`)                                       |
 | `PUBLIC_URL`           | yes      | —       | Absolute URL where mig is reachable (for links in emails)                      |
 | `MIN_NOTICE_HOURS`     | no       | `6`     | Minimum hours from now until first bookable slot                               |
-| `BOOKING_HORIZON_DAYS` | no       | `60`    | Maximum days ahead bookable                                                    |
+| `BOOKING_HORIZON_DAYS` | no       | `14`    | Maximum days ahead bookable                                                    |
 | `BLOCKED_DATES`        | no       | —       | Blocked dates, see syntax below                                                |
 | `RATE_LIMIT_PER_5MIN`  | no       | `1`     | Max bookings per IP per 5 minutes                                              |
 | `THEME`                | no       | `auto`  | `light`, `dark`, or `auto` (follow OS)                                         |
 | `PORT`                 | no       | `8080`  | HTTP listen port                                                               |
-| `HIDE_FOOTER`          | no       | `false` | Set `true` to hide the "Powered by mig" footer + GitHub link                  |
+| `HIDE_FOOTER` → `HIDE_BRANDING` | no | `false` | Set `true` to hide the "Powered by mig" footer + GitHub link. Renamed from `HIDE_FOOTER`; old name still works. |
 | `GITHUB_URL`           | no       | (see)   | Override the URL the footer links to. Defaults to `https://github.com/spy4x/mig` |
 
 ### `WEEKLY_AVAILABILITY` syntax

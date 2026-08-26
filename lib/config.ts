@@ -17,7 +17,7 @@ const RawSchema = z.object({
   WEEKLY_AVAILABILITY: Required,
   SLOT_DURATION_MIN: z.coerce.number().int().positive().max(480),
   MIN_NOTICE_HOURS: z.coerce.number().int().nonnegative().default(6),
-  BOOKING_HORIZON_DAYS: z.coerce.number().int().positive().max(365).default(60),
+  BOOKING_HORIZON_DAYS: z.coerce.number().int().positive().max(365).default(14),
   BLOCKED_DATES: z.string().optional().default(""),
   RATE_LIMIT_PER_5MIN: z.coerce.number().int().positive().default(1),
   THEME: z.enum(["light", "dark", "auto"]).default("auto"),
@@ -29,7 +29,7 @@ const RawSchema = z.object({
   CANCEL_SECRET: Required.min(16, "min 16 chars"),
   PORT: z.coerce.number().int().positive().default(8080),
   DATA_PATH: z.string().default("./data/bookings.json"),
-  HIDE_FOOTER: z.coerce.boolean().default(false),
+  HIDE_BRANDING: z.coerce.boolean().default(false),
   GITHUB_URL: z.string().url().default("https://github.com/spy4x/mig"),
 });
 
@@ -120,7 +120,7 @@ function parseConfig(): Config {
     cancelSecret: r.CANCEL_SECRET,
     port: r.PORT,
     dataPath: r.DATA_PATH,
-    hideFooter: r.HIDE_FOOTER,
+    hideBranding: r.HIDE_BRANDING,
     githubUrl: r.GITHUB_URL,
   };
 }

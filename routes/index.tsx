@@ -6,7 +6,18 @@ import { minToHHMM, zonedDateTime } from "../lib/tz.ts";
 interface IndexData {
   date: string | null;
   slot: string | null;
-  dates: Array<{ date: string; label: string; slots: number; full: boolean }>;
+  dates: Array<{
+    date: string;
+    dayShort: string;
+    dayNum: number;
+    monthShort: string;
+    monthName: string;
+    year: number;
+    monthIdx: number;
+    slots: number;
+    full: boolean;
+  }>;
+  selectedDateLabel: string | null;
   slots: Array<{ time: string; available: boolean }>;
   error: string | null;
 }
@@ -49,6 +60,45 @@ function dayNameFromDate(
     | "SUN";
 }
 
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+const MONTH_NAME = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+const DAY_NAME = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
 export default define.page(function Index(ctx) {
   const cfg = ctx.state.config;
   const url = new URL(ctx.req.url);
@@ -75,31 +125,33 @@ export default define.page(function Index(ctx) {
       minStart,
     );
     const dt = new Date(d + "T12:00:00Z");
-    const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
-      dt.getUTCDay()
-    ];
+    const dayShort = DAY_SHORT[dt.getUTCDay()];
     const dayNum = dt.getUTCDate();
-    const monthShort = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ][dt.getUTCMonth()];
+    const monthIdx = dt.getUTCMonth();
+    const year = dt.getUTCFullYear();
     return {
       date: d,
-      label: `${dayName} ${dayNum} ${monthShort}`,
+      dayShort,
+      dayNum,
+      monthShort: MONTH_SHORT[monthIdx],
+      monthName: MONTH_NAME[monthIdx],
+      year,
+      monthIdx,
       slots,
       full: slots === 0,
     };
   }).filter((d) => d.slots > 0 || d.date === date);
+
+  // Pre-format the selected-date label for the "change" card (e.g.
+  // "Thursday, 28 August 2026"). Built from the parsed date string so
+  // it's stable across server restarts.
+  let selectedDateLabel: string | null = null;
+  if (date) {
+    const dt = new Date(date + "T12:00:00Z");
+    selectedDateLabel = `${DAY_NAME[dt.getUTCDay()]}, ${dt.getUTCDate()} ${
+      MONTH_NAME[dt.getUTCMonth()]
+    } ${dt.getUTCFullYear()}`;
+  }
 
   const slots: IndexData["slots"] = [];
   if (date && !cfg.blockedDates.has(date)) {
@@ -153,14 +205,13 @@ export default define.page(function Index(ctx) {
           dates={dates}
           slots={slots}
           selectedDate={date}
+          selectedDateLabel={selectedDateLabel}
           selectedSlot={slot}
           durationMin={cfg.slotDurationMin}
-          hostTz={cfg.hostTz}
-          publicUrl={cfg.publicUrl}
         />
       </section>
 
-      {!cfg.hideFooter && (
+      {!cfg.hideBranding && (
         <footer class="w-full max-w-2xl mt-12 pt-6 border-t border-slate-800 text-slate-500 text-sm flex items-center justify-between">
           <a
             href={cfg.githubUrl}
