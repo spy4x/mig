@@ -51,6 +51,8 @@ export interface Config {
   cancelSecret: string;
   port: number;
   dataPath: string;
+  hideFooter: boolean;
+  githubUrl: string;
 }
 
 export type Result<T, E = string> =

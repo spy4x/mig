@@ -35,6 +35,8 @@ function makeConfig(): Config {
     cancelSecret: "x",
     port: 8080,
     dataPath: "./data/bookings.json",
+    hideFooter: false,
+    githubUrl: "https://github.com/spy4x/mig",
   };
 }
 

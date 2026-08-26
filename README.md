@@ -141,6 +141,8 @@ See `.env.example` for the full list of env vars.
 | `RATE_LIMIT_PER_5MIN`  | no       | `1`     | Max bookings per IP per 5 minutes                                              |
 | `THEME`                | no       | `auto`  | `light`, `dark`, or `auto` (follow OS)                                         |
 | `PORT`                 | no       | `8080`  | HTTP listen port                                                               |
+| `HIDE_FOOTER`          | no       | `false` | Set `true` to hide the "Powered by mig" footer + GitHub link                  |
+| `GITHUB_URL`           | no       | (see)   | Override the URL the footer links to. Defaults to `https://github.com/spy4x/mig` |
 
 ### `WEEKLY_AVAILABILITY` syntax
 

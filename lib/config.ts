@@ -29,6 +29,8 @@ const RawSchema = z.object({
   CANCEL_SECRET: Required.min(16, "min 16 chars"),
   PORT: z.coerce.number().int().positive().default(8080),
   DATA_PATH: z.string().default("./data/bookings.json"),
+  HIDE_FOOTER: z.coerce.boolean().default(false),
+  GITHUB_URL: z.string().url().default("https://github.com/spy4x/mig"),
 });
 
 function loadEnv(): Record<string, string> {
@@ -118,6 +120,8 @@ function parseConfig(): Config {
     cancelSecret: r.CANCEL_SECRET,
     port: r.PORT,
     dataPath: r.DATA_PATH,
+    hideFooter: r.HIDE_FOOTER,
+    githubUrl: r.GITHUB_URL,
   };
 }
 

@@ -1,5 +1,4 @@
 import { define } from "../lib/utils.ts";
-import { ThemeToggle } from "../islands/ThemeToggle.tsx";
 import { BookingPicker } from "../components/BookingPicker.tsx";
 import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
 import { minToHHMM, zonedDateTime } from "../lib/tz.ts";
@@ -138,7 +137,6 @@ export default define.page(function Index(ctx) {
         >
           mig
         </a>
-        <ThemeToggle initial={cfg.theme} />
       </header>
 
       <section class="w-full max-w-2xl">
@@ -162,16 +160,26 @@ export default define.page(function Index(ctx) {
         />
       </section>
 
-      <footer class="w-full max-w-2xl mt-12 pt-6 border-t border-slate-800 text-slate-500 text-sm flex items-center justify-between">
-        <span>Powered by mig</span>
-        <a
-          href="/embed"
-          class="hover:text-slate-300 transition-colors"
-          title="Use this on your own site"
-        >
-          embed
-        </a>
-      </footer>
+      {!cfg.hideFooter && (
+        <footer class="w-full max-w-2xl mt-12 pt-6 border-t border-slate-800 text-slate-500 text-sm flex items-center justify-between">
+          <a
+            href={cfg.githubUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hover:text-slate-300 transition-colors"
+            title={cfg.githubUrl}
+          >
+            Powered by mig
+          </a>
+          <a
+            href="/embed"
+            class="hover:text-slate-300 transition-colors"
+            title="Use this on your own site"
+          >
+            embed
+          </a>
+        </footer>
+      )}
     </main>
   );
 });
