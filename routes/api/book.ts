@@ -1,5 +1,5 @@
 // POST /api/book — create a booking. Form fields:
-//   name, email, notes (optional), date, slot, website (honeypot)
+//   name, email, notes (optional), date, slot, guestTz (optional), website (honeypot)
 //
 // On success: 303 redirect to /confirmed?id=...&token=...
 // On failure: 303 redirect to /?err=...
@@ -49,6 +49,7 @@ export const handler = define.handlers({
       notes: form.get("notes") ?? "",
       date: form.get("date"),
       slot: form.get("slot"),
+      guestTz: form.get("guestTz") || undefined,
       website: form.get("website") ?? "",
     });
     if (!parsed.success) {
@@ -130,6 +131,7 @@ export const handler = define.handlers({
       date: input.date,
       time: input.slot,
       hostTz: cfg.hostTz,
+      guestTz: input.guestTz,
       guestName: input.name.trim(),
       guestEmail: input.email.trim().toLowerCase(),
       notes: input.notes.trim() || undefined,

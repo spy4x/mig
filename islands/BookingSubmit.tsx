@@ -1,4 +1,4 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 
 /*
   Booking submit island.
@@ -23,6 +23,15 @@ interface Props {
 
 export default function BookingSubmit({ label }: Props) {
   const [busy, setBusy] = useState(false);
+  const [guestTz, setGuestTz] = useState("");
+
+  useEffect(() => {
+    try {
+      setGuestTz(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    } catch {
+      // Keep field empty. Server falls back to host timezone.
+    }
+  }, []);
 
   function onClick() {
     setBusy(true);
@@ -30,21 +39,24 @@ export default function BookingSubmit({ label }: Props) {
   }
 
   return (
-    <button
-      type="submit"
-      onClick={onClick}
-      aria-busy={busy ? "true" : undefined}
-      class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 active:bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-(--duration-snappy) hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
-    >
-      {busy
-        ? (
-          <>
-            <Spinner />
-            <span>Confirming…</span>
-          </>
-        )
-        : <span>{label}</span>}
-    </button>
+    <>
+      <input type="hidden" name="guestTz" value={guestTz} />
+      <button
+        type="submit"
+        onClick={onClick}
+        aria-busy={busy ? "true" : undefined}
+        class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 active:bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-(--duration-snappy) hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
+      >
+        {busy
+          ? (
+            <>
+              <Spinner />
+              <span>Confirming…</span>
+            </>
+          )
+          : <span>{label}</span>}
+      </button>
+    </>
   );
 }
 

@@ -56,6 +56,7 @@ Deno.test("generateIcs — VCALENDAR skeleton + single VEVENT", async () => {
   const { raw } = await newCancelToken("x");
   const cancelUrl = `https://meet.example.com/cancel?id=01HXYZBK8M&t=${raw}`;
   const ics = generateIcs(b, cfg, cancelUrl);
+  const flatIcs = unfold(ics);
 
   assertEquals(ics.includes("BEGIN:VCALENDAR"), true);
   assertEquals(ics.includes("END:VCALENDAR"), true);
@@ -78,18 +79,44 @@ Deno.test("generateIcs — VCALENDAR skeleton + single VEVENT", async () => {
   // word boundaries so labels like "Meeting with Jane Doe" stay
   // intact across fold boundaries.
   assertEquals(ics.includes("DESCRIPTION:"), true);
-  assertEquals(ics.includes("Meeting with Jane Doe"), true);
-  assertEquals(ics.includes("Booked via mig"), true);
-  assertEquals(ics.includes("Cancel:"), true);
+  assertEquals(flatIcs.includes("Meeting with Jane Doe"), true);
+  assertEquals(flatIcs.includes("Booked via mig"), true);
+  assertEquals(flatIcs.includes("Cancel:"), true);
   // The cancel URL itself is one logical piece — it may be folded
   // across multiple lines, but every octet is present.
   assertEquals(
-    ics.includes("meet.example.com/cancel?id=01HXYZBK8M&t="),
+    flatIcs.includes("meet.example.com/cancel?id=01HXYZBK8M&t="),
     true,
   );
-  assertEquals(ics.includes(cancelUrl), true);
+  assertEquals(flatIcs.includes(cancelUrl), true);
   // Notes section is omitted when there are no notes.
   assertEquals(ics.includes("Looking forward"), false);
+});
+
+Deno.test("generateIcs — visitor description uses visitor timezone", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZBK8M",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "Europe/Berlin",
+    guestTz: "America/New_York",
+    guestName: "Client",
+    guestEmail: "client@example.com",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = unfold(
+    generateIcs(b, cfg, `https://example.com/c?t=${raw}`, b.guestTz),
+  );
+
+  assertEquals(ics.includes("DTSTART:20260828T080000Z"), true);
+  assertEquals(
+    ics.includes("Friday\\, 28 August 2026 at 04:00 (America/New_York)"),
+    true,
+  );
 });
 
 // RFC 5545 §3.1 — lines starting with SPACE or HTAB are
@@ -131,6 +158,78 @@ Deno.test("generateIcs — description includes guest notes when present", async
   );
 });
 
+Deno.test("generateIcs — normalizes CRLF in guest notes", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZ",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "UTC",
+    guestName: "Client",
+    guestEmail: "client@example.com",
+    notes: "First line\r\nSecond line\rThird line",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = generateIcs(b, cfg, `https://example.com/c?t=${raw}`);
+
+  assertEquals(
+    unfold(ics).includes("First line\\nSecond line\\nThird line"),
+    true,
+  );
+  assertEquals(ics.replaceAll("\r\n", "").includes("\r"), false);
+});
+
+Deno.test("generateIcs — strips unsupported stored control characters", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZ",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "UTC",
+    guestName: "Client\u0000Name",
+    guestEmail: "client@example.com",
+    notes: "Note\u0007Text",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = generateIcs(b, cfg, `https://example.com/c?t=${raw}`);
+
+  assertEquals(ics.includes("\u0000"), false);
+  assertEquals(ics.includes("\u0007"), false);
+  assertEquals(unfold(ics).includes("ClientName"), true);
+  assertEquals(unfold(ics).includes("NoteText"), true);
+});
+
+Deno.test("generateIcs — folds every content line to 75 UTF-8 octets", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZ",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "UTC",
+    guestName: "訪問者訪問者訪問者訪問者訪問者訪問者訪問者訪問者",
+    guestEmail: "client@example.com",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = generateIcs(b, cfg, `https://example.com/c?t=${raw}`);
+  const encoder = new TextEncoder();
+
+  assertEquals(
+    ics.split("\r\n").filter(Boolean).every((line) =>
+      encoder.encode(line).length <= 75
+    ),
+    true,
+  );
+});
+
 Deno.test("generateIcs — empty / whitespace notes are dropped", async () => {
   const cfg = makeConfig();
   const b: Booking = {
@@ -156,7 +255,7 @@ Deno.test("generateIcs — empty / whitespace notes are dropped", async () => {
   assertEquals(ics.includes("Looking forward"), false);
 });
 
-Deno.test("generateIcs — escapes commas and semicolons in fields", async () => {
+Deno.test("generateIcs — quotes commas and semicolons in CN parameters", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZ",
@@ -171,7 +270,29 @@ Deno.test("generateIcs — escapes commas and semicolons in fields", async () =>
   };
   const { raw } = await newCancelToken("x");
   const ics = generateIcs(b, cfg, `https://example.com/c?t=${raw}`);
-  assertEquals(ics.includes("Lastname\\, Firstname\\; PhD"), true);
+  assertEquals(ics.includes('CN="Lastname, Firstname; PhD";RSVP=TRUE'), true);
+});
+
+Deno.test("generateIcs — RFC 6868-encodes CN parameter delimiters", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZ",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "UTC",
+    guestName: 'Visitor";ROLE=CHAIR^\nInjected',
+    guestEmail: "client@example.com",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = unfold(generateIcs(b, cfg, `https://example.com/c?t=${raw}`));
+
+  assertEquals(
+    ics.includes('CN="Visitor^\';ROLE=CHAIR^^^nInjected";RSVP=TRUE'),
+    true,
+  );
 });
 
 Deno.test("generateIcs — cancelled status reflects", async () => {
