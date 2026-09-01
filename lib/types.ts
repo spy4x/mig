@@ -53,6 +53,10 @@ export interface Config {
   dataPath: string;
   hideBranding: boolean;
   githubUrl: string;
+  /** Build identifier (git short SHA, semver, etc.). Empty/undefined
+   *  falls back to "dev" so the footer chip always has something to
+   *  display without conditional logic in the template. */
+  version: string;
 }
 
 export type Result<T, E = string> =

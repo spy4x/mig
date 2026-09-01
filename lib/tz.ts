@@ -1,6 +1,22 @@
 // IANA timezone helpers. All host-side date/time math runs in HOST_TZ;
 // client-side strings are pre-formatted by the browser Intl APIs.
 
+export function isValidTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function validTimeZoneOr(
+  value: string | undefined,
+  fallback: string,
+): string {
+  return value && isValidTimeZone(value) ? value : fallback;
+}
+
 // Format an ISO date (YYYY-MM-DD) and time (HH:MM) interpreted in `tz`
 // as a long human-readable string. Examples:
 //   "Wednesday, 28 August 2026, 10:00"
@@ -10,12 +26,45 @@ export function formatDateTimeLong(
   tz: string,
 ): string {
   const dt = zonedDateTime(date, time, tz);
+  return formatInstantLong(dt, tz);
+}
+
+export function formatInstantLong(dt: Date, tz: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: tz,
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(dt);
+}
+
+// Date-only, e.g. "Wednesday, 2 September 2026". Used on the
+// confirmation page where Date + Time get separate rows.
+export function formatDateLong(date: string, tz: string): string {
+  const dt = zonedDateTime(date, "12:00", tz);
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(dt);
+}
+
+// Time-of-day in 24h, e.g. "11:00". Used on the confirmation page
+// where Date + Time get separate rows.
+export function formatTimeOfDay(
+  date: string,
+  time: string,
+  tz: string,
+): string {
+  const dt = zonedDateTime(date, time, tz);
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -30,6 +79,10 @@ export function formatDateTimeShort(
   tz: string,
 ): string {
   const dt = zonedDateTime(date, time, tz);
+  return formatInstantShort(dt, tz);
+}
+
+export function formatInstantShort(dt: Date, tz: string): string {
   const fmt = new Intl.DateTimeFormat("en-GB", {
     timeZone: tz,
     weekday: "short",

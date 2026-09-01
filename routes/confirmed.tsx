@@ -2,6 +2,7 @@ import { define } from "../lib/utils.ts";
 import { verifyCancelToken } from "../lib/tokens.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
+import { formatDateLong, formatTimeOfDay, validTimeZoneOr } from "../lib/tz.ts";
 
 interface ConfirmedData {
   state: "ok" | "missing" | "invalid" | "expired";
@@ -12,6 +13,7 @@ interface ConfirmedData {
       date: string;
       time: string;
       hostTz: string;
+      guestTz: string | null;
       guestName: string;
       guestEmail: string;
       cancelToken: string;
@@ -79,6 +81,7 @@ export const handler = define.handlers({
           date: booking.date,
           time: booking.time,
           hostTz: booking.hostTz,
+          guestTz: booking.guestTz ?? null,
           guestName: booking.guestName,
           guestEmail: booking.guestEmail,
           cancelToken: token,
@@ -87,20 +90,6 @@ export const handler = define.handlers({
     };
   },
 });
-
-// Date-only format used on the success page — no tz label leaks.
-// The ICS attachment carries the precise UTC instant so any
-// calendar client can place it in the visitor's local zone.
-function formatWhenShort(date: string, time: string, tz: string): string {
-  const dt = new Date(date + "T" + time + ":00Z");
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(dt);
-}
 
 export default define.page<typeof handler>(function Confirmed({ data, state }) {
   const cfg = state.config;
@@ -148,13 +137,24 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
             </a>
           </div>
         </main>
-        <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+        <Footer
+          githubUrl={cfg.githubUrl}
+          hidden={cfg.hideBranding}
+          version={cfg.version}
+        />
       </div>
     );
   }
 
   const b = data.booking;
-  const when = formatWhenShort(b.date, b.time, b.hostTz);
+  // Display the booking time in the visitor's TZ when we captured one
+  // at submit time. Falls back to host TZ when guestTz is missing or
+  // invalid (older bookings, bad data, hidden legacy paths). The
+  // page is server-rendered — we have access to guestTz from the
+  // booking record, no client Intl needed.
+  const displayTz = validTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
+  const dateLabel = formatDateLong(b.date, displayTz);
+  const timeLabel = formatTimeOfDay(b.date, b.time, displayTz);
 
   if (data.mode === "cancelled") {
     return (
@@ -181,7 +181,9 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
               <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
                 Booking cancelled
               </h1>
-              <p class="text-sm text-ink-muted tnum">{when}</p>
+              <p class="text-sm text-ink-muted tnum">
+                {dateLabel} · {timeLabel}
+              </p>
               <p class="text-sm text-ink-muted mt-4">
                 Both you and {cfg.hostName} have been notified.
               </p>
@@ -210,7 +212,11 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
             </div>
           </div>
         </main>
-        <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+        <Footer
+          githubUrl={cfg.githubUrl}
+          hidden={cfg.hideBranding}
+          version={cfg.version}
+        />
       </div>
     );
   }
@@ -239,14 +245,21 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
             <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
               You're booked
             </h1>
-            <p class="text-sm text-ink-muted tnum">{when}</p>
-            <p class="text-sm text-ink-muted mt-4">
+            <p class="text-sm text-ink-muted mt-2">
               A confirmation email is on its way to{" "}
               <span class="text-ink font-medium">{b.guestEmail}</span>.
             </p>
           </div>
 
           <div class="rounded-2xl border border-line bg-surface-raised divide-y divide-line">
+            <Detail
+              label="Date"
+              value={<span class="tnum">{dateLabel}</span>}
+            />
+            <Detail
+              label="Time"
+              value={<span class="tnum">{timeLabel}</span>}
+            />
             <Detail label="Duration" value={`${cfg.slotDurationMin} minutes`} />
             <Detail
               label="Meeting link"
@@ -263,10 +276,30 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
             />
           </div>
 
-          <div class="mt-6 text-center">
+          <div class="mt-5 flex items-center justify-between gap-4 text-sm">
+            <a
+              href="/"
+              class="inline-flex items-center gap-1 text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m12 19-7-7 7-7" />
+                <path d="M19 12H5" />
+              </svg>
+              Book another time
+            </a>
             <a
               href={`/cancel?id=${b.id}&token=${b.cancelToken}`}
-              class="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-red-600 dark:hover:text-red-300 transition-colors focus:outline-none focus-visible:underline"
+              class="inline-flex items-center gap-1 text-ink-muted hover:text-red-600 dark:hover:text-red-300 transition-colors focus:outline-none focus-visible:underline"
             >
               Need to cancel?
               <svg
@@ -285,18 +318,13 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
               </svg>
             </a>
           </div>
-
-          <div class="mt-8 text-center">
-            <a
-              href="/"
-              class="text-sm font-medium text-brand-600 dark:text-brand-300 hover:underline"
-            >
-              ← Book another time
-            </a>
-          </div>
         </div>
       </main>
-      <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+      <Footer
+        githubUrl={cfg.githubUrl}
+        hidden={cfg.hideBranding}
+        version={cfg.version}
+      />
     </div>
   );
 });

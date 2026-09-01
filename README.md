@@ -120,33 +120,33 @@ See `.env.example` for the full list of env vars.
 
 ## Configuration
 
-| Env var                | Required | Default | Description                                                                    |
-| ---------------------- | -------- | ------- | ------------------------------------------------------------------------------ |
-| `HOST_NAME`            | yes      | —       | Owner's display name                                                           |
-| `HOST_EMAIL`           | yes      | —       | Owner's email (receives booking + cancel notifications)                        |
-| `HOST_TZ`              | yes      | —       | IANA timezone, e.g. `Europe/Berlin`                                            |
-| `MEETING_URL`          | yes      | —       | Static meeting URL embedded in every confirmation                              |
-| `WEEKLY_AVAILABILITY`  | yes      | —       | Comma-separated `DAY HH:MM-HH:MM` list, e.g. `MON-FRI 09:00-17:00` (see below) |
-| `SLOT_DURATION_MIN`    | yes      | —       | Slot length in minutes (e.g. 30)                                               |
-| `CANCEL_SECRET`        | yes      | —       | Random 32+ byte secret for HMAC sign/verify                                    |
-| `SMTP_HOST`            | yes      | —       | SMTP server hostname                                                           |
-| `SMTP_PORT`            | yes      | `587`   | SMTP port                                                                      |
-| `SMTP_USER`            | yes      | —       | SMTP username                                                                  |
-| `SMTP_PASSWORD`        | yes      | —       | SMTP password. Wrap in single quotes if it contains shell-special characters. |
-| `SMTP_FROM`            | yes      | —       | From address (`Name <addr@example.com>`)                                       |
-| `PUBLIC_URL`           | yes      | —       | Absolute URL where mig is reachable (for links in emails)                      |
-| `MIN_NOTICE_HOURS`     | no       | `6`     | Minimum hours from now until first bookable slot                               |
-| `BOOKING_HORIZON_DAYS` | no       | `14`    | Maximum days ahead bookable                                                    |
-| `BLOCKED_DATES`        | no       | —       | Blocked dates, see syntax below                                                |
-| `RATE_LIMIT_PER_5MIN`  | no       | `1`     | Max bookings per IP per 5 minutes                                              |
-| `THEME`                | no       | `auto`  | `light`, `dark`, or `auto` (follow OS)                                         |
-| `PORT`                 | no       | `8080`  | HTTP listen port                                                               |
-| `HIDE_FOOTER` → `HIDE_BRANDING` | no | `false` | Set `true` to hide the "Powered by mig" footer + GitHub link. Renamed from `HIDE_FOOTER`; old name still works. |
-| `GITHUB_URL`           | no       | (see)   | Override the URL the footer links to. Defaults to `https://github.com/spy4x/mig` |
-| `NTFY_URL`             | no       | —       | NTFY server base URL (e.g. `https://ntfy.example.com`). All four NTFY vars must be set to enable. |
-| `NTFY_TOPIC`           | no       | —       | NTFY topic to publish to.                                                          |
-| `NTFY_TOKEN`           | no       | —       | NTFY bearer token.                                                                  |
-| `NTFY_MODE`            | no       | `all`   | Which events push: `all`, `errors`, `booking`, or `cancel`.                      |
+| Env var                         | Required | Default | Description                                                                                                     |
+| ------------------------------- | -------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| `HOST_NAME`                     | yes      | —       | Owner's display name                                                                                            |
+| `HOST_EMAIL`                    | yes      | —       | Owner's email (receives booking + cancel notifications)                                                         |
+| `HOST_TZ`                       | yes      | —       | IANA timezone, e.g. `Europe/Berlin`                                                                             |
+| `MEETING_URL`                   | yes      | —       | Static meeting URL embedded in every confirmation                                                               |
+| `WEEKLY_AVAILABILITY`           | yes      | —       | Comma-separated `DAY HH:MM-HH:MM` list, e.g. `MON-FRI 09:00-17:00` (see below)                                  |
+| `SLOT_DURATION_MIN`             | yes      | —       | Slot length in minutes (e.g. 30)                                                                                |
+| `CANCEL_SECRET`                 | yes      | —       | Random 32+ byte secret for HMAC sign/verify                                                                     |
+| `SMTP_HOST`                     | yes      | —       | SMTP server hostname                                                                                            |
+| `SMTP_PORT`                     | yes      | `587`   | SMTP port                                                                                                       |
+| `SMTP_USER`                     | yes      | —       | SMTP username                                                                                                   |
+| `SMTP_PASSWORD`                 | yes      | —       | SMTP password. Wrap in single quotes if it contains shell-special characters.                                   |
+| `SMTP_FROM`                     | yes      | —       | From address (`Name <addr@example.com>`)                                                                        |
+| `PUBLIC_URL`                    | yes      | —       | Absolute URL where mig is reachable (for links in emails)                                                       |
+| `MIN_NOTICE_HOURS`              | no       | `6`     | Minimum hours from now until first bookable slot                                                                |
+| `BOOKING_HORIZON_DAYS`          | no       | `14`    | Maximum days ahead bookable                                                                                     |
+| `BLOCKED_DATES`                 | no       | —       | Blocked dates, see syntax below                                                                                 |
+| `RATE_LIMIT_PER_5MIN`           | no       | `1`     | Max bookings per IP per 5 minutes                                                                               |
+| `THEME`                         | no       | `auto`  | `light`, `dark`, or `auto` (follow OS)                                                                          |
+| `PORT`                          | no       | `8080`  | HTTP listen port                                                                                                |
+| `HIDE_FOOTER` → `HIDE_BRANDING` | no       | `false` | Set `true` to hide the "Powered by mig" footer + GitHub link. Renamed from `HIDE_FOOTER`; old name still works. |
+| `GITHUB_URL`                    | no       | (see)   | Override the URL the footer links to. Defaults to `https://github.com/spy4x/mig`                                |
+| `NTFY_URL`                      | no       | —       | NTFY server base URL (e.g. `https://ntfy.example.com`). All four NTFY vars must be set to enable.               |
+| `NTFY_TOPIC`                    | no       | —       | NTFY topic to publish to.                                                                                       |
+| `NTFY_TOKEN`                    | no       | —       | NTFY bearer token.                                                                                              |
+| `NTFY_MODE`                     | no       | `all`   | Which events push: `all`, `errors`, `booking`, or `cancel`.                                                     |
 
 ### `WEEKLY_AVAILABILITY` syntax
 
