@@ -42,6 +42,35 @@ export function formatInstantLong(dt: Date, tz: string): string {
   }).format(dt);
 }
 
+// Date-only, e.g. "Wednesday, 2 September 2026". Used on the
+// confirmation page where Date + Time get separate rows.
+export function formatDateLong(date: string, tz: string): string {
+  const dt = zonedDateTime(date, "12:00", tz);
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(dt);
+}
+
+// Time-of-day in 24h, e.g. "11:00". Used on the confirmation page
+// where Date + Time get separate rows.
+export function formatTimeOfDay(
+  date: string,
+  time: string,
+  tz: string,
+): string {
+  const dt = zonedDateTime(date, time, tz);
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(dt);
+}
+
 // Short form used in emails subject lines + buttons. Examples:
 //   "Wed 28 Aug, 10:00"
 export function formatDateTimeShort(

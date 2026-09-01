@@ -335,6 +335,24 @@ export default function BookingFlow(props: BookingFlowProps) {
     )
     : null;
 
+  // Re-format every slot's HH:MM string in the visitor's TZ for
+  // display. SSR + `/embed` + pre-hydration leave `displayTime`
+  // unset, so TimeSlots falls back to the host-local `time` (the
+  // authoritative value the server books against — never swapped).
+  // After hydration Preact diffs the text node and updates in place;
+  // the surrounding DOM structure stays identical.
+  const slotsForDisplay = (mounted.value && date.value)
+    ? slots.value.map((s) => ({
+      ...s,
+      displayTime: formatTimeInTz(
+        date.value!,
+        s.time,
+        hostTz,
+        displayTz,
+      ) ?? s.time,
+    }))
+    : slots.value;
+
   // ─── Render ──────────────────────────────────────────────────────
 
   const hasDate = !!date.value;
@@ -425,12 +443,12 @@ export default function BookingFlow(props: BookingFlowProps) {
                   <p class="text-sm text-ink-muted">Loading times…</p>
                 </div>
               )
-              : slots.value.length > 0
+              : slotsForDisplay.length > 0
               ? (
                 <TimeSlots
                   date={date.value!}
                   dateLabel={dateLabel ?? date.value!}
-                  slots={slots.value}
+                  slots={slotsForDisplay}
                   selectedSlot={null}
                   onSelectSlot={interactive ? onSelectSlot : undefined}
                 />
