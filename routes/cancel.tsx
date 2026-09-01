@@ -189,7 +189,11 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
             </a>
           </div>
         </main>
-        <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+        <Footer
+          githubUrl={cfg.githubUrl}
+          hidden={cfg.hideBranding}
+          version={cfg.version}
+        />
       </div>
     );
   }
@@ -266,7 +270,11 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
           </p>
         </div>
       </main>
-      <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+      <Footer
+        githubUrl={cfg.githubUrl}
+        hidden={cfg.hideBranding}
+        version={cfg.version}
+      />
     </div>
   );
 });

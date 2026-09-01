@@ -34,6 +34,14 @@ interface CalendarProps {
   slotsByDate: Record<string, number>;
   selectedDate: string | null;
   hostTz: string;
+  /** Called when a bookable day is clicked. When provided, days are
+   *  rendered as <button> with onClick — no navigation, no SSR
+   *  roundtrip. When omitted, days are <a href="/?date=…"> for the
+   *  no-JS / /embed fallback. */
+  onSelectDate?: (date: string) => void;
+  /** Called when the prev/next month arrow is clicked. Same
+   *  interactive/SSR contract as `onSelectDate`. */
+  onSelectMonth?: (monthAnchor: string) => void;
 }
 
 const DOW_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -83,8 +91,16 @@ function isAfter(a: string, b: string): boolean {
 }
 
 export function Calendar(props: CalendarProps) {
-  const { monthAnchor, minDate, maxDate, slotsByDate, selectedDate, hostTz } =
-    props;
+  const {
+    monthAnchor,
+    minDate,
+    maxDate,
+    slotsByDate,
+    selectedDate,
+    hostTz,
+    onSelectDate,
+    onSelectMonth,
+  } = props;
 
   const firstOfMonth = startOfMonth(monthAnchor);
   const firstDow = monthFirstDow(firstOfMonth, hostTz); // 0=Mon..6=Sun
@@ -130,48 +146,104 @@ export function Calendar(props: CalendarProps) {
           {monthLabel(firstOfMonth, hostTz)}
         </h3>
         <div class="flex items-center gap-1">
-          <a
-            href={`/?month=${prevMonth}`}
-            aria-label="Previous month"
-            class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-              prevHasContent ? "" : "opacity-30 pointer-events-none"
-            }`}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-          </a>
-          <a
-            href={`/?month=${nextMonth}`}
-            aria-label="Next month"
-            class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-              nextHasContent ? "" : "opacity-30 pointer-events-none"
-            }`}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m9 18 6-6-6-6" />
-            </svg>
-          </a>
+          {onSelectMonth
+            ? (
+              <button
+                type="button"
+                aria-label="Previous month"
+                disabled={!prevHasContent}
+                onClick={() => prevHasContent && onSelectMonth(prevMonth)}
+                class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  prevHasContent ? "" : "opacity-30 cursor-not-allowed"
+                }`}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
+              </button>
+            )
+            : (
+              <a
+                href={`/?month=${prevMonth}`}
+                aria-label="Previous month"
+                class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  prevHasContent ? "" : "opacity-30 pointer-events-none"
+                }`}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
+              </a>
+            )}
+          {onSelectMonth
+            ? (
+              <button
+                type="button"
+                aria-label="Next month"
+                disabled={!nextHasContent}
+                onClick={() => nextHasContent && onSelectMonth(nextMonth)}
+                class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  nextHasContent ? "" : "opacity-30 cursor-not-allowed"
+                }`}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </button>
+            )
+            : (
+              <a
+                href={`/?month=${nextMonth}`}
+                aria-label="Next month"
+                class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                  nextHasContent ? "" : "opacity-30 pointer-events-none"
+                }`}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </a>
+            )}
         </div>
       </div>
 
@@ -234,6 +306,31 @@ export function Calendar(props: CalendarProps) {
             );
           }
 
+          const dot = (!isSelected && slots > 0 && slots <= 4) || isToday;
+
+          if (onSelectDate) {
+            return (
+              <button
+                key={date}
+                type="button"
+                onClick={() => onSelectDate(date)}
+                aria-label={ariaLabel}
+                aria-current={isSelected ? "date" : undefined}
+                class={`${cellBase} ${cellState} focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised ${
+                  isSelected ? "selected-pulse" : ""
+                }`}
+              >
+                {dayNum}
+                {dot && (
+                  <span
+                    class="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-brand-500"
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            );
+          }
+
           return (
             <a
               key={date}
@@ -245,13 +342,7 @@ export function Calendar(props: CalendarProps) {
               }`}
             >
               {dayNum}
-              {!disabled && !isSelected && slots > 0 && slots <= 4 && (
-                <span
-                  class="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-brand-500"
-                  aria-hidden="true"
-                />
-              )}
-              {isToday && !isSelected && (
+              {dot && (
                 <span
                   class="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-brand-500"
                   aria-hidden="true"

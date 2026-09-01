@@ -82,6 +82,32 @@ src/
 See `.env.example` for the full list. All vars validated at startup — the
 process exits 1 if any required var is missing or malformed.
 
+### Build version
+
+`MIG_VERSION` is a single optional string rendered in the footer as
+`mig v<version>` (e.g. `mig vabc1234`). It's how the host (and a fresh agent on
+support duty) confirms at a glance which build is live.
+
+- **Source of truth:** `Deno.env.get("MIG_VERSION")` read by `lib/config.ts`.
+- **Default:** `"dev"` so `deno task dev` shows something useful without needing
+  any env wiring.
+- **Container injection:** the `Dockerfile` declares an `ARG MIG_VERSION=dev`
+  and exposes it via `ENV MIG_VERSION=${MIG_VERSION}`. Pass it at build time so
+  each image carries its own identifier:
+
+  ```bash
+  docker build \
+    --build-arg MIG_VERSION=$(git rev-parse --short HEAD) \
+    -t mig:abc1234 .
+  ```
+
+- **Footer:** `components/Footer.tsx` renders the chip from `Config.version`.
+  It's shown regardless of `HIDE_BRANDING` (build traceability is a diagnostic
+  concern, not advertising).
+- **Where it ends up in the DOM:** a `<span class="font-mono">` between the
+  "Powered by mig" link and the "Embed" link, with `select-all` so a user can
+  copy it with one click.
+
 ## Commands
 
 ```bash

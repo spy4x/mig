@@ -1,6 +1,12 @@
 # Build stage — deno + nodejs.
 FROM denoland/deno:debian-2.9.5 AS build
 
+# Build identifier. Wired through to the runtime ENV so mig can render
+# it in the footer. Pass at build time:
+#   docker build --build-arg MIG_VERSION=$(git rev-parse --short HEAD) .
+# Defaults to "dev" — see AGENTS.md "Build version".
+ARG MIG_VERSION=dev
+
 WORKDIR /src
 
 # Install unzip + nodejs + npm (used by vite during build).
@@ -65,6 +71,10 @@ COPY --from=build /src/static ./static
 ENV PORT=8080
 EXPOSE 8080
 ENV DATA_PATH=/data/bookings.json
+# Build identifier — re-declare ARG in this stage so the runtime ENV
+# can pick it up. AGENTS.md "Build version" has the injection recipe.
+ARG MIG_VERSION=dev
+ENV MIG_VERSION=${MIG_VERSION}
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --spider -q http://localhost:${PORT}/health || exit 1

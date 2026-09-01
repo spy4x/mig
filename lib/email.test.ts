@@ -36,6 +36,7 @@ function makeConfig(): Config {
     dataPath: "./data/bookings.json",
     hideBranding: false,
     githubUrl: "https://github.com/spy4x/mig",
+    version: "test",
   };
 }
 

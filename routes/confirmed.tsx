@@ -148,7 +148,11 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
             </a>
           </div>
         </main>
-        <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+        <Footer
+          githubUrl={cfg.githubUrl}
+          hidden={cfg.hideBranding}
+          version={cfg.version}
+        />
       </div>
     );
   }
@@ -210,7 +214,11 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
             </div>
           </div>
         </main>
-        <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+        <Footer
+          githubUrl={cfg.githubUrl}
+          hidden={cfg.hideBranding}
+          version={cfg.version}
+        />
       </div>
     );
   }
@@ -296,7 +304,11 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
           </div>
         </div>
       </main>
-      <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+      <Footer
+        githubUrl={cfg.githubUrl}
+        hidden={cfg.hideBranding}
+        version={cfg.version}
+      />
     </div>
   );
 });

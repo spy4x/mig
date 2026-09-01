@@ -12,6 +12,11 @@
 interface DateCardProps {
   date: string; // YYYY-MM-DD (host-local)
   dateLabel: string; // pre-formatted "Friday, 28 August 2026"
+  /** Called when the Change link is clicked. When provided, Change is
+   *  a <button> with onClick (no navigation, no SSR roundtrip). When
+   *  omitted, Change is an <a href="/"> for the no-JS / /embed
+   *  fallback. */
+  onClear?: () => void;
 }
 
 function CalendarIcon() {
@@ -35,7 +40,15 @@ function CalendarIcon() {
   );
 }
 
-export function DateCard({ dateLabel }: DateCardProps) {
+export function DateCard({ dateLabel, onClear }: DateCardProps) {
+  // Focus styles live on the outer <button>/<a> (the actual focusable
+  // element). Earlier refactor wrapped the inner <span> in an outer
+  // button — the outer one had `focus:outline-none`, the inner span
+  // had `focus-visible:underline` but never received focus, so the
+  // visible focus indicator disappeared.
+  const changeClass =
+    "shrink-0 inline-flex items-center gap-1 text-xs font-medium text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline";
+
   return (
     <div class="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface-raised px-4 py-3">
       <div class="flex items-center gap-3 min-w-0">
@@ -51,27 +64,50 @@ export function DateCard({ dateLabel }: DateCardProps) {
           </p>
         </div>
       </div>
-      <a
-        href="/"
-        class="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline"
-        aria-label="Change date"
-      >
-        Change
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.4"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M5 12h14" />
-          <path d="m12 5 7 7-7 7" />
-        </svg>
-      </a>
+      {onClear
+        ? (
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label="Change date"
+            class={changeClass}
+          >
+            Change
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+          </button>
+        )
+        : (
+          <a href="/" aria-label="Change date" class={changeClass}>
+            Change
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+          </a>
+        )}
     </div>
   );
 }

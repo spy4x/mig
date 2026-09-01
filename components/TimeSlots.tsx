@@ -21,6 +21,10 @@ interface TimeSlotsProps {
   dateLabel: string; // pre-formatted "Thursday, 28 August 2026"
   slots: SlotCell[];
   selectedSlot?: string | null;
+  /** Called when an available slot is picked. When provided, slots
+   *  render as <button> with onClick. When omitted, slots render as
+   *  <a href="/?date=…&slot=…"> for the no-JS / /embed fallback. */
+  onSelectSlot?: (date: string, slot: string) => void;
 }
 
 type Period = "morning" | "afternoon" | "evening";
@@ -41,7 +45,7 @@ const PERIOD_LABEL: Record<Period, string> = {
 const PERIOD_ORDER: Period[] = ["morning", "afternoon", "evening"];
 
 export function TimeSlots(
-  { date, dateLabel, slots, selectedSlot }: TimeSlotsProps,
+  { date, dateLabel, slots, selectedSlot, onSelectSlot }: TimeSlotsProps,
 ) {
   if (slots.length === 0) {
     return (
@@ -82,6 +86,7 @@ export function TimeSlots(
                   date={date}
                   slot={s}
                   selected={selectedSlot === s.time}
+                  onSelect={onSelectSlot}
                 />
               ))}
             </div>
@@ -93,10 +98,11 @@ export function TimeSlots(
 }
 
 function SlotButton(
-  { date, slot, selected }: {
+  { date, slot, selected, onSelect }: {
     date: string;
     slot: SlotCell;
     selected: boolean;
+    onSelect?: (date: string, slot: string) => void;
   },
 ) {
   const base =
@@ -123,6 +129,18 @@ function SlotButton(
       >
         {slot.time}
       </span>
+    );
+  }
+
+  if (onSelect) {
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect(date, slot.time)}
+        class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
+      >
+        {slot.time}
+      </button>
     );
   }
 
