@@ -2,6 +2,7 @@ import { define } from "../lib/utils.ts";
 import { verifyCancelToken } from "../lib/tokens.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
+import { formatDateLong, formatTimeOfDay, validTimeZoneOr } from "../lib/tz.ts";
 
 interface CancelData {
   state: "ok" | "missing" | "invalid" | "not-found" | "already-cancelled";
@@ -11,6 +12,7 @@ interface CancelData {
       date: string;
       time: string;
       hostTz: string;
+      guestTz: string | null;
       guestName: string;
     }
     | null;
@@ -83,6 +85,7 @@ export const handler = define.handlers({
           date: booking.date,
           time: booking.time,
           hostTz: booking.hostTz,
+          guestTz: booking.guestTz ?? null,
           guestName: booking.guestName,
         },
         token,
@@ -91,30 +94,6 @@ export const handler = define.handlers({
     };
   },
 });
-
-function formatWhen(date: string, time: string, tz: string): string {
-  const dt = new Date(date + "T" + time + ":00Z");
-  // Date only — time is hidden behind the action; the email and
-  // ICS attachment carry the precise moment in UTC, so a calendar
-  // app can put it in the visitor's local zone.
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(dt);
-}
-
-function formatTime(date: string, time: string, tz: string): string {
-  const dt = new Date(date + "T" + time + ":00Z");
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(dt);
-}
 
 export default define.page<typeof handler>(function Cancel({ data, state }) {
   const cfg = state.config;
@@ -200,8 +179,13 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
 
   const b = data.booking!;
   const token = data.token!;
-  const whenDate = formatWhen(b.date, b.time, b.hostTz);
-  const whenTime = formatTime(b.date, b.time, b.hostTz);
+  // Render the booking time in the visitor's TZ when we captured one
+  // at submit time — same convention as the /confirmed page. Falls
+  // back to host TZ for older bookings without guestTz, or for
+  // invalid values.
+  const displayTz = validTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
+  const whenDate = formatDateLong(b.date, displayTz);
+  const whenTime = formatTimeOfDay(b.date, b.time, displayTz);
 
   return (
     <div class="min-h-dvh flex flex-col">
@@ -248,18 +232,12 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
                 />
               </div>
 
-              <div class="flex items-center justify-end gap-2 pt-2">
-                <a
-                  href="/"
-                  class="px-4 py-2 rounded-lg text-sm font-medium text-ink-muted hover:bg-surface-sunken transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                >
-                  Keep booking
-                </a>
+              <div class="flex items-center justify-end pt-2">
                 <button
                   type="submit"
                   class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-500 hover:bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
                 >
-                  Cancel booking
+                  Cancel
                 </button>
               </div>
             </form>

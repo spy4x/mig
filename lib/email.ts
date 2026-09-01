@@ -180,7 +180,7 @@ export function buildCancellationEmails(
         cancellerLabel: guestCancellerLabel,
         reason: reasonText,
       }),
-      html: cancellationHtml({
+      html: cancellationHtml(config, {
         greeting: `Hi ${booking.guestName},`,
         body: guestBody,
         cancellerLabel: guestCancellerLabel,
@@ -196,7 +196,7 @@ export function buildCancellationEmails(
         cancellerLabel: hostCancellerLabel,
         reason: reasonText,
       }),
-      html: cancellationHtml({
+      html: cancellationHtml(config, {
         greeting: `Hi ${config.hostName},`,
         body: hostBody,
         cancellerLabel: hostCancellerLabel,
@@ -235,25 +235,27 @@ function guestHtml(
   booking: Booking,
   cancelUrl: string,
 ): string {
-  return htmlWrap(`
+  return htmlWrap(
+    config,
+    `
     <p>Hi ${esc(booking.guestName)},</p>
     <p>Your meeting with <strong>${esc(config.hostName)}</strong> is booked.</p>
     <table style="border-collapse:collapse;margin:16px 0">
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">When</td>
           <td style="padding:4px 0">${
-    esc(whenLong(booking, guestTimeZone(booking)))
-  }</td></tr>
+      esc(whenLong(booking, guestTimeZone(booking)))
+    }</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Where</td>
           <td style="padding:4px 0"><a href="${
-    esc(config.meetingUrl)
-  }" style="color:#f97316">${esc(config.meetingUrl)}</a></td></tr>
+      esc(config.meetingUrl)
+    }" style="color:#f97316">${esc(config.meetingUrl)}</a></td></tr>
     </table>
     <p>Add to calendar: open the attached <code>.ics</code> file.</p>
     <p>Need to cancel? <a href="${
-    esc(cancelUrl)
-  }" style="color:#f97316">Cancel booking</a></p>
-    <p style="color:#64748b;font-size:14px">— Sent by mig</p>
-  `);
+      esc(cancelUrl)
+    }" style="color:#f97316">Click here</a></p>
+  `,
+  );
 }
 
 function ownerText(
@@ -281,7 +283,7 @@ function ownerText(
 }
 
 function ownerHtml(
-  _config: Config,
+  config: Config,
   booking: Booking,
   cancelUrl: string,
 ): string {
@@ -291,26 +293,28 @@ function ownerHtml(
       esc(booking.notes.trim())
     }</td></tr>`
     : "";
-  return htmlWrap(`
+  return htmlWrap(
+    config,
+    `
     <p>New booking received.</p>
     <table style="border-collapse:collapse;margin:16px 0">
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Guest</td>
           <td style="padding:4px 0">${esc(booking.guestName)} &lt;${
-    esc(booking.guestEmail)
-  }&gt;</td></tr>
+      esc(booking.guestEmail)
+    }&gt;</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">When</td>
           <td style="padding:4px 0">${
-    esc(whenLong(booking, booking.hostTz))
-  }</td></tr>
+      esc(whenLong(booking, booking.hostTz))
+    }</td></tr>
       ${notesHtml}
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Booked at</td>
           <td style="padding:4px 0">${esc(booking.createdAt)}</td></tr>
     </table>
     <p><a href="${
-    esc(cancelUrl)
-  }" style="color:#f97316">Cancel this booking</a></p>
-    <p style="color:#64748b;font-size:14px">— Sent by mig</p>
-  `);
+      esc(cancelUrl)
+    }" style="color:#f97316">Cancel this booking</a></p>
+  `,
+  );
 }
 
 function cancellationText(opts: {
@@ -332,13 +336,18 @@ function cancellationText(opts: {
   ].join("\n");
 }
 
-function cancellationHtml(opts: {
-  greeting: string;
-  body: string;
-  cancellerLabel: string;
-  reason: string;
-}): string {
-  return htmlWrap(`
+function cancellationHtml(
+  config: Config,
+  opts: {
+    greeting: string;
+    body: string;
+    cancellerLabel: string;
+    reason: string;
+  },
+): string {
+  return htmlWrap(
+    config,
+    `
     <p>${esc(opts.greeting.replace(/,$/, ""))},</p>
     <p>${esc(opts.body)}</p>
     <table style="border-collapse:collapse;margin:16px 0">
@@ -349,8 +358,8 @@ function cancellationHtml(opts: {
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Cancelled at</td>
           <td style="padding:4px 0">${esc(new Date().toISOString())}</td></tr>
     </table>
-    <p style="color:#64748b;font-size:14px">— Sent by mig</p>
-  `);
+  `,
+  );
 }
 
 function bookingInstant(booking: Booking): Date {
@@ -370,15 +379,26 @@ function whenLong(booking: Booking, displayTz: string): string {
     ` (${displayTz})`;
 }
 
-function htmlWrap(body: string): string {
+function htmlWrap(config: Config, body: string): string {
+  // Constrain to ~480px so the email reads as a letter, not a full
+  // desktop pane. The body's dark background still extends to the
+  // email-client viewport edges, which keeps the dark-mode look
+  // clean without leaving the content dangling in whitespace.
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:24px;background:#0f172a;color:#e2e8f0;
              font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
              font-size:16px;line-height:1.6">
-<div style="max-width:560px;margin:0 auto">
-  <div style="color:#f97316;font-weight:600;margin-bottom:16px">mig</div>
+<div style="max-width:480px;margin:0 auto">
+  <div style="margin-bottom:16px">
+    <a href="${
+    esc(config.githubUrl)
+  }" style="color:#f97316;font-weight:600;text-decoration:none">mig</a>
+  </div>
   ${body}
+  <p style="color:#64748b;font-size:14px;margin-top:24px">— Sent by <a href="${
+    esc(config.githubUrl)
+  }" style="color:#64748b;text-decoration:underline">mig</a></p>
 </div>
 </body></html>`;
 }
