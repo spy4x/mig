@@ -1,16 +1,14 @@
 /*
   Footer. Hidden when HIDE_BRANDING is true (config-driven, not env).
 
-  Kept minimal — a single line with the "Powered by mig" attribution
-  and an "embed" link. No socials, no language picker. The page is
-  supposed to feel personal, not corporate.
+  Kept minimal — a single line with the "Powered by mig vX.Y.Z"
+  attribution and an "embed" link. No socials, no language picker.
+  The page is supposed to feel personal, not corporate.
 
-  The version chip (e.g. "mig vabc1234") sits between the attribution
-  and the embed link so a fresh agent (or the host) can confirm at a
-  glance which build is live. The chip is rendered even when
-  HIDE_BRANDING is true — branding and build traceability are
-  separate concerns. It always renders because it's useful diagnostic
-  info, not advertising.
+  The build version is rendered inline with the attribution so the
+  host can confirm at a glance which build is live without a
+  separate chip. Pass either "0.2.0" or "v0.2.0" — the `v` prefix
+  is normalised at render time.
 
   `pb-6` keeps the footer text off the screen edge on short pages
   where the layout doesn't push it down naturally — small enough
@@ -20,45 +18,42 @@
 interface FooterProps {
   githubUrl: string;
   hidden?: boolean;
+  /** Build identifier (semver recommended, e.g. "0.2.0"). The `v`
+   *  prefix is added at render time so callers can pass either with
+   *  or without it. Falls back to `"dev"` when unset. */
   version?: string;
+}
+
+function formatVersion(raw: string | undefined): string {
+  const v = (raw && raw.trim()) || "dev";
+  // Strip a leading "v" so callers can pass either "0.2.0" or
+  // "v0.2.0" — both should render as "v0.2.0".
+  return v.startsWith("v") ? v : `v${v}`;
 }
 
 export function Footer(
   { githubUrl, hidden = false, version }: FooterProps,
 ) {
-  const v = (version && version.trim()) || "dev";
-  // The version chip is diagnostic info (which build is live?) so it
-  // renders even when `hidden=true` — branding is an advertising
-  // concern, build traceability is a separate operational one. The
-  // rest of the chrome (Powered-by + Embed) is suppressed on hide.
+  if (hidden) return null;
+  const v = formatVersion(version);
   return (
     <footer class="mt-16 pt-6 pb-6 border-t border-line">
       <div class="mx-auto max-w-2xl px-4 sm:px-6 flex items-center justify-between text-xs text-ink-subtle">
-        {hidden ? <span /> : (
-          <a
-            href={githubUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="hover:text-ink transition-colors"
-          >
-            Powered by mig
-          </a>
-        )}
-        <span
-          class="font-mono text-[11px] text-ink-subtle/80 select-all"
-          title={`Build identifier — set via MIG_VERSION env at build time. Currently: ${v}`}
+        <a
+          href={githubUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:text-ink transition-colors"
         >
-          mig v{v}
-        </span>
-        {hidden ? <span /> : (
-          <a
-            href="/embed"
-            class="hover:text-ink transition-colors"
-            title="Use this on your own site"
-          >
-            Embed
-          </a>
-        )}
+          Powered by mig {v}
+        </a>
+        <a
+          href="/embed"
+          class="hover:text-ink transition-colors"
+          title="Use this on your own site"
+        >
+          Embed
+        </a>
       </div>
     </footer>
   );
