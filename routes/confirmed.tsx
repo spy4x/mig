@@ -3,6 +3,13 @@ import { verifyCancelToken } from "../lib/tokens.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
 import { formatDateLong, formatTimeOfDay, validTimeZoneOr } from "../lib/tz.ts";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  InfoCircle,
+  Minus,
+} from "../components/icons.tsx";
 
 interface ConfirmedData {
   state: "ok" | "missing" | "invalid" | "expired";
@@ -109,21 +116,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
         <main class="flex-1 grid place-items-center px-6 py-16">
           <div class="max-w-sm text-center">
             <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
-              <svg
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
+              <InfoCircle />
             </div>
             <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
               {title}
@@ -164,19 +157,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
           <div class="max-w-sm w-full">
             <div class="text-center mb-8">
               <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-surface-sunken text-ink-subtle mb-5">
-                <svg
-                  width="26"
-                  height="26"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M5 12h14" />
-                </svg>
+                <Minus size={26} strokeWidth={1.8} />
               </div>
               <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
                 Booking cancelled
@@ -194,20 +175,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
                 class="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
                 Book another time
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M5 12h14" />
-                  <path d="m12 5 7 7-7 7" />
-                </svg>
+                <ArrowRight size={14} />
               </a>
             </div>
           </div>
@@ -228,19 +196,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
         <div class="max-w-md w-full">
           <div class="text-center mb-8">
             <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300 mb-5">
-              <svg
-                width="26"
-                height="26"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.4"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M20 6 9 17l-5-5" />
-              </svg>
+              <Check />
             </div>
             <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
               You're booked
@@ -281,20 +237,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
               href="/"
               class="inline-flex items-center gap-1 text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline"
             >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="m12 19-7-7 7-7" />
-                <path d="M19 12H5" />
-              </svg>
+              <ArrowLeft />
               Book another time
             </a>
             <a
@@ -302,20 +245,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
               class="inline-flex items-center gap-1 text-ink-muted hover:text-red-600 dark:hover:text-red-300 transition-colors focus:outline-none focus-visible:underline"
             >
               Need to cancel?
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M5 12h14" />
-                <path d="m12 5 7 7-7 7" />
-              </svg>
+              <ArrowRight />
             </a>
           </div>
         </div>

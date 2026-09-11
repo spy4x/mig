@@ -3,6 +3,7 @@ import { verifyCancelToken } from "../lib/tokens.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
 import { formatDateLong, formatTimeOfDay, validTimeZoneOr } from "../lib/tz.ts";
+import { InfoCircle } from "../components/icons.tsx";
 
 interface CancelData {
   state: "ok" | "missing" | "invalid" | "not-found" | "already-cancelled";
@@ -140,21 +141,7 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
         <main class="flex-1 grid place-items-center px-6 py-16">
           <div class="max-w-sm text-center">
             <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
-              <svg
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
+              <InfoCircle />
             </div>
             <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
               {msg.title}

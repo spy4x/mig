@@ -9,6 +9,8 @@
   Picker interprets as "show the calendar again".
 */
 
+import { ArrowRight, Calendar } from "./icons.tsx";
+
 interface DateCardProps {
   date: string; // YYYY-MM-DD (host-local)
   dateLabel: string; // pre-formatted "Friday, 28 August 2026"
@@ -17,27 +19,6 @@ interface DateCardProps {
    *  omitted, Change is an <a href="/"> for the no-JS / /embed
    *  fallback. */
   onClear?: () => void;
-}
-
-function CalendarIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  );
 }
 
 export function DateCard({ dateLabel, onClear }: DateCardProps) {
@@ -53,7 +34,7 @@ export function DateCard({ dateLabel, onClear }: DateCardProps) {
     <div class="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface-raised px-4 py-3">
       <div class="flex items-center gap-3 min-w-0">
         <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-300">
-          <CalendarIcon />
+          <Calendar />
         </span>
         <div class="min-w-0">
           <p class="text-[11px] font-medium uppercase tracking-wider text-ink-subtle">
@@ -73,39 +54,13 @@ export function DateCard({ dateLabel, onClear }: DateCardProps) {
             class={changeClass}
           >
             Change
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M5 12h14" />
-              <path d="m12 5 7 7-7 7" />
-            </svg>
+            <ArrowRight size={12} />
           </button>
         )
         : (
           <a href="/" aria-label="Change date" class={changeClass}>
             Change
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M5 12h14" />
-              <path d="m12 5 7 7-7 7" />
-            </svg>
+            <ArrowRight size={12} />
           </a>
         )}
     </div>

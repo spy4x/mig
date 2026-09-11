@@ -13,6 +13,8 @@
       they use the DateCard's Change button.
 */
 
+import { Calendar } from "./icons.tsx";
+
 interface SummaryBarProps {
   /** "none"  → bar is hidden.
    *  "date"  → date picked, no slot yet. Pill shows the date.
@@ -35,22 +37,7 @@ export function SummaryBar(props: SummaryBarProps) {
       <div class="mx-auto max-w-2xl px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div class="pointer-events-auto flex items-center justify-center gap-2 rounded-2xl border border-line bg-surface-raised/95 backdrop-blur-md shadow-[0_8px_32px_-12px_rgb(0_0_0_/_0.18)] px-4 py-2.5">
           <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-brand-500/10 text-brand-600 dark:text-brand-300 shrink-0">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <rect x="3" y="4" width="18" height="18" rx="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
+            <Calendar size={14} strokeWidth={2.2} />
           </span>
           <span class="truncate text-sm font-medium text-ink tnum">
             {dateLabel ?? date}
