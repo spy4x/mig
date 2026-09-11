@@ -5,15 +5,28 @@
   Slot links go to /?date=...&slot=HH:MM so the URL stays the source
   of truth — no JS required to advance the booking flow.
 
-  Periods (host-local):
+  Display TZ: each slot's HH:MM is stored as host-local time (the
+  authoritative value the server books against). The island can pass
+  a `displayTime` per slot — the HH:MM string the visitor actually
+  sees, formatted in their TZ. SSR / no-JS / `/embed` leave it unset
+  and the host-local string renders. Bucketing into Morning /
+  Afternoon / Evening uses `displayTime` when present so the label
+  agrees with the displayed time.
+
+  Periods (based on the time being displayed):
     morning   05:00–11:59
     afternoon 12:00–16:59
     evening   17:00–04:59 (wraps midnight)
 */
 
 interface SlotCell {
-  time: string;
+  time: string; // host-local HH:MM, authoritative
   available: boolean;
+  /** Optional visitor-TZ HH:MM. When present, the button renders
+   *  this string instead of `time`, and the period bucket is
+   *  computed from this. Falls back to `time` (host TZ) when
+   *  absent — e.g. SSR pass before hydration, or `/embed`. */
+  displayTime?: string;
 }
 
 interface TimeSlotsProps {
@@ -21,6 +34,10 @@ interface TimeSlotsProps {
   dateLabel: string; // pre-formatted "Thursday, 28 August 2026"
   slots: SlotCell[];
   selectedSlot?: string | null;
+  /** Called when an available slot is picked. When provided, slots
+   *  render as <button> with onClick. When omitted, slots render as
+   *  <a href="/?date=…&slot=…"> for the no-JS / /embed fallback. */
+  onSelectSlot?: (date: string, slot: string) => void;
 }
 
 type Period = "morning" | "afternoon" | "evening";
@@ -41,7 +58,7 @@ const PERIOD_LABEL: Record<Period, string> = {
 const PERIOD_ORDER: Period[] = ["morning", "afternoon", "evening"];
 
 export function TimeSlots(
-  { date, dateLabel, slots, selectedSlot }: TimeSlotsProps,
+  { date, dateLabel, slots, selectedSlot, onSelectSlot }: TimeSlotsProps,
 ) {
   if (slots.length === 0) {
     return (
@@ -53,13 +70,15 @@ export function TimeSlots(
     );
   }
 
-  // Bucket slots by period, preserving the input order within each.
+  // Bucket by the time the visitor actually sees. The island passes
+  // a visitor-TZ displayTime after hydration; without it we fall
+  // back to the host-local `time` string (SSR / /embed / no-JS).
   const buckets: Record<Period, SlotCell[]> = {
     morning: [],
     afternoon: [],
     evening: [],
   };
-  for (const s of slots) buckets[periodFor(s.time)].push(s);
+  for (const s of slots) buckets[periodFor(s.displayTime ?? s.time)].push(s);
 
   const periods = PERIOD_ORDER.filter((p) => buckets[p].length > 0);
 
@@ -82,6 +101,7 @@ export function TimeSlots(
                   date={date}
                   slot={s}
                   selected={selectedSlot === s.time}
+                  onSelect={onSelectSlot}
                 />
               ))}
             </div>
@@ -93,14 +113,19 @@ export function TimeSlots(
 }
 
 function SlotButton(
-  { date, slot, selected }: {
+  { date, slot, selected, onSelect }: {
     date: string;
     slot: SlotCell;
     selected: boolean;
+    onSelect?: (date: string, slot: string) => void;
   },
 ) {
   const base =
     "inline-flex h-10 min-w-[4.5rem] items-center justify-center rounded-lg border px-3 text-sm tnum font-medium transition-all duration-(--duration-snappy) focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised";
+  // What the user actually sees. Falls back to host-local when the
+  // island hasn't computed a visitor-TZ displayTime yet (SSR + /embed
+  // + pre-hydration).
+  const shownTime = slot.displayTime ?? slot.time;
 
   if (selected) {
     return (
@@ -109,7 +134,7 @@ function SlotButton(
         title="Selected"
         class={`${base} border-brand-500 bg-brand-500 text-white font-semibold shadow-sm cursor-default`}
       >
-        {slot.time}
+        {shownTime}
       </span>
     );
   }
@@ -121,8 +146,20 @@ function SlotButton(
         title="Already booked"
         class={`${base} border-line bg-surface-sunken text-ink-subtle/60 line-through decoration-ink-subtle/40 cursor-not-allowed`}
       >
-        {slot.time}
+        {shownTime}
       </span>
+    );
+  }
+
+  if (onSelect) {
+    return (
+      <button
+        type="button"
+        onClick={() => onSelect(date, slot.time)}
+        class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
+      >
+        {shownTime}
+      </button>
     );
   }
 
@@ -131,7 +168,7 @@ function SlotButton(
       href={`/?date=${date}&slot=${encodeURIComponent(slot.time)}`}
       class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
     >
-      {slot.time}
+      {shownTime}
     </a>
   );
 }

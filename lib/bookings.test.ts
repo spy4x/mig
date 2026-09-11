@@ -45,7 +45,7 @@ Deno.test("BookingsStore — persists mutations atomically", async () => {
   await s.init();
 
   await s.mutate((draft) => {
-    draft.push(makeBooking({ id: "a" }));
+    draft.push(makeBooking({ id: "a", guestTz: "America/New_York" }));
     draft.push(makeBooking({ id: "b" }));
   });
   assertEquals(s.list().length, 2);
@@ -55,6 +55,7 @@ Deno.test("BookingsStore — persists mutations atomically", async () => {
   await s2.init();
   assertEquals(s2.list().length, 2);
   assertEquals(s2.list()[0].id, "a");
+  assertEquals(s2.list()[0].guestTz, "America/New_York");
   await rm(path);
 });
 

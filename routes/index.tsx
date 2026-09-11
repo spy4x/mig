@@ -1,8 +1,7 @@
 import { define } from "../lib/utils.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
-import { Picker } from "../components/Picker.tsx";
-import { SummaryBar } from "../components/SummaryBar.tsx";
+import BookingFlow from "../islands/BookingFlow.tsx";
 import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
 import { isoDateInTz, minToHHMM, zonedDateTime } from "../lib/tz.ts";
 
@@ -10,11 +9,9 @@ interface IndexData {
   date: string | null;
   slot: string | null;
   dates: Array<{ date: string; slots: number }>;
-  selectedDateLabel: string | null;
   slots: Array<{ time: string; available: boolean }>;
   error: string | null;
   monthAnchor: string;
-  confirmLabel: string | null;
 }
 
 function parseDateParam(v: string | null): string | null {
@@ -65,26 +62,6 @@ function dayNameFromDate(
     | "SUN";
 }
 
-// Compact "Fri, 28 Aug, 14:00" used in the confirm-button label.
-// Computed once in the route (host-local) and passed down so the
-// form + button stay in lockstep with what's already on screen.
-function formatConfirmLabel(date: string, slot: string, tz: string): string {
-  const dt = zonedDateTime(date, slot, tz);
-  const weekday = new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    weekday: "short",
-  }).format(dt);
-  const day = new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    day: "numeric",
-  }).format(dt);
-  const month = new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    month: "short",
-  }).format(dt);
-  return `Confirm — ${weekday}, ${day} ${month}, ${slot}`;
-}
-
 export default define.page(function Index(ctx) {
   const cfg = ctx.state.config;
   const url = new URL(ctx.req.url);
@@ -128,18 +105,6 @@ export default define.page(function Index(ctx) {
     return { date: d, slots };
   });
 
-  let selectedDateLabel: string | null = null;
-  if (date) {
-    const dt = zonedDateTime(date, "12:00", cfg.hostTz);
-    selectedDateLabel = new Intl.DateTimeFormat("en-GB", {
-      timeZone: cfg.hostTz,
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }).format(dt);
-  }
-
   const slots: IndexData["slots"] = [];
   if (date && !cfg.blockedDates.has(date)) {
     const dayBookings = ctx.state.bookings.forDate(date);
@@ -164,15 +129,9 @@ export default define.page(function Index(ctx) {
     }
   }
 
-  const summaryState: "none" | "date" | "slot" = slot
-    ? "slot"
-    : date
-    ? "date"
-    : "none";
-
-  const confirmLabel = date && slot
-    ? formatConfirmLabel(date, slot, cfg.hostTz)
-    : null;
+  // The BookingFlow island computes its own confirm label (host TZ
+  // on SSR, visitor TZ after hydration), so the route doesn't need
+  // to pre-compute one.
 
   return (
     <div class="min-h-dvh flex flex-col">
@@ -186,30 +145,25 @@ export default define.page(function Index(ctx) {
           />
 
           <div class="mt-8 sm:mt-10">
-            <Picker
+            <BookingFlow
               dates={dates}
               slots={slots}
               selectedDate={date}
-              selectedDateLabel={selectedDateLabel}
               selectedSlot={slot}
               monthAnchor={monthAnchor}
               durationMin={cfg.slotDurationMin}
               hostName={cfg.hostName}
               hostTz={cfg.hostTz}
               error={error}
-              confirmLabel={confirmLabel}
             />
           </div>
         </div>
       </main>
 
-      <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
-
-      <SummaryBar
-        state={summaryState}
-        date={date}
-        dateLabel={selectedDateLabel}
-        slot={slot}
+      <Footer
+        githubUrl={cfg.githubUrl}
+        hidden={cfg.hideBranding}
+        version={cfg.version}
       />
     </div>
   );

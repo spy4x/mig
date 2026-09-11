@@ -28,7 +28,13 @@ export default define.page(function Error(
           </a>
         </div>
       </main>
-      {cfg && <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />}
+      {cfg && (
+        <Footer
+          githubUrl={cfg.githubUrl}
+          hidden={cfg.hideBranding}
+          version={cfg.version}
+        />
+      )}
     </div>
   );
 });

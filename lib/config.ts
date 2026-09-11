@@ -34,6 +34,10 @@ const RawSchema = z.object({
   DATA_PATH: z.string().default("./data/bookings.json"),
   HIDE_BRANDING: z.coerce.boolean().default(false),
   GITHUB_URL: z.string().url().default("https://github.com/spy4x/mig"),
+  // Build identifier. Injected at container build time as a docker
+  // --build-arg (see AGENTS.md "Build version"). Defaults to "dev" so
+  // local `deno task dev` always shows something sensible.
+  MIG_VERSION: z.string().trim().max(64).optional().default("dev"),
 });
 
 function loadEnv(): Record<string, string> {
@@ -125,6 +129,7 @@ function parseConfig(): Config {
     dataPath: r.DATA_PATH,
     hideBranding: r.HIDE_BRANDING,
     githubUrl: r.GITHUB_URL,
+    version: r.MIG_VERSION,
   };
 }
 

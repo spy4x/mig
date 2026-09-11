@@ -26,7 +26,11 @@ export default define.page(function NotFound({ state }) {
           </a>
         </div>
       </main>
-      <Footer githubUrl={cfg.githubUrl} hidden={cfg.hideBranding} />
+      <Footer
+        githubUrl={cfg.githubUrl}
+        hidden={cfg.hideBranding}
+        version={cfg.version}
+      />
     </div>
   );
 });

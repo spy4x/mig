@@ -1,11 +1,19 @@
-// ICS VCALENDAR generator. Produces a single VEVENT with timezone-aware
-// DTSTART/DTEND so calendar clients display the meeting in host TZ.
+// ICS VCALENDAR generator. Produces a single VEVENT with UTC DTSTART/DTEND
+// so calendar clients display the meeting in their configured timezone.
 
 import type { Booking, Config } from "./types.ts";
-import { formatDateTimeLong, zonedDateTime } from "./tz.ts";
+import { formatInstantLong, validTimeZoneOr, zonedDateTime } from "./tz.ts";
 
 const PRODID = "-//mig//EN";
 const VERSION = "2.0";
+
+function stripUnsupportedControlCharacters(value: string): string {
+  return [...value].filter((character) => {
+    const code = character.codePointAt(0)!;
+    return !((code <= 31 && code !== 9 && code !== 10 && code !== 13) ||
+      code === 127);
+  }).join("");
+}
 
 function pad(n: number, w = 2): string {
   return String(n).padStart(w, "0");
@@ -23,59 +31,63 @@ function icsDateUTC(d: Date): string {
 
 // Escape per RFC 5545: backslash, semicolon, comma; newlines to \n.
 function icsEscape(s: string): string {
-  return s
+  return stripUnsupportedControlCharacters(s)
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n")
     .replaceAll("\\", "\\\\")
     .replaceAll(";", "\\;")
     .replaceAll(",", "\\,")
     .replaceAll("\n", "\\n");
 }
 
-// 75-octet line folding per RFC 5545 §3.1. We prefer to break at a
-// space when one exists within the last ~20 chars of the chunk,
-// rather than splitting mid-word. The space is included in the
-// current chunk (so the next chunk's leading whitespace — which
-// the client strips on unfold — doesn't eat the original space
-// and collapse words together).
+// RFC 6868 encoding for quoted RFC 5545 parameter values.
+function icsParameterEscape(s: string): string {
+  return stripUnsupportedControlCharacters(s)
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n")
+    .replaceAll("^", "^^")
+    .replaceAll('"', "^'")
+    .replaceAll("\n", "^n");
+}
+
+// 75-octet line folding per RFC 5545 §3.1. Continuation lines reserve
+// one octet for their leading space. Iterate code points so UTF-8
+// characters are never split.
 function fold(line: string): string {
-  if (line.length <= 75) return line;
+  const encoder = new TextEncoder();
+  if (encoder.encode(line).length <= 75) return line;
+
   const chunks: string[] = [];
-  let remaining = line;
-  const firstMax = 75; // first chunk has no leading space
-  const contMax = 74; // continuation chunks have a leading space (1 octet)
-  while (remaining.length > firstMax) {
-    const limit = chunks.length === 0 ? firstMax : contMax;
-    let breakAt = -1;
-    // Search backwards for a space inside the chunk window. The
-    // floor (limit - 20) avoids breaking in the middle of a
-    // long URL just because it has no spaces anywhere.
-    for (let i = Math.min(limit, remaining.length) - 1; i > limit - 20; i--) {
-      if (remaining[i] === " ") {
-        breakAt = i;
-        break;
-      }
+  let chunk = "";
+  let chunkBytes = 0;
+  let limit = 75;
+
+  for (const character of line) {
+    const characterBytes = encoder.encode(character).length;
+    if (chunk && chunkBytes + characterBytes > limit) {
+      chunks.push(chunk);
+      chunk = "";
+      chunkBytes = 0;
+      limit = 74;
     }
-    if (breakAt === -1) {
-      chunks.push(remaining.slice(0, limit));
-      remaining = (chunks.length === 0 ? "" : " ") + remaining.slice(limit);
-    } else {
-      // Include the space at breakAt in the current chunk. The
-      // continuation line's leading whitespace (the 1-octet
-      // continuation indicator) is what gets stripped on unfold,
-      // not this space.
-      chunks.push(remaining.slice(0, breakAt + 1));
-      remaining = " " + remaining.slice(breakAt + 1);
-    }
+    chunk += character;
+    chunkBytes += characterBytes;
   }
-  chunks.push(remaining);
-  return chunks.join("\r\n");
+  if (chunk) chunks.push(chunk);
+
+  return chunks.map((value, index) => index === 0 ? value : ` ${value}`).join(
+    "\r\n",
+  );
 }
 
 export function generateIcs(
   booking: Booking,
   config: Config,
   cancelUrl: string,
+  displayTz = booking.hostTz,
 ): string {
   const start = zonedDateTime(booking.date, booking.time, booking.hostTz);
+  displayTz = validTimeZoneOr(displayTz, booking.hostTz);
   const end = new Date(
     start.getTime() + config.slotDurationMin * 60_000,
   );
@@ -96,7 +108,7 @@ export function generateIcs(
   //   3. Notes: guest's notes, if any
   //   4. Cancel URL — wrapped in a single trailing line so the URL
   //      and its label travel together
-  const when = formatDateTimeLong(booking.date, booking.time, booking.hostTz);
+  const when = `${formatInstantLong(start, displayTz)} (${displayTz})`;
 
   const descLines: string[] = [
     `Meeting with ${config.hostName}`,
@@ -130,10 +142,12 @@ export function generateIcs(
     `SUMMARY:${icsEscape(summary)}`,
     `DESCRIPTION:${icsEscape(description)}`,
     `LOCATION:${icsEscape(location)}`,
-    `ORGANIZER;CN=${icsEscape(config.hostName)}:mailto:${config.hostEmail}`,
-    `ATTENDEE;CN=${
-      icsEscape(booking.guestName)
-    };RSVP=TRUE:mailto:${booking.guestEmail}`,
+    `ORGANIZER;CN="${
+      icsParameterEscape(config.hostName)
+    }":mailto:${config.hostEmail}`,
+    `ATTENDEE;CN="${
+      icsParameterEscape(booking.guestName)
+    }";RSVP=TRUE:mailto:${booking.guestEmail}`,
     `STATUS:${booking.status === "cancelled" ? "CANCELLED" : "CONFIRMED"}`,
     "TRANSP:OPAQUE",
     "END:VEVENT",
@@ -148,5 +162,9 @@ export function generateIcs(
 // host timezone here — that's a host detail that doesn't belong in
 // visitor-facing strings.
 export function meetingSummary(booking: Booking): string {
-  return formatDateTimeLong(booking.date, booking.time, booking.hostTz);
+  const instant = zonedDateTime(booking.date, booking.time, booking.hostTz);
+  return formatInstantLong(
+    instant,
+    validTimeZoneOr(booking.guestTz, booking.hostTz),
+  );
 }
