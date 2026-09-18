@@ -1,6 +1,6 @@
 # mig ⏱
 
-[![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fspy4x%2Fmig-blue)](https://github.com/spy4x/mig/pkgs/container/mig)
+[![Docker](https://img.shields.io/badge/docker-antonshubin%2Fmig-blue)](https://hub.docker.com/r/antonshubin/mig)
 [![Deno](https://img.shields.io/badge/deno-2.x-black?logo=deno)](https://deno.land)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![GitHub](https://img.shields.io/badge/github-spy4x%2Fmig-181717?logo=github)](https://github.com/spy4x/mig)
@@ -84,7 +84,7 @@ docker run -d --name mig \
   -e SMTP_FROM="Bookings <book@example.com>" \
   -e CANCEL_SECRET=$(openssl rand -base64 32) \
   -e PUBLIC_URL=https://meet.example.com \
-  ghcr.io/spy4x/mig:latest
+  antonshubin/mig:latest
 ```
 
 ### Docker Compose
@@ -92,7 +92,7 @@ docker run -d --name mig \
 ```yaml
 services:
   mig:
-    image: ghcr.io/spy4x/mig:latest
+    image: antonshubin/mig:latest
     container_name: mig
     restart: unless-stopped
     ports:

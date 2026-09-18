@@ -20,4 +20,4 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dark + light theme with OS auto-detection, manual toggle persisted in
   localStorage.
 - Single-binary deploy via `deno compile`.
-- Distroless container (~25 MB) at `ghcr.io/spy4x/mig`.
+- Distroless container (~25 MB) at `antonshubin/mig`.
