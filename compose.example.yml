@@ -3,7 +3,7 @@
 
 services:
   mig:
-    image: ghcr.io/spy4x/mig:latest
+    image: antonshubin/mig:latest
     container_name: mig
     restart: unless-stopped
     ports:
