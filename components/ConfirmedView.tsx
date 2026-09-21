@@ -33,8 +33,8 @@ export interface ConfirmedViewProps extends ConfirmedData {
   cancelTarget?: "_blank";
   /** <main> classes for the cancelled state. Defaults to the
    *  standalone page's original `px-6 py-16` (matches the not-ok
-   *  state) so the standalone page renders byte-identical to before
-   *  this component existed. /embed passes a tighter class list to
+   *  state) so the standalone page renders as it did before this
+   *  component existed. /embed passes a tighter class list to
    *  match its own denser layout. */
   cancelledMainClass?: string;
   /** id for every state's <main>. The standalone page's own <main>

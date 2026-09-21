@@ -208,7 +208,7 @@ previous config may still be setting it globally. The rest of the site (`/`,
 nothing sent anywhere — it just fills a hidden form field before submit), the
 same way the theme toggle avoids a flash of the wrong theme. Without JavaScript
 that field stays empty and the booking still goes through; the confirmation
-email and page just show times in the host's timezone instead of the visitor's.
+email then shows times in the host's timezone instead of the visitor's.
 
 ## Architecture
 
