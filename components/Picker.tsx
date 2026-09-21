@@ -87,6 +87,25 @@ export function Picker(props: PickerProps) {
 
   return (
     <div class="space-y-5 sm:space-y-7">
+      {
+        /* Top-level banner — mirrors islands/BookingFlow.tsx's error
+           banner exactly (same markup, same role="alert"). It has to
+           live here, above every step, because a rate-limit or
+           validation failure redirects back with ?err=... and at most
+           ?date=... — never ?slot=... — so the frame can land on step
+           1 or step 2, not just step 3 where BookingForm lives. Passing
+           `error={null}` to BookingForm below (instead of `error`)
+           keeps it from rendering a second copy at step 3. */
+      }
+      {error && (
+        <div
+          role="alert"
+          class="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+        >
+          {error}
+        </div>
+      )}
+
       {/* Step 1 — date */}
       <section aria-labelledby="step-date">
         <StepHeader
@@ -173,7 +192,7 @@ export function Picker(props: PickerProps) {
               dateLabel={selectedDateLabel ?? selectedDate!}
               durationMin={durationMin}
               hostName={hostName}
-              error={error}
+              error={null}
               confirmLabel={confirmLabel ?? `Confirm — ${selectedSlot}`}
               basePath={basePath}
             />
