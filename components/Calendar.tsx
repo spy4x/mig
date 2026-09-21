@@ -5,7 +5,7 @@
   above. Cells know three states:
     - past / outside horizon   → disabled (greyed, no link)
     - no availability / full   → disabled (greyed, "Full" hint)
-    - bookable                 → link to `/?date=YYYY-MM-DD`
+    - bookable                 → link to the picker root + ?date=YYYY-MM-DD
 
   The selected date is highlighted with the brand accent regardless of
   its bookable state (the URL might already carry a ?date= param the
@@ -21,6 +21,7 @@
 
 import { addDays, isoDateInTz } from "../lib/tz.ts";
 import { ChevronLeft, ChevronRight } from "./icons.tsx";
+import { pickerHref } from "../lib/picker-links.ts";
 
 interface CalendarProps {
   /** YYYY-MM-DD (host-local) — month we anchor on. */
@@ -43,6 +44,10 @@ interface CalendarProps {
   /** Called when the prev/next month arrow is clicked. Same
    *  interactive/SSR contract as `onSelectDate`. */
   onSelectMonth?: (monthAnchor: string) => void;
+  /** "" for the standalone page, "/embed" for the iframe variant.
+   *  Only affects the SSR / no-JS `<a href>` fallbacks. Defaults to
+   *  "". */
+  basePath?: string;
 }
 
 const DOW_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -101,6 +106,7 @@ export function Calendar(props: CalendarProps) {
     hostTz,
     onSelectDate,
     onSelectMonth,
+    basePath = "",
   } = props;
 
   const firstOfMonth = startOfMonth(monthAnchor);
@@ -163,7 +169,7 @@ export function Calendar(props: CalendarProps) {
             )
             : (
               <a
-                href={`/?month=${prevMonth}`}
+                href={pickerHref(basePath, { month: prevMonth })}
                 aria-label="Previous month"
                 class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                   prevHasContent ? "" : "opacity-30 pointer-events-none"
@@ -188,7 +194,7 @@ export function Calendar(props: CalendarProps) {
             )
             : (
               <a
-                href={`/?month=${nextMonth}`}
+                href={pickerHref(basePath, { month: nextMonth })}
                 aria-label="Next month"
                 class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                   nextHasContent ? "" : "opacity-30 pointer-events-none"
@@ -287,7 +293,7 @@ export function Calendar(props: CalendarProps) {
           return (
             <a
               key={date}
-              href={`/?date=${date}`}
+              href={pickerHref(basePath, { date })}
               aria-label={ariaLabel}
               aria-current={isSelected ? "date" : undefined}
               class={`${cellBase} ${cellState} focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised ${

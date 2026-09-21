@@ -1,11 +1,16 @@
 /*
   Picker — orchestrates the 3-step booking flow.
 
-  URL-driven so it works without JS:
-    /                      → step 1: pick a date
-    /?date=YYYY-MM-DD      → step 2: pick a time
-    /?date=…&slot=HH:MM    → step 3: enter details
-    /?month=YYYY-MM-DD     → calendar showing that month (step 1 only)
+  URL-driven so it works without JS. Relative to `basePath` ("" for
+  the standalone page, "/embed" for the iframe variant — see
+  lib/picker-links.ts):
+    {base}                      → step 1: pick a date
+    {base}?date=YYYY-MM-DD      → step 2: pick a time
+    {base}?date=…&slot=HH:MM    → step 3: enter details
+    {base}?month=YYYY-MM-DD     → calendar showing that month (step 1 only)
+
+  Every link and form action this component renders stays under
+  `basePath` — that's what keeps /embed self-contained (issue #11).
 
   Once a date or slot is picked, the full picker (calendar / slot
   grid) collapses into a compact summary card with a Change link.
@@ -46,6 +51,10 @@ interface PickerProps {
   /** "Fri, 28 Aug, 14:00" — host-local. Computed by the route so the
    *  button label matches what's already on screen. */
   confirmLabel: string | null;
+  /** "" for the standalone page, "/embed" for the iframe variant.
+   *  Threaded down to every link/form so the flow never leaves the
+   *  base path it started in (issue #11). Defaults to "". */
+  basePath?: string;
 }
 
 export function Picker(props: PickerProps) {
@@ -61,6 +70,7 @@ export function Picker(props: PickerProps) {
     hostTz,
     error,
     confirmLabel,
+    basePath = "",
   } = props;
 
   const slotsByDate: Record<string, number> = {};
@@ -90,6 +100,7 @@ export function Picker(props: PickerProps) {
               <DateCard
                 date={selectedDate!}
                 dateLabel={selectedDateLabel ?? selectedDate!}
+                basePath={basePath}
               />
             )
             : (
@@ -100,6 +111,7 @@ export function Picker(props: PickerProps) {
                 slotsByDate={slotsByDate}
                 selectedDate={selectedDate}
                 hostTz={hostTz}
+                basePath={basePath}
               />
             )}
         </div>
@@ -123,6 +135,7 @@ export function Picker(props: PickerProps) {
                   date={selectedDate!}
                   slot={selectedSlot!}
                   dateLabel={selectedDateLabel ?? selectedDate!}
+                  basePath={basePath}
                 />
               )
               : slots.length > 0
@@ -132,6 +145,7 @@ export function Picker(props: PickerProps) {
                   dateLabel={selectedDateLabel ?? selectedDate!}
                   slots={slots}
                   selectedSlot={selectedSlot}
+                  basePath={basePath}
                 />
               )
               : (
@@ -161,6 +175,7 @@ export function Picker(props: PickerProps) {
               hostName={hostName}
               error={error}
               confirmLabel={confirmLabel ?? `Confirm — ${selectedSlot}`}
+              basePath={basePath}
             />
           </div>
         </section>

@@ -19,6 +19,8 @@
     evening   17:00–04:59 (wraps midnight)
 */
 
+import { pickerHref } from "../lib/picker-links.ts";
+
 interface SlotCell {
   time: string; // host-local HH:MM, authoritative
   available: boolean;
@@ -36,8 +38,12 @@ interface TimeSlotsProps {
   selectedSlot?: string | null;
   /** Called when an available slot is picked. When provided, slots
    *  render as <button> with onClick. When omitted, slots render as
-   *  <a href="/?date=…&slot=…"> for the no-JS / /embed fallback. */
+   *  <a href> for the no-JS / /embed fallback, built from
+   *  `basePath`. */
   onSelectSlot?: (date: string, slot: string) => void;
+  /** "" for the standalone page, "/embed" for the iframe variant.
+   *  Defaults to "". */
+  basePath?: string;
 }
 
 type Period = "morning" | "afternoon" | "evening";
@@ -58,7 +64,8 @@ const PERIOD_LABEL: Record<Period, string> = {
 const PERIOD_ORDER: Period[] = ["morning", "afternoon", "evening"];
 
 export function TimeSlots(
-  { date, dateLabel, slots, selectedSlot, onSelectSlot }: TimeSlotsProps,
+  { date, dateLabel, slots, selectedSlot, onSelectSlot, basePath = "" }:
+    TimeSlotsProps,
 ) {
   if (slots.length === 0) {
     return (
@@ -102,6 +109,7 @@ export function TimeSlots(
                   slot={s}
                   selected={selectedSlot === s.time}
                   onSelect={onSelectSlot}
+                  basePath={basePath}
                 />
               ))}
             </div>
@@ -113,11 +121,12 @@ export function TimeSlots(
 }
 
 function SlotButton(
-  { date, slot, selected, onSelect }: {
+  { date, slot, selected, onSelect, basePath }: {
     date: string;
     slot: SlotCell;
     selected: boolean;
     onSelect?: (date: string, slot: string) => void;
+    basePath: string;
   },
 ) {
   const base =
@@ -165,7 +174,7 @@ function SlotButton(
 
   return (
     <a
-      href={`/?date=${date}&slot=${encodeURIComponent(slot.time)}`}
+      href={pickerHref(basePath, { date, slot: slot.time })}
       class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
     >
       {shownTime}

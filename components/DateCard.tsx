@@ -5,23 +5,27 @@
   the calendar's visual language (rounded card, brand icon, change
   link) so the swap doesn't feel jarring.
 
-  The Change link goes back to `/` (no date param), which the
-  Picker interprets as "show the calendar again".
+  The Change link goes back to the picker root (no date param), which
+  the Picker interprets as "show the calendar again".
 */
 
 import { ArrowRight, Calendar } from "./icons.tsx";
+import { pickerHref } from "../lib/picker-links.ts";
 
 interface DateCardProps {
   date: string; // YYYY-MM-DD (host-local)
   dateLabel: string; // pre-formatted "Friday, 28 August 2026"
   /** Called when the Change link is clicked. When provided, Change is
    *  a <button> with onClick (no navigation, no SSR roundtrip). When
-   *  omitted, Change is an <a href="/"> for the no-JS / /embed
-   *  fallback. */
+   *  omitted, Change is an <a href> for the no-JS / /embed fallback,
+   *  built from `basePath`. */
   onClear?: () => void;
+  /** "" for the standalone page (Change → "/"), "/embed" for the
+   *  iframe variant (Change → "/embed"). Defaults to "". */
+  basePath?: string;
 }
 
-export function DateCard({ dateLabel, onClear }: DateCardProps) {
+export function DateCard({ dateLabel, onClear, basePath = "" }: DateCardProps) {
   // Focus styles live on the outer <button>/<a> (the actual focusable
   // element). Earlier refactor wrapped the inner <span> in an outer
   // button — the outer one had `focus:outline-none`, the inner span
@@ -58,7 +62,11 @@ export function DateCard({ dateLabel, onClear }: DateCardProps) {
           </button>
         )
         : (
-          <a href="/" aria-label="Change date" class={changeClass}>
+          <a
+            href={pickerHref(basePath)}
+            aria-label="Change date"
+            class={changeClass}
+          >
             Change
             <ArrowRight size={12} />
           </a>
