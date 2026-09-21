@@ -200,7 +200,7 @@ Deno.test("embed picker: time step — date-card and slot links stay under /embe
   assert(links.length >= 2, `expected >=2 links, got ${links.length}`);
 });
 
-Deno.test("embed picker: confirm step — form posts to /embed/book, no island mounted", () => {
+Deno.test("embed picker: confirm step — form posts to /embed/book, captures guestTz without an island", () => {
   const html = renderToString(
     <EmbedPage
       {...fakePageProps(embedData({
@@ -217,13 +217,34 @@ Deno.test("embed picker: confirm step — form posts to /embed/book, no island m
   ];
   assertEquals(offendingLinks(links, "/embed"), []);
   assertEquals(formActions(html), ["/embed/book"]);
-  // BookingSubmit (the standalone island) renders a hidden
-  // name="guestTz" input; the embed fallback button does not. Its
-  // absence is the observable proxy for "no island mounted" — Fresh
-  // only injects hydration `<script>` tags through the Vite build,
-  // which isn't exercised by calling the component directly (see the
-  // file header comment).
-  assertFalse(html.includes('name="guestTz"'));
+  // The progressive-enhancement guestTz capture: a hidden input the
+  // inline script below fills in, no island required.
+  assert(html.includes('name="guestTz"'), "expected a hidden guestTz input");
+  assert(
+    html.includes("Intl.DateTimeFormat"),
+    "expected the inline timezone-capture script",
+  );
+  // No module script anywhere — Fresh only emits island hydration
+  // `<script type="module">` tags through the real Vite build (this
+  // render doesn't go through it, see the file header comment), but a
+  // literal type="module" here would still be a real regression.
+  assertFalse(html.includes('<script type="module"'));
+});
+
+Deno.test("embed form never renders BookingSubmit, the standalone island", async () => {
+  // Complements the routes/embed/*.tsx import check below: BookingForm
+  // legitimately imports islands/BookingSubmit.tsx (the standalone
+  // page still uses it), so a blanket "no islands/ import" check on
+  // that file would false-positive. This instead pins the one line
+  // that decides which branch runs for basePath !== "": PlainSubmitButton
+  // for embed, BookingSubmit only for the standalone default.
+  const source = await Deno.readTextFile(
+    new URL("../../components/BookingForm.tsx", import.meta.url),
+  );
+  assert(
+    /embed\s*\?\s*<PlainSubmitButton/.test(source),
+    "expected the embed branch of the submit-button ternary to render PlainSubmitButton",
+  );
 });
 
 Deno.test("embed picker: month navigation links stay under /embed", () => {
@@ -236,19 +257,45 @@ Deno.test("embed picker: month navigation links stay under /embed", () => {
   assertEquals(offendingLinks(links, "/embed"), []);
 });
 
-Deno.test("embed picker: error banner does not add a link off /embed", () => {
+// lib/book.ts's errRedirect never passes both `date` and `slot` back —
+// only rate-limit/validation failures (neither param) or
+// availability/persist failures (date only). Those are the only two
+// states the embed page's error banner actually has to render in.
+// Before this fix the banner lived inside BookingForm, which Picker
+// only renders at step 3 (date + slot both chosen) — a state the
+// server never redirects to with ?err=, so a failed booking inside
+// the frame showed no error at all.
+
+Deno.test("embed picker: error banner is visible with a date but no slot (step 2)", () => {
   const html = renderToString(
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
         selectedDateLabel: "Monday, 4 January 2027",
-        slot: "09:00",
         slots: SLOTS,
         error: "That time is no longer available.",
       }))}
     />,
   );
   assert(html.includes("That time is no longer available."));
+  assert(html.includes('role="alert"'));
+  const links = [
+    ...anchors(html).map((a) => a.href),
+    ...formActions(html),
+  ];
+  assertEquals(offendingLinks(links, "/embed"), []);
+});
+
+Deno.test("embed picker: error banner is visible with neither date nor slot (step 1)", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        error: "Too many attempts. Try again in 3 minutes.",
+      }))}
+    />,
+  );
+  assert(html.includes("Too many attempts. Try again in 3 minutes."));
+  assert(html.includes('role="alert"'));
   const links = [
     ...anchors(html).map((a) => a.href),
     ...formActions(html),
@@ -268,6 +315,22 @@ Deno.test("embed pages render no header, footer, or theme toggle", () => {
     assertFalse(html.includes("<footer"));
     assertFalse(html.includes('aria-label="Toggle theme"'));
   }
+});
+
+Deno.test("embed pages give the Skip-to-content link (#main, routes/_app.tsx) a target", () => {
+  const pickerHtml = renderToString(
+    <EmbedPage {...fakePageProps(embedData({}))} />,
+  );
+  for (const mode of ["booked", "cancelled"] as const) {
+    const confirmedHtml = renderToString(
+      <EmbedConfirmedPage {...fakePageProps(confirmedData({ mode }))} />,
+    );
+    assert(
+      confirmedHtml.includes('id="main"'),
+      `expected id="main" for mode=${mode}`,
+    );
+  }
+  assert(pickerHtml.includes('id="main"'));
 });
 
 // ─── /embed/confirmed ─────────────────────────────────────────────────
@@ -359,6 +422,23 @@ Deno.test("standalone confirmed page keeps header, footer, and same-tab cancel l
   assertEquals(cancel?.target, null);
   const back = anchors(html).find((a) => a.href === "/");
   assert(back, "expected a link back to /");
+});
+
+Deno.test("standalone confirmed page's cancelled state keeps its original padding", () => {
+  // Regression guard: the ConfirmedView extraction briefly changed the
+  // cancelled state's <main> from px-6 py-16 (its original class,
+  // matching the not-ok state) to px-4 sm:px-6 py-12 (the booked
+  // state's class) — a visible, unintended behaviour change on the
+  // standalone page a "no behaviour change" refactor must not make.
+  const html = renderToString(
+    <ConfirmedPage
+      {...fakePageProps(confirmedData({ mode: "cancelled" }))}
+    />,
+  );
+  assert(html.includes('class="flex-1 grid place-items-center px-6 py-16"'));
+  assertFalse(
+    html.includes('class="flex-1 grid place-items-center px-4 sm:px-6 py-12"'),
+  );
 });
 
 // ─── Structural guard ────────────────────────────────────────────────
