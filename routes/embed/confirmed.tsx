@@ -30,6 +30,8 @@ export default define.page<typeof handler>(
           slotDurationMin={cfg.slotDurationMin}
           backHref="/embed"
           cancelTarget="_blank"
+          cancelledMainClass="flex-1 grid place-items-center px-4 sm:px-5 py-4 sm:py-5"
+          mainId="main"
         />
       </div>
     );

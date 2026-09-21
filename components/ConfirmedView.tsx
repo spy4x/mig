@@ -31,7 +31,23 @@ export interface ConfirmedViewProps extends ConfirmedData {
   /** Set to "_blank" to open the cancel link in a new tab. Omitted on
    *  the standalone page. */
   cancelTarget?: "_blank";
+  /** <main> classes for the cancelled state. Defaults to the
+   *  standalone page's original `px-6 py-16` (matches the not-ok
+   *  state) so the standalone page renders byte-identical to before
+   *  this component existed. /embed passes a tighter class list to
+   *  match its own denser layout. */
+  cancelledMainClass?: string;
+  /** id for every state's <main>. The standalone page's own <main>
+   *  never had one (matching routes/index.tsx would be a separate,
+   *  pre-existing gap this issue doesn't cover), so this defaults to
+   *  undefined there; /embed passes "main" so its Skip-to-content
+   *  link (routes/_app.tsx, #main) has a target on every state of
+   *  /embed/confirmed, not just the picker. */
+  mainId?: string;
 }
+
+const DEFAULT_CANCELLED_MAIN_CLASS =
+  "flex-1 grid place-items-center px-6 py-16";
 
 export function ConfirmedView(props: ConfirmedViewProps) {
   const {
@@ -43,6 +59,8 @@ export function ConfirmedView(props: ConfirmedViewProps) {
     slotDurationMin,
     backHref,
     cancelTarget,
+    cancelledMainClass = DEFAULT_CANCELLED_MAIN_CLASS,
+    mainId,
   } = props;
 
   if (state !== "ok" || !booking) {
@@ -55,7 +73,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
       ? "The link you used has been tampered with or is no longer valid."
       : "Check the URL and try again, or contact the host.";
     return (
-      <main class="flex-1 grid place-items-center px-6 py-16">
+      <main id={mainId} class="flex-1 grid place-items-center px-6 py-16">
         <div class="max-w-sm text-center">
           <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
             <InfoCircle />
@@ -87,7 +105,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
 
   if (mode === "cancelled") {
     return (
-      <main class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
+      <main id={mainId} class={cancelledMainClass}>
         <div class="max-w-sm w-full">
           <div class="text-center mb-8">
             <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-surface-sunken text-ink-subtle mb-5">
@@ -118,7 +136,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
   }
 
   return (
-    <main class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
+    <main id={mainId} class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
       <div class="max-w-md w-full">
         <div class="text-center mb-8">
           <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300 mb-5">
