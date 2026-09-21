@@ -31,7 +31,7 @@ interface Props {
   label: string;
 }
 
-// Mirrors routes/api/_validators.ts:BookingSchema (name min 2, email
+// Mirrors lib/validators.ts:BookingSchema (name min 2, email
 // shape). Server-side Zod is the trust boundary — this is UX only.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NAME_MIN = 2;
