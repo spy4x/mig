@@ -1,11 +1,16 @@
 /*
   Picker — orchestrates the 3-step booking flow.
 
-  URL-driven so it works without JS:
-    /                      → step 1: pick a date
-    /?date=YYYY-MM-DD      → step 2: pick a time
-    /?date=…&slot=HH:MM    → step 3: enter details
-    /?month=YYYY-MM-DD     → calendar showing that month (step 1 only)
+  URL-driven so it works without JS. Relative to `basePath` ("" for
+  the standalone page, "/embed" for the iframe variant — see
+  lib/picker-links.ts):
+    {base}                      → step 1: pick a date
+    {base}?date=YYYY-MM-DD      → step 2: pick a time
+    {base}?date=…&slot=HH:MM    → step 3: enter details
+    {base}?month=YYYY-MM-DD     → calendar showing that month (step 1 only)
+
+  Every link and form action this component renders stays under
+  `basePath` — that's what keeps /embed self-contained (issue #11).
 
   Once a date or slot is picked, the full picker (calendar / slot
   grid) collapses into a compact summary card with a Change link.
@@ -46,6 +51,10 @@ interface PickerProps {
   /** "Fri, 28 Aug, 14:00" — host-local. Computed by the route so the
    *  button label matches what's already on screen. */
   confirmLabel: string | null;
+  /** "" for the standalone page, "/embed" for the iframe variant.
+   *  Threaded down to every link/form so the flow never leaves the
+   *  base path it started in (issue #11). Defaults to "". */
+  basePath?: string;
 }
 
 export function Picker(props: PickerProps) {
@@ -61,6 +70,7 @@ export function Picker(props: PickerProps) {
     hostTz,
     error,
     confirmLabel,
+    basePath = "",
   } = props;
 
   const slotsByDate: Record<string, number> = {};
@@ -77,6 +87,25 @@ export function Picker(props: PickerProps) {
 
   return (
     <div class="space-y-5 sm:space-y-7">
+      {
+        /* Top-level banner — mirrors islands/BookingFlow.tsx's error
+           banner exactly (same markup, same role="alert"). It has to
+           live here, above every step, because a rate-limit or
+           validation failure redirects back with ?err=... and at most
+           ?date=... — never ?slot=... — so the frame can land on step
+           1 or step 2, not just step 3 where BookingForm lives. Passing
+           `error={null}` to BookingForm below (instead of `error`)
+           keeps it from rendering a second copy at step 3. */
+      }
+      {error && (
+        <div
+          role="alert"
+          class="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+        >
+          {error}
+        </div>
+      )}
+
       {/* Step 1 — date */}
       <section aria-labelledby="step-date">
         <StepHeader
@@ -90,6 +119,7 @@ export function Picker(props: PickerProps) {
               <DateCard
                 date={selectedDate!}
                 dateLabel={selectedDateLabel ?? selectedDate!}
+                basePath={basePath}
               />
             )
             : (
@@ -100,6 +130,7 @@ export function Picker(props: PickerProps) {
                 slotsByDate={slotsByDate}
                 selectedDate={selectedDate}
                 hostTz={hostTz}
+                basePath={basePath}
               />
             )}
         </div>
@@ -123,6 +154,7 @@ export function Picker(props: PickerProps) {
                   date={selectedDate!}
                   slot={selectedSlot!}
                   dateLabel={selectedDateLabel ?? selectedDate!}
+                  basePath={basePath}
                 />
               )
               : slots.length > 0
@@ -132,6 +164,7 @@ export function Picker(props: PickerProps) {
                   dateLabel={selectedDateLabel ?? selectedDate!}
                   slots={slots}
                   selectedSlot={selectedSlot}
+                  basePath={basePath}
                 />
               )
               : (
@@ -159,8 +192,9 @@ export function Picker(props: PickerProps) {
               dateLabel={selectedDateLabel ?? selectedDate!}
               durationMin={durationMin}
               hostName={hostName}
-              error={error}
+              error={null}
               confirmLabel={confirmLabel ?? `Confirm — ${selectedSlot}`}
+              basePath={basePath}
             />
           </div>
         </section>

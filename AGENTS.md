@@ -39,10 +39,15 @@ src/
 │   ├── _404.tsx             — not found
 │   ├── _500.tsx             — error
 │   ├── index.tsx            — standalone booking page
-│   ├── embed.tsx            — iframe variant
-│   ├── book.tsx             — POST handler (form action)
+│   ├── confirmed.tsx        — standalone confirmation / cancelled page
 │   ├── cancel.tsx           — GET form + POST action
-│   └── api/slots.ts         — GET slots for a date (JSON)
+│   ├── embed/
+│   │   ├── index.tsx        — /embed iframe variant (no islands, self-contained)
+│   │   ├── confirmed.tsx    — /embed/confirmed, no Header/Footer/ThemeToggle
+│   │   └── book.ts          — POST /embed/book, redirects stay under /embed
+│   └── api/
+│       ├── book.ts          — POST /api/book (standalone; shares lib/book.ts)
+│       └── slots.ts         — GET slots for a date (JSON)
 ├── islands/
 │   ├── DatePicker.tsx       — client interactive
 │   ├── SlotPicker.tsx
@@ -56,7 +61,12 @@ src/
 │   ├── email.ts             — SMTP via denomailer
 │   ├── ics.ts               — ICS VCALENDAR generator
 │   ├── ratelimit.ts         — in-memory per-IP sliding window
-│   └── tz.ts                — IANA tz helpers
+│   ├── tz.ts                — IANA tz helpers
+│   ├── validators.ts        — shared Zod schema for booking submission
+│   ├── book.ts              — POST /api/book + POST /embed/book handler
+│   ├── confirmed-data.ts    — shared /confirmed + /embed/confirmed lookup
+│   ├── picker-links.ts      — basePath-aware href builder for the picker
+│   └── guest-tz-script.ts   — inline timezone-capture script for /embed's form
 ├── components/              — server-side Preact components (no hydration)
 └── data/.gitkeep            — runtime mount point
 ```

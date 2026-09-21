@@ -7,6 +7,7 @@
 */
 
 import { ArrowRight, Clock } from "./icons.tsx";
+import { pickerHref } from "../lib/picker-links.ts";
 
 interface TimeCardProps {
   date: string; // YYYY-MM-DD (host-local)
@@ -17,13 +18,16 @@ interface TimeCardProps {
    *  prop stays the source of truth for the URL / POST body. */
   displaySlot?: string;
   /** Called when the Change link is clicked. When provided, Change is
-   *  a <button>; otherwise it stays an <a href="/?date=…"> for the
-   *  no-JS / /embed fallback. */
+   *  a <button>; otherwise it stays an <a href> for the no-JS /
+   *  /embed fallback, built from `basePath`. */
   onClear?: () => void;
+  /** "" for the standalone page, "/embed" for the iframe variant.
+   *  Defaults to "". */
+  basePath?: string;
 }
 
 export function TimeCard(
-  { date, slot, dateLabel, displaySlot, onClear }: TimeCardProps,
+  { date, slot, dateLabel, displaySlot, onClear, basePath = "" }: TimeCardProps,
 ) {
   const shownSlot = displaySlot ?? slot;
   // Focus styles live on the outer <button>/<a> — same reason as
@@ -61,7 +65,7 @@ export function TimeCard(
         )
         : (
           <a
-            href={`/?date=${date}`}
+            href={pickerHref(basePath, { date })}
             aria-label="Change time"
             class={changeClass}
           >

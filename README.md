@@ -56,7 +56,9 @@ admin UI.
   email. SHA-256 HMAC of a random token; stateless.
 - **Timezone-aware.** Host's TZ from env. Guest's TZ auto-detected in the
   browser and rendered in emails alongside host time.
-- **Iframe-ready.** `/embed` route strips chrome for use inside another page.
+- **Iframe-ready.** `/embed` strips chrome for use inside another page, and
+  every step of the booking flow — date, time, confirm, the confirmation page —
+  stays under `/embed`. See [Embedding](#embedding).
 - **Dark + light theme.** Tailwind v4, follows OS preference, toggle persists in
   localStorage.
 - **Modern stack.** Fresh 2 (Preact + JSX), Tailwind v4, single binary via
@@ -170,6 +172,43 @@ on both ends. Comma-separated, whitespace tolerant.
 01.01.2027-10.01.2027                    # a date range
 01.01.2027-10.01.2027,04.07.2027        # range + single
 ```
+
+## Embedding
+
+Drop the booking flow into another page with an iframe:
+
+```html
+<iframe
+  src="https://meet.example.com/embed"
+  style="width:100%;max-width:36rem;border:0"
+  title="Book a meeting"
+></iframe>
+```
+
+Every step a visitor can reach from `/embed` — picking a date, picking a time,
+the confirm form, the confirmation page at `/embed/confirmed` — stays under the
+`/embed` path prefix. The only exceptions are the meeting link and the cancel
+link on the confirmation page, which open in a new tab, because they point at
+pages (`MEETING_URL`, `/cancel`) that live outside `/embed`. That means the host
+embedding mig only needs to allow framing for `/embed`, not the whole site.
+
+Concretely, on the host serving mig behind a reverse proxy, apply this to paths
+starting with `/embed` only:
+
+```
+Content-Security-Policy: frame-ancestors https://your-site.example
+```
+
+and make sure no `X-Frame-Options: DENY` (or `SAMEORIGIN`) header is applied to
+those paths — `frame-ancestors` supersedes it in modern browsers, but a proxy or
+previous config may still be setting it globally. The rest of the site (`/`,
+`/confirmed`, `/cancel`) can keep denying framing entirely.
+
+`/embed` detects the visitor's timezone with a small inline script (no tracking,
+nothing sent anywhere — it just fills a hidden form field before submit), the
+same way the theme toggle avoids a flash of the wrong theme. Without JavaScript
+that field stays empty and the booking still goes through; the confirmation
+email then shows times in the host's timezone instead of the visitor's.
 
 ## Architecture
 

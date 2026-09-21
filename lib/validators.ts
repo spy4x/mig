@@ -1,7 +1,8 @@
-// Shared Zod validators for API endpoints.
+// Shared Zod validators for booking submission (POST /api/book and
+// POST /embed/book).
 
 import { z } from "zod";
-import { isValidTimeZone } from "../../lib/tz.ts";
+import { isValidTimeZone } from "./tz.ts";
 
 function hasHeaderControlCharacters(value: string): boolean {
   return [...value].some((character) => {

@@ -1,18 +1,36 @@
 /*
-  Booking form — name + email + optional notes. Submits to /api/book
-  which redirects to /confirmed?id=...&token=... on success or back
-  to /?err=... on failure.
+  Booking form — name + email + optional notes. Submits to `action`
+  (default /api/book, "/embed/book" on the embed variant) which
+  redirects to `${basePath}/confirmed?id=...&token=...` on success or
+  back to the picker root with `?err=...` on failure.
 
   The submit button label includes both date and time ("Confirm —
   Fri, 28 Aug, 14:00") so the user can sanity-check their pick right
-  up to the click. The button is hydrated into the BookingSubmit
-  island so we can show a spinner while the form is in flight.
+  up to the click. On the standalone page the button is hydrated into
+  the BookingSubmit island so we can show a spinner while the form is
+  in flight. /embed never mounts islands (issue #11 — a partial iframe
+  allow-list must not depend on a script tag loading), so `basePath !==
+  ""` renders a plain <button type="submit"> instead: same label, no
+  spinner, no client-side pre-validation. Server-side Zod is already
+  the trust boundary either way.
 
-  No-JS fallback: without the island the button is still a real
-  <button type="submit"> with the same label.
+  Timezone capture works the same way, split by the same island/no-island
+  line: the standalone form's guestTz field is filled by the
+  BookingSubmit island after mount; /embed's is filled by a tiny inline
+  <script> (lib/guest-tz-script.ts), the same progressive-enhancement
+  pattern routes/_app.tsx uses for the theme bootstrap. Neither runs
+  without JavaScript, and in that case the field stays empty — the
+  server already treats guestTz as optional and falls back to the
+  host's timezone.
+
+  No-JS fallback: without the island the standalone button is still a
+  real <button type="submit"> with the same label.
 */
 
 import BookingSubmit from "../islands/BookingSubmit.tsx";
+import { guestTzCaptureScript } from "../lib/guest-tz-script.ts";
+
+const GUEST_TZ_INPUT_ID = "mig-embed-guest-tz";
 
 interface BookingFormProps {
   date: string;
@@ -26,6 +44,10 @@ interface BookingFormProps {
    *  14:00". Computed by the route so it stays in lockstep with
    *  the rest of the host-local time presentation. */
   confirmLabel: string;
+  /** "" for the standalone page (posts to /api/book, no island), "/embed"
+   *  for the iframe variant (posts to /embed/book, no island). Defaults
+   *  to "". */
+  basePath?: string;
 }
 
 export function BookingForm({
@@ -36,7 +58,10 @@ export function BookingForm({
   hostName,
   error,
   confirmLabel,
+  basePath = "",
 }: BookingFormProps) {
+  const embed = basePath !== "";
+  const action = embed ? `${basePath}/book` : "/api/book";
   return (
     <div class="rounded-2xl border border-line bg-surface-raised overflow-hidden">
       <div class="px-5 py-4 border-b border-line">
@@ -49,7 +74,7 @@ export function BookingForm({
 
       <form
         method="POST"
-        action="/api/book"
+        action={action}
         class="px-5 py-5 space-y-4"
         aria-label="Booking details"
       >
@@ -110,8 +135,29 @@ export function BookingForm({
           </label>
         </div>
 
+        {
+          /* Progressive-enhancement timezone capture — /embed's
+             equivalent of BookingSubmit's hidden guestTz field, since
+             /embed mounts no island (issue #11 Option A). Without
+             this script the field just stays empty and the booking
+             still completes; lib/book.ts already treats guestTz as
+             optional. */
+        }
+        {embed && (
+          <>
+            <input type="hidden" name="guestTz" id={GUEST_TZ_INPUT_ID} />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: guestTzCaptureScript(GUEST_TZ_INPUT_ID),
+              }}
+            />
+          </>
+        )}
+
         <div class="pt-1">
-          <BookingSubmit label={confirmLabel} />
+          {embed
+            ? <PlainSubmitButton label={confirmLabel} />
+            : <BookingSubmit label={confirmLabel} />}
           <p class="text-xs text-ink-subtle mt-2.5">
             We'll send a confirmation email with a calendar invite.
           </p>
@@ -125,6 +171,25 @@ export function BookingForm({
 // button at mobile widths. The TZ used here is the browser's local
 // TZ because that's what the visitor sees on screen — they should be
 // able to verify the date/time they're agreeing to.
+
+/*
+  PlainSubmitButton — the /embed fallback for BookingSubmit.
+
+  Same visual contract as the island's idle state (no spinner, no
+  client-side pre-validation, no guestTz capture — those all need
+  JS). A real <button type="submit"> works with no script at all;
+  the server's Zod validation is the trust boundary regardless.
+*/
+function PlainSubmitButton({ label }: { label: string }) {
+  return (
+    <button
+      type="submit"
+      class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 active:bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-(--duration-snappy) hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
+    >
+      <span>{label}</span>
+    </button>
+  );
+}
 
 interface FieldProps {
   label: string;

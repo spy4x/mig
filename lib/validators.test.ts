@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { BookingSchema } from "./_validators.ts";
+import { BookingSchema } from "./validators.ts";
 
 const validBooking = {
   name: "Visitor",
