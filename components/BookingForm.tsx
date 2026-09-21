@@ -14,11 +14,23 @@
   spinner, no client-side pre-validation. Server-side Zod is already
   the trust boundary either way.
 
+  Timezone capture works the same way, split by the same island/no-island
+  line: the standalone form's guestTz field is filled by the
+  BookingSubmit island after mount; /embed's is filled by a tiny inline
+  <script> (lib/guest-tz-script.ts), the same progressive-enhancement
+  pattern routes/_app.tsx uses for the theme bootstrap. Neither runs
+  without JavaScript, and in that case the field stays empty — the
+  server already treats guestTz as optional and falls back to the
+  host's timezone.
+
   No-JS fallback: without the island the standalone button is still a
   real <button type="submit"> with the same label.
 */
 
 import BookingSubmit from "../islands/BookingSubmit.tsx";
+import { guestTzCaptureScript } from "../lib/guest-tz-script.ts";
+
+const GUEST_TZ_INPUT_ID = "mig-embed-guest-tz";
 
 interface BookingFormProps {
   date: string;
@@ -122,6 +134,25 @@ export function BookingForm({
             />
           </label>
         </div>
+
+        {
+          /* Progressive-enhancement timezone capture — /embed's
+             equivalent of BookingSubmit's hidden guestTz field, since
+             /embed mounts no island (issue #11 Option A). Without
+             this script the field just stays empty and the booking
+             still completes; lib/book.ts already treats guestTz as
+             optional. */
+        }
+        {embed && (
+          <>
+            <input type="hidden" name="guestTz" id={GUEST_TZ_INPUT_ID} />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: guestTzCaptureScript(GUEST_TZ_INPUT_ID),
+              }}
+            />
+          </>
+        )}
 
         <div class="pt-1">
           {embed

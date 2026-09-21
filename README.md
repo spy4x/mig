@@ -204,6 +204,12 @@ those paths — `frame-ancestors` supersedes it in modern browsers, but a proxy 
 previous config may still be setting it globally. The rest of the site (`/`,
 `/confirmed`, `/cancel`) can keep denying framing entirely.
 
+`/embed` detects the visitor's timezone with a small inline script (no tracking,
+nothing sent anywhere — it just fills a hidden form field before submit), the
+same way the theme toggle avoids a flash of the wrong theme. Without JavaScript
+that field stays empty and the booking still goes through; the confirmation
+email and page just show times in the host's timezone instead of the visitor's.
+
 ## Architecture
 
 Single-process Deno app. JSON file + atomic rename is the only persistence. SMTP

@@ -65,7 +65,8 @@ src/
 │   ├── validators.ts        — shared Zod schema for booking submission
 │   ├── book.ts              — POST /api/book + POST /embed/book handler
 │   ├── confirmed-data.ts    — shared /confirmed + /embed/confirmed lookup
-│   └── picker-links.ts      — basePath-aware href builder for the picker
+│   ├── picker-links.ts      — basePath-aware href builder for the picker
+│   └── guest-tz-script.ts   — inline timezone-capture script for /embed's form
 ├── components/              — server-side Preact components (no hydration)
 └── data/.gitkeep            — runtime mount point
 ```
