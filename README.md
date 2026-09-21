@@ -2,7 +2,7 @@
 
 [![Docker](https://img.shields.io/badge/docker-antonshubin%2Fmig-blue)](https://hub.docker.com/r/antonshubin/mig)
 [![Deno](https://img.shields.io/badge/deno-2.x-black?logo=deno)](https://deno.land)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![GitHub](https://img.shields.io/badge/github-spy4x%2Fmig-181717?logo=github)](https://github.com/spy4x/mig)
 
 **mig** (миг — Russian for "moment") is a tiny self-hosted meeting scheduler.
@@ -198,4 +198,7 @@ The binary is ~80 MB stripped and has zero runtime dependencies.
 
 ## License
 
-MIT
+Copyright (C) 2026 Anton Shubin
+
+Licensed under [AGPL-3.0](LICENSE). Contribution terms are in
+[CONTRIBUTING.md](CONTRIBUTING.md).

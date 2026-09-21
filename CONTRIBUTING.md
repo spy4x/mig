@@ -66,3 +66,8 @@ conventions.
 - **Security:** see [SECURITY.md](SECURITY.md) — don't open a public issue.
 - **Feature requests:** keep them small. "I want a UI to view all bookings" is
   fine. "I want Zapier integration" is not.
+
+## License of contributions
+
+By contributing you agree that your contribution is licensed under AGPL-3.0 and
+that Anton Shubin may also license it under other terms.
