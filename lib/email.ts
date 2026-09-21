@@ -45,6 +45,18 @@ function getTransport(config: Config) {
   return transporter;
 }
 
+/** Test-only seam: replace the transport `sendEmail` uses instead of
+ *  building one from `config.smtp` (which would otherwise open a real
+ *  socket to `config.smtp.host`). Pass a `nodemailer.createTransport({
+ *  jsonTransport: true })` transport to make sends resolve instantly
+ *  with no network I/O, or `null` to go back to the real transport on
+ *  the next send. Never call this outside a test. */
+export function setTransportForTesting(
+  t: ReturnType<typeof nodemailer.createTransport> | null,
+): void {
+  transporter = t;
+}
+
 function parseAddress(from: string): { name: string; addr: string } {
   const m = from.match(/^\s*(?:"?([^"<]*)"?\s*)?<([^>]+)>\s*$/);
   if (m) return { name: m[1].trim(), addr: m[2].trim() };
