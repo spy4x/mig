@@ -1,255 +1,28 @@
 import { define } from "../lib/utils.ts";
-import { verifyCancelToken } from "../lib/tokens.ts";
+import { loadConfirmedData } from "../lib/confirmed-data.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
-import { formatDateLong, formatTimeOfDay, validTimeZoneOr } from "../lib/tz.ts";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  InfoCircle,
-  Minus,
-} from "../components/icons.tsx";
-
-interface ConfirmedData {
-  state: "ok" | "missing" | "invalid" | "expired";
-  mode: "booked" | "cancelled";
-  booking:
-    | {
-      id: string;
-      date: string;
-      time: string;
-      hostTz: string;
-      guestTz: string | null;
-      guestName: string;
-      guestEmail: string;
-      cancelToken: string;
-    }
-    | null;
-}
+import { ConfirmedView } from "../components/ConfirmedView.tsx";
 
 export const handler = define.handlers({
   async GET(ctx) {
-    const cfg = ctx.state.config;
-    const url = new URL(ctx.req.url);
-    const id = url.searchParams.get("id") ?? "";
-    const token = url.searchParams.get("token") ?? "";
-
-    if (!id || !token) {
-      return {
-        data: {
-          state: "missing",
-          mode: "booked",
-          booking: null,
-        } satisfies ConfirmedData,
-      };
-    }
-
-    const booking = ctx.state.bookings.get(id);
-    if (!booking) {
-      return {
-        data: {
-          state: "expired",
-          mode: "booked",
-          booking: null,
-        } satisfies ConfirmedData,
-      };
-    }
-
-    const ok = await verifyCancelToken(
-      token,
-      booking.cancelTokenHash,
-      cfg.cancelSecret,
-    );
-    if (!ok) {
-      return {
-        data: {
-          state: "invalid",
-          mode: "booked",
-          booking: null,
-        } satisfies ConfirmedData,
-      };
-    }
-
-    // ?cancelled=1 → cancellation success page. The actual source of
-    // truth is the booking status: a cancelled booking should always
-    // show the cancelled view, whether the user landed here via
-    // /api/cancel's redirect (with ?cancelled=1) or via a bookmark
-    // (without). A booked URL pointing at a now-cancelled booking
-    // shouldn't lie and show "Booked!" again.
-    const mode = booking.status === "cancelled" ? "cancelled" : "booked";
-
-    return {
-      data: {
-        state: "ok",
-        mode,
-        booking: {
-          id: booking.id,
-          date: booking.date,
-          time: booking.time,
-          hostTz: booking.hostTz,
-          guestTz: booking.guestTz ?? null,
-          guestName: booking.guestName,
-          guestEmail: booking.guestEmail,
-          cancelToken: token,
-        },
-      } satisfies ConfirmedData,
-    };
+    return { data: await loadConfirmedData(ctx) };
   },
 });
 
 export default define.page<typeof handler>(function Confirmed({ data, state }) {
   const cfg = state.config;
 
-  if (data.state !== "ok" || !data.booking) {
-    const title = data.state === "invalid"
-      ? "Invalid or expired link"
-      : data.state === "missing"
-      ? "Link missing parameters"
-      : "Booking not found";
-    const body = data.state === "invalid"
-      ? "The link you used has been tampered with or is no longer valid."
-      : "Check the URL and try again, or contact the host.";
-    return (
-      <div class="min-h-dvh flex flex-col">
-        <Header compact />
-        <main class="flex-1 grid place-items-center px-6 py-16">
-          <div class="max-w-sm text-center">
-            <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
-              <InfoCircle />
-            </div>
-            <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
-              {title}
-            </h1>
-            <p class="text-sm text-ink-muted mb-6">{body}</p>
-            <a
-              href="/"
-              class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-            >
-              Back to booking
-            </a>
-          </div>
-        </main>
-        <Footer
-          githubUrl={cfg.githubUrl}
-          hidden={cfg.hideBranding}
-          version={cfg.version}
-        />
-      </div>
-    );
-  }
-
-  const b = data.booking;
-  // Display the booking time in the visitor's TZ when we captured one
-  // at submit time. Falls back to host TZ when guestTz is missing or
-  // invalid (older bookings, bad data, hidden legacy paths). The
-  // page is server-rendered — we have access to guestTz from the
-  // booking record, no client Intl needed.
-  const displayTz = validTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
-  const dateLabel = formatDateLong(b.date, displayTz);
-  const timeLabel = formatTimeOfDay(b.date, b.time, displayTz);
-
-  if (data.mode === "cancelled") {
-    return (
-      <div class="min-h-dvh flex flex-col">
-        <Header compact />
-        <main class="flex-1 grid place-items-center px-6 py-16">
-          <div class="max-w-sm w-full">
-            <div class="text-center mb-8">
-              <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-surface-sunken text-ink-subtle mb-5">
-                <Minus size={26} strokeWidth={1.8} />
-              </div>
-              <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
-                Booking cancelled
-              </h1>
-              <p class="text-sm text-ink-muted tnum">
-                {dateLabel} · {timeLabel}
-              </p>
-              <p class="text-sm text-ink-muted mt-4">
-                Both you and {cfg.hostName} have been notified.
-              </p>
-            </div>
-            <div class="text-center">
-              <a
-                href="/"
-                class="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-              >
-                Book another time
-                <ArrowRight size={14} />
-              </a>
-            </div>
-          </div>
-        </main>
-        <Footer
-          githubUrl={cfg.githubUrl}
-          hidden={cfg.hideBranding}
-          version={cfg.version}
-        />
-      </div>
-    );
-  }
-
   return (
     <div class="min-h-dvh flex flex-col">
       <Header compact />
-      <main class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
-        <div class="max-w-md w-full">
-          <div class="text-center mb-8">
-            <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300 mb-5">
-              <Check />
-            </div>
-            <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
-              You're booked
-            </h1>
-            <p class="text-sm text-ink-muted mt-2">
-              A confirmation email is on its way to{" "}
-              <span class="text-ink font-medium">{b.guestEmail}</span>.
-            </p>
-          </div>
-
-          <div class="rounded-2xl border border-line bg-surface-raised divide-y divide-line">
-            <Detail
-              label="Date"
-              value={<span class="tnum">{dateLabel}</span>}
-            />
-            <Detail
-              label="Time"
-              value={<span class="tnum">{timeLabel}</span>}
-            />
-            <Detail label="Duration" value={`${cfg.slotDurationMin} minutes`} />
-            <Detail
-              label="Meeting link"
-              value={
-                <a
-                  href={cfg.meetingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="text-brand-600 dark:text-brand-300 hover:underline break-all text-right"
-                >
-                  {cfg.meetingUrl}
-                </a>
-              }
-            />
-          </div>
-
-          <div class="mt-5 flex items-center justify-between gap-4 text-sm">
-            <a
-              href="/"
-              class="inline-flex items-center gap-1 text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline"
-            >
-              <ArrowLeft />
-              Book another time
-            </a>
-            <a
-              href={`/cancel?id=${b.id}&token=${b.cancelToken}`}
-              class="inline-flex items-center gap-1 text-ink-muted hover:text-red-600 dark:hover:text-red-300 transition-colors focus:outline-none focus-visible:underline"
-            >
-              Need to cancel?
-              <ArrowRight />
-            </a>
-          </div>
-        </div>
-      </main>
+      <ConfirmedView
+        {...data}
+        hostName={cfg.hostName}
+        meetingUrl={cfg.meetingUrl}
+        slotDurationMin={cfg.slotDurationMin}
+        backHref="/"
+      />
       <Footer
         githubUrl={cfg.githubUrl}
         hidden={cfg.hideBranding}
@@ -258,14 +31,3 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
     </div>
   );
 });
-
-function Detail(
-  { label, value }: { label: string; value: preact.ComponentChildren },
-) {
-  return (
-    <div class="flex items-center justify-between gap-4 px-5 py-3.5">
-      <span class="text-sm text-ink-muted">{label}</span>
-      <span class="text-sm text-ink">{value}</span>
-    </div>
-  );
-}
