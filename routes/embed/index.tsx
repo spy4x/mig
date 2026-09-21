@@ -1,20 +1,24 @@
-import { define } from "../lib/utils.ts";
-import { Picker } from "../components/Picker.tsx";
-import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
-import { isoDateInTz, minToHHMM, zonedDateTime } from "../lib/tz.ts";
+import { define } from "../../lib/utils.ts";
+import { Picker } from "../../components/Picker.tsx";
+import {
+  countSlotsForDate,
+  getCandidateDates,
+} from "../../lib/availability.ts";
+import { isoDateInTz, minToHHMM, zonedDateTime } from "../../lib/tz.ts";
 
 interface DateCell {
   date: string;
   slots: number;
 }
 
-interface EmbedData {
+export interface EmbedData {
   date: string | null;
   slot: string | null;
   dates: DateCell[];
   selectedDateLabel: string | null;
   slots: Array<{ time: string; available: boolean }>;
   monthAnchor: string;
+  error: string | null;
 }
 
 function parseDateParam(v: string | null): string | null {
@@ -68,6 +72,7 @@ export const handler = define.handlers({
     const date = parseDateParam(url.searchParams.get("date"));
     const slot = parseSlotParam(url.searchParams.get("slot"));
     const monthParam = parseMonthParam(url.searchParams.get("month"));
+    const error = url.searchParams.get("err");
 
     const minStart = minStartInstant(cfg.minNoticeHours);
     const today = isoDateInTz(new Date(), cfg.hostTz);
@@ -137,7 +142,7 @@ export const handler = define.handlers({
     }
 
     return {
-      data: { date, slot, dates, selectedDateLabel, slots, monthAnchor },
+      data: { date, slot, dates, selectedDateLabel, slots, monthAnchor, error },
     };
   },
 });
@@ -148,14 +153,19 @@ export const handler = define.handlers({
   Differences from /:
     - No header chrome, no footer, no theme toggle (parent page owns
       the theme; the iframe inherits its color-scheme automatically).
+    - No island: the Picker renders plain <a href> / <form> — every
+      link and the booking form action stay under /embed (basePath
+      below), so a host that only allows framing /embed never gets
+      navigated out of it (issue #11).
     - Tighter padding — embedders get a smaller drop-in.
-    - Same booking flow, same URL contract.
+    - Same booking flow, same URL contract, offset by /embed.
 
   Auto-sizing: the parent page should set `style="width:100%;max-width:36rem"`
   on the iframe and listen to postMessage if they want dynamic height.
 */
 export default define.page<typeof handler>(function Embed({ data, state }) {
-  const { date, slot, dates, selectedDateLabel, slots, monthAnchor } = data;
+  const { date, slot, dates, selectedDateLabel, slots, monthAnchor, error } =
+    data;
   const cfg = state.config;
 
   // Pre-compute the confirm label for the picker.
@@ -180,11 +190,17 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
   return (
     <div class="min-h-dvh bg-surface text-ink">
       <main class="px-4 sm:px-5 py-4 sm:py-5">
-        <header class="mb-4">
+        {
+          /* A plain <div>, not a <header> element — /embed must not
+             contain the site's chrome, and a bare landmark heading
+             for "Book {hostName}" isn't that chrome, but keeping it
+             out of a <header> tag keeps that easy to verify. */
+        }
+        <div class="mb-4">
           <h1 class="text-base font-semibold tracking-(--tracking-tight) text-ink">
             Book {cfg.hostName}
           </h1>
-        </header>
+        </div>
 
         <Picker
           dates={dates}
@@ -196,8 +212,9 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
           durationMin={cfg.slotDurationMin}
           hostName={cfg.hostName}
           hostTz={cfg.hostTz}
-          error={null}
+          error={error}
           confirmLabel={confirmLabel}
+          basePath="/embed"
         />
       </main>
     </div>
