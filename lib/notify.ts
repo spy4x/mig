@@ -225,44 +225,33 @@ export interface EmailFailedOpts {
 // already carries the detail.
 export function notifyBookingEmailFailed(
   config: Config,
-  booking: Booking | null,
+  booking: Booking,
   error: string,
   opts: EmailFailedOpts,
 ): Promise<void> {
   if (!isEventEnabled("error")) return Promise.resolve();
   const { rolledBack } = opts;
   const lines = [
-    booking
-      ? (rolledBack
-        ? `mig: a booking for ${booking.guestName} was NOT created — the ` +
-          `confirmation email failed, so it was removed and the slot is ` +
-          `free again`
-        : `mig: a booking for ${booking.guestName} was NOT confirmed — ` +
-          `an email failed to send, and removing the booking failed too. ` +
-          `It may still be on disk and come back after a restart. ` +
-          `Remove it by hand: id ${booking.id} in the data file.`)
-      : "mig: a booking was NOT created (no record — the send failed " +
-        "before anything was saved)",
+    rolledBack
+      ? `mig: a booking for ${booking.guestName} was NOT created — the ` +
+        `confirmation email failed, so it was removed and the slot is ` +
+        `free again`
+      : `mig: a booking for ${booking.guestName} was NOT confirmed — ` +
+        `an email failed to send, and removing the booking failed too. ` +
+        `It may still be on disk and come back after a restart. ` +
+        `Remove it by hand: id ${booking.id} in the data file.`,
     "",
     `Error: ${error}`,
+    "",
+    `Guest:  ${booking.guestName} <${booking.guestEmail}>`,
+    `When:   ${ownerWhenLabel(booking)}`,
+    `Notes:  ${booking.notes?.trim() || "(none)"}`,
+    `Booked: ${formatClockShortAt(new Date(booking.createdAt), config.hostTz)}`,
   ];
-  if (booking) {
-    lines.push(
-      "",
-      `Guest:  ${booking.guestName} <${booking.guestEmail}>`,
-      `When:   ${ownerWhenLabel(booking)}`,
-      `Notes:  ${booking.notes?.trim() || "(none)"}`,
-      `Booked: ${
-        formatClockShortAt(new Date(booking.createdAt), config.hostTz)
-      }`,
-    );
-  }
   return notify(config, {
-    title: booking
-      ? (rolledBack
-        ? `mig: NOT booked - ${booking.guestName}`
-        : `mig: NOT booked, remove by hand - ${booking.guestName}`)
-      : "mig: booking NOT created",
+    title: rolledBack
+      ? `mig: NOT booked - ${booking.guestName}`
+      : `mig: NOT booked, remove by hand - ${booking.guestName}`,
     message: lines.join("\n"),
     priority: rolledBack ? 4 : 5,
     tags: rolledBack
