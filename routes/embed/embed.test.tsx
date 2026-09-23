@@ -349,13 +349,20 @@ Deno.test("mig#15: the time card's Change link carries tz (step 2, slot picked)"
   );
 });
 
-Deno.test("mig#15: /embed's own confirm label converts into the visitor's zone, not the host's", () => {
+Deno.test("mig#15 round 2: /embed's own confirm label converts into the visitor's zone, not the host's", () => {
   // Regression guard for routes/embed/index.tsx's confirmLabel: it's
   // computed inside the page component itself (not passed in via
   // EmbedData), so this has to render the real component with a real
   // date+slot+tz combination that crosses a date boundary — same pair
   // as lib/tz.test.ts's cross-zone case (09:00 Tuesday Ho Chi Minh =
   // 22:00 Monday New York).
+  //
+  // mig#15 round 2 fix: the assertion is scoped to the confirm
+  // button's own text, extracted by regex, not `html.includes(...)`
+  // over the whole page — the time card (tested separately below)
+  // renders the same "22:00, New York, UTC-4" and "5 Oct" substrings
+  // on its own, so a whole-page `includes` check stayed green even
+  // when confirmLabel itself was reverted to the host zone.
   const cfg: Config = { ...FAKE_CONFIG, hostTz: "Asia/Ho_Chi_Minh" };
   const props = {
     ...fakePageProps(embedData({
@@ -368,18 +375,36 @@ Deno.test("mig#15: /embed's own confirm label converts into the visitor's zone, 
     state: { config: cfg } as unknown as State,
   };
   const html = renderToString(<EmbedPage {...props} />);
-  assert(
-    html.includes("22:00, New York, UTC-4"),
-    "expected the confirm label to show the converted visitor clock",
+  const confirmButtonText = html.match(/Confirm — [^<]+/)?.[0];
+  assertEquals(
+    confirmButtonText,
+    "Confirm — Mon, 5 Oct, 22:00, New York, UTC-4",
   );
-  assert(
-    html.includes("5 Oct"),
-    "expected the confirm label's date to be Mon 5 Oct, not Tue 6 (host)",
+});
+
+Deno.test("mig#15 round 2: the time card shows the slot's own converted date when the route supplies slotDateLabel", () => {
+  // Companion to the confirm-label test above, scoped the same way:
+  // extracts the time card's own date text (after the "·" separator)
+  // rather than checking the whole page. This exercises Picker's
+  // slotDateLabel-over-selectedDateLabel precedence with a fabricated
+  // EmbedData; routes/embed/index.test.ts separately proves the real
+  // GET handler actually *computes* slotDateLabel from the slot's own
+  // instant rather than noon of the host day — the two together are
+  // the full regression guard.
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2026-10-06",
+        slot: "09:00",
+        selectedDateLabel: "Tuesday, 6 October 2026",
+        slotDateLabel: "Monday, 5 October 2026",
+        slots: SLOTS,
+        tz: "America/New_York",
+      }))}
+    />,
   );
-  assertFalse(
-    html.includes("Confirm — Tue"),
-    "confirm label must not use the host's weekday (Tuesday)",
-  );
+  const timeCardDate = html.match(/· ([^<]+)</)?.[1];
+  assertEquals(timeCardDate, "Monday, 5 October 2026");
 });
 
 Deno.test("mig#15: no tz known yet (missing or invalid) — links have no tz param, and the redirect script is present", () => {
