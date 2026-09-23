@@ -4,6 +4,7 @@
 import { type } from "arktype";
 import { parseWeeklyAvailability } from "./availability.ts";
 import { parseBlockedDates } from "./availability.ts";
+import { Email } from "./email-pattern.ts";
 import type { Config } from "./types.ts";
 
 // Field-level shape + constraints, applied to the already-defaulted/
@@ -15,7 +16,7 @@ import type { Config } from "./types.ts";
 // through the schema unconditionally is safe.
 const ConfigSchema = type({
   HOST_NAME: "string > 0",
-  HOST_EMAIL: "string.email",
+  HOST_EMAIL: Email,
   HOST_TZ: "string > 0",
   MEETING_URL: "string.url",
   PUBLIC_URL: "string.url",
@@ -134,8 +135,17 @@ function parseConfig(): Config {
 
   const validated = ConfigSchema(candidate);
   if (validated instanceof type.errors) {
+    // arktype's default messages end with `(was <the actual value>)` —
+    // fine for a length count ("was 5") but not for a type/pattern
+    // mismatch, where <the actual value> is the raw env string itself
+    // (e.g. a malformed MEETING_URL carrying a query-string token).
+    // Startup errors go to the container's logs, so name the variable
+    // and the reason, never the value.
     const issues = [...validated]
-      .map((issue) => `  ${issue.path.join(".")}: ${issue.message}`)
+      .map((issue) => {
+        const message = issue.message.replace(/ \(was .*\)$/, "");
+        return `  ${issue.path.join(".")}: ${message}`;
+      })
       .join("\n");
     console.error(`mig: invalid environment configuration:\n${issues}`);
     Deno.exit(1);

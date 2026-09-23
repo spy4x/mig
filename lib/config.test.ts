@@ -37,6 +37,30 @@ async function runConfig(
   return { code, stderr: new TextDecoder().decode(stderr) };
 }
 
+/** Boots config.ts in a child process and prints one field of the
+ *  resulting `Config` to stdout — for pinning a *value* (a default, a
+ *  coercion result), not just "did it exit 0". */
+async function runConfigField(
+  env: Record<string, string>,
+  field: string,
+): Promise<string> {
+  const command = new Deno.Command(Deno.execPath(), {
+    args: [
+      "eval",
+      "--allow-env",
+      "--allow-read",
+      `const { config } = await import(\`file://\${Deno.cwd()}/lib/config.ts\`); console.log(config.${field})`,
+    ],
+    cwd: Deno.cwd(),
+    env,
+    clearEnv: true,
+    stdout: "piped",
+    stderr: "inherit",
+  });
+  const { stdout } = await command.output();
+  return new TextDecoder().decode(stdout).trim();
+}
+
 Deno.test("config: boots with a fully valid env", async () => {
   const { code, stderr } = await runConfig(VALID_ENV);
   assertEquals(code, 0, stderr);
@@ -81,4 +105,58 @@ Deno.test("config: exits 1 naming an invalid THEME", async () => {
   const { code, stderr } = await runConfig({ ...VALID_ENV, THEME: "blue" });
   assertEquals(code, 1);
   assertStringIncludes(stderr, "THEME");
+});
+
+// mig#3 review round 1: HOST_EMAIL goes through the same shared
+// lib/email-pattern.ts Email type as BookingSchema's email field — pin
+// the same Zod-parity boundary here too.
+Deno.test("config: accepts an apostrophe in HOST_EMAIL's local part (Zod parity)", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    HOST_EMAIL: "o'brien@example.com",
+  });
+  assertEquals(code, 0, stderr);
+});
+
+for (
+  const bad of [
+    "a..b@example.com",
+    ".a@example.com",
+    "a.@example.com",
+    "a%b@example.com",
+    "a@-example.com",
+    "a@example..com",
+  ]
+) {
+  Deno.test(`config: rejects HOST_EMAIL=${bad} (Zod parity)`, async () => {
+    const { code, stderr } = await runConfig({ ...VALID_ENV, HOST_EMAIL: bad });
+    assertEquals(code, 1);
+    assertStringIncludes(stderr, "HOST_EMAIL");
+  });
+}
+
+Deno.test("config: MIN_NOTICE_HOURS defaults to 6 when unset", async () => {
+  const env = { ...VALID_ENV };
+  delete env.MIN_NOTICE_HOURS;
+  const value = await runConfigField(env, "minNoticeHours");
+  assertEquals(value, "6");
+});
+
+// mig#3 review round 1: arktype's default messages echo the actual bad
+// value ("... (was \"<value>\")"), which for a type/pattern mismatch is
+// the raw env string itself — a malformed MEETING_URL carrying a
+// passcode-looking query param must not reach the container's logs.
+Deno.test("config: a malformed MEETING_URL is named but its value is not echoed to stderr", async () => {
+  const secretLooking = "not a url ?token=SUPER-SECRET-PASSCODE";
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    MEETING_URL: secretLooking,
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "MEETING_URL");
+  assertEquals(
+    stderr.includes("SUPER-SECRET-PASSCODE"),
+    false,
+    `stderr echoed the bad value:\n${stderr}`,
+  );
 });

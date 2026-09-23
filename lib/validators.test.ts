@@ -52,6 +52,36 @@ Deno.test("booking validator rejects a bad email with the visitor-facing message
   }
 });
 
+// mig#3 review round 1: arktype's built-in `string.email` keyword uses a
+// different pattern than Zod 3's `.email()` — it accepted `o'brien@...`
+// and rejected the six addresses below; arktype's keyword flipped every
+// one of them. lib/email-pattern.ts reproduces Zod's exact regex instead,
+// so these pin the accept/reject boundary that regex draws.
+Deno.test("booking validator accepts an apostrophe in the local part (Zod parity)", () => {
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    email: "o'brien@example.com",
+  });
+
+  assertEquals(result.success, true);
+});
+
+for (
+  const bad of [
+    "a..b@example.com",
+    ".a@example.com",
+    "a.@example.com",
+    "a%b@example.com",
+    "a@-example.com",
+    "a@example..com",
+  ]
+) {
+  Deno.test(`booking validator rejects ${bad} (Zod parity)`, () => {
+    const result = BookingSchema.safeParse({ ...validBooking, email: bad });
+    assertEquals(result.success, false);
+  });
+}
+
 Deno.test("booking validator trims and lowercases a valid email", () => {
   const result = BookingSchema.safeParse({
     ...validBooking,
@@ -71,6 +101,89 @@ Deno.test("booking validator rejects a missing required field", () => {
   assertEquals(result.success, false);
   if (!result.success) {
     assertEquals(result.error.issues[0]?.path, ["name"]);
+    assertEquals(result.error.issues[0]?.message, "Required");
+  }
+});
+
+// mig#3 review round 1: pins for the hand-written field-order
+// orchestration in validators.ts — each one is a behaviour the old Zod
+// object schema had that a naive rewrite could silently drop.
+Deno.test("booking validator: name and email both invalid — name's message wins (declaration order)", () => {
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    name: "A",
+    email: "not-an-email",
+  });
+
+  assertEquals(result.success, false);
+  if (!result.success) {
+    assertEquals(result.error.issues[0]?.message, "Please enter your name.");
+  }
+});
+
+Deno.test("booking validator: name at exactly 100 chars is accepted, 101 is rejected", () => {
+  const at100 = BookingSchema.safeParse({
+    ...validBooking,
+    name: "B".repeat(100),
+  });
+  assertEquals(at100.success, true);
+
+  const at101 = BookingSchema.safeParse({
+    ...validBooking,
+    name: "B".repeat(101),
+  });
+  assertEquals(at101.success, false);
+});
+
+Deno.test("booking validator: notes at exactly 500 chars is accepted, 501 is rejected", () => {
+  const at500 = BookingSchema.safeParse({
+    ...validBooking,
+    notes: "N".repeat(500),
+  });
+  assertEquals(at500.success, true);
+
+  const at501 = BookingSchema.safeParse({
+    ...validBooking,
+    notes: "N".repeat(501),
+  });
+  assertEquals(at501.success, false);
+});
+
+Deno.test("booking validator: name is trimmed before the length check", () => {
+  // 100 real characters padded with whitespace to 104 raw — accepted only
+  // if trim() runs before max(100), same order Zod's .trim().max() chain
+  // ran in.
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    name: "  " + "B".repeat(100) + "  ",
+  });
+
+  assertEquals(result.success, true);
+  if (result.success) {
+    assertEquals(result.data.name, "B".repeat(100));
+  }
+});
+
+Deno.test("booking validator: name is trimmed before the min-length check too", () => {
+  // Raw length 3 (" A "), trimmed length 1 — must fail min(2) on the
+  // trimmed value, the same order Zod's .trim().min() chain ran in.
+  const result = BookingSchema.safeParse({ ...validBooking, name: " A " });
+
+  assertEquals(result.success, false);
+  if (!result.success) {
+    assertEquals(result.error.issues[0]?.message, "Please enter your name.");
+  }
+});
+
+Deno.test("booking validator: guestTz canonicalizes a legacy alias (Japan -> Asia/Tokyo)", () => {
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    guestTz: "Japan",
+  });
+
+  assertEquals(result.success, true);
+  if (result.success) {
+    assertEquals(result.data.guestTz, "Asia/Tokyo");
   }
 });
 

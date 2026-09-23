@@ -14,6 +14,7 @@
 // visitor sees first when several fields are invalid at once.
 
 import { type } from "arktype";
+import { Email } from "./email-pattern.ts";
 import { canonicalTimeZone, isValidTimeZone } from "./tz.ts";
 
 function hasHeaderControlCharacters(value: string): boolean {
@@ -81,7 +82,7 @@ const NameRule = type("string").pipe((s: string, ctx) => {
 
 const EmailRule = type("string").pipe((s: string, ctx) => {
   const trimmed = s.trim().toLowerCase();
-  const checked = type("string.email")(trimmed);
+  const checked = Email(trimmed);
   if (checked instanceof type.errors) {
     return ctx.reject({ message: "Please enter a valid email." });
   }

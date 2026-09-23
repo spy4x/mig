@@ -7,14 +7,14 @@ import { Spinner } from "../components/icons.tsx";
   Two responsibilities, both client-side UX only:
 
   1. Validation short-circuit. The native form posts to /api/book
-     which validates server-side via Zod (the trust boundary). But
+     which validates server-side via arktype (the trust boundary). But
      if the form is empty / malformed, posting and waiting for the
      303 redirect with ?err=… means the button briefly enters its
      "Confirming…" spinner state — and on slow networks that
      spinner can sit for many seconds with no feedback, looking
      broken. Fix: validate locally first, and if invalid, surface
      an inline error AND prevent the submit so the button label
-     never flips to "Confirming…". Server Zod still runs on the
+     never flips to "Confirming…". Server arktype still runs on the
      valid path as the source of truth.
 
   2. Visitor timezone capture. Same as before — read
@@ -32,7 +32,7 @@ interface Props {
 }
 
 // Mirrors lib/validators.ts:BookingSchema (name min 2, email
-// shape). Server-side Zod is the trust boundary — this is UX only.
+// shape). Server-side arktype is the trust boundary — this is UX only.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NAME_MIN = 2;
 const NAME_MAX = 100;
