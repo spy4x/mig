@@ -176,30 +176,31 @@ It used to delete `deno.lock`, exclude it from the build context via
 `.dockerignore`, and pull `vite`, `tailwindcss`, `preact`, `@preact/signals` and
 `nodemailer` with a separate `npm install` by `^` range — so the published image
 could carry different dependency versions than the ones CI tested and the lock
-recorded. Since CI's own `check` step already runs `deno install --frozen` then
-`deno task build` inside the exact same `denoland/deno:debian-2.9.5` image as
-the build stage, with no Node.js or npm, the build stage now does the same: it
-keeps `deno.lock` in the build context and runs `deno install --frozen` before
-`deno task build`, dropping the Node.js/npm install and the npm-install
-workaround entirely. Verified with a real `docker build` from a clean
+recorded — and it did: that path resolved `@preact/signals@2.11.2` where
+`deno.lock` records `2.11.1`. Since CI's own `check` step already runs
+`deno install --frozen` then `deno task build` inside the exact same
+`denoland/deno:debian-2.9.5` image as the build stage, with no Node.js or npm,
+the build stage now does the same: it keeps `deno.lock` in the build context and
+runs `deno install --frozen` before `deno task build`, dropping the Node.js/npm
+install and the npm-install workaround entirely. `deno install --frozen` builds
+its own `/src/node_modules` (a `.deno/`-backed store) in the build stage — see
+`.dockerignore`'s `node_modules` entry for why a host-managed one must still
+stay out of the build context. Verified with a real `docker build` from a clean
 `git archive` checkout (so a host `node_modules`/`_fresh` can't leak in, same
 risk `.dockerignore` guards against): the build exits 0 with no Node.js or npm
 installed anywhere in the image; the resolved `vite`, `preact`, `tailwindcss`
-and `nodemailer` versions inside the build stage
-(`ls $DENO_DIR/npm/registry.npmjs.org/<pkg>`) equal `deno.lock`'s recorded
-versions exactly (`vite@7.3.6`, `preact@10.29.8`, `tailwindcss@4.3.3`,
-`nodemailer@7.0.13`); a container from the built image answers `/`, `/embed` and
-`/health` with 200, `/` is a full page (~21 KB, not the 77-byte empty-`<body>`
-failure mode), and the footer shows `Powered by mig vtest`; and, in a scratch
-copy with `deno.json` given a `zod` range (`^3.24.0`) the lock has no entry for,
-`docker build` fails at the `deno install --frozen` step instead of silently
-building a different `zod` than CI tested, while the unchanged copy still
-builds. The final image size is unchanged (194 MB either way): Node.js and npm
-only ever lived in the discarded build stage, so a multi-stage build was already
-shipping just the runtime stage regardless of what the build stage installed.
-The real win is a much smaller, faster build stage — no `apt-get install` of
-Node.js/npm and ~400 of their dependencies, no separate npm resolution that
-could drift from `deno.lock`.
+and `nodemailer` versions inside the build stage equal `deno.lock`'s recorded
+versions exactly; a container from the built image answers `/`, `/embed` and
+`/health` with 200, `/` is a full page (not the 77-byte empty-`<body>` failure
+mode), and the footer shows the injected `MIG_VERSION`; and, with `deno.json`
+given an import range the lock has no entry for, `docker build` fails at the
+`deno install --frozen` step instead of silently building different versions
+than CI tested, while an unchanged copy still builds. The runtime stage's layers
+(base image, `_fresh/` + `static/` copy, env/healthcheck/CMD) are unchanged, so
+the published image's own footprint doesn't change — the win is a build stage
+that can no longer silently drift from what CI already tested, and a smaller,
+faster one besides (no `apt-get install` of Node.js/npm and their several
+hundred transitive dependencies, no separate npm resolution).
 
 `release` runs after `check` on a `v<digit>` tag and publishes `antonshubin/mig`
 to Docker Hub: `v1.2.3` and `latest`, built with `MIG_VERSION=1.2.3`. A
