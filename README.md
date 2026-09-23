@@ -229,9 +229,13 @@ starting with `/embed` only:
 Content-Security-Policy: frame-ancestors https://your-site.example
 ```
 
-and make sure no `X-Frame-Options: DENY` (or `SAMEORIGIN`) header is applied to
-those paths — `frame-ancestors` supersedes it in modern browsers, but a proxy or
-previous config may still be setting it globally. The rest of the site (`/`,
+That header is the actual requirement. Current browsers (Chromium, Firefox,
+WebKit) follow `frame-ancestors` and ignore `X-Frame-Options` whenever both are
+present on the same response — the CSP Level 2 spec calls for exactly that — so
+an `X-Frame-Options: DENY` or `SAMEORIGIN` a reverse proxy sets globally can
+stay; it won't block the frame as long as `frame-ancestors` is also there on
+`/embed`. Only a browser old enough to lack CSP Level 2 support would still
+honor `X-Frame-Options` and refuse the frame. The rest of the site (`/`,
 `/confirmed`, `/cancel`) can keep denying framing entirely.
 
 `/embed` detects the visitor's timezone with a small inline script (no tracking,
