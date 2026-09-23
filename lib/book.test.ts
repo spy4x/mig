@@ -172,6 +172,27 @@ function failingTransport(message: string) {
   });
 }
 
+/** Test-only transport (mig#19 review round 1): fails only the send
+ *  to `addressToFail`, records every other `to` address it succeeds
+ *  on. Lets a test single out an owner-send failure from a
+ *  guest-send failure without caring which one lib/email.ts happens
+ *  to attempt first. */
+function failingAddressTransport(addressToFail: string, sentTo: string[]) {
+  return nodemailer.createTransport({
+    name: "failing-address-test-transport",
+    version: "1.0.0",
+    send(mail: TestMail, callback: TestSendCallback) {
+      const to = String(mail.data.to);
+      if (to === addressToFail) {
+        callback(new Error(`simulated SMTP failure for ${to}`));
+        return;
+      }
+      sentTo.push(to);
+      callback(null, { envelope: mail.message.getEnvelope() });
+    },
+  });
+}
+
 /** Test-only (mig#19 review round 1): makes `store`'s very next
  *  persist() call reject once, then delegates to the real
  *  implementation for every call after that — simulating the disk
@@ -786,6 +807,89 @@ Deno.test("mig#19: a persist failure on the initial save leaves nothing behind a
       ).length,
       1,
       "the retry must have saved exactly one booking",
+    );
+  } finally {
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+// ─── mig#19 review round 1: owner email goes out first, then guest ──────
+
+Deno.test("mig#19: a guest-send failure still reaches the owner first, then rolls back", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const sentTo: string[] = [];
+  // validFields()'s default guest address.
+  const guestEmail = "visitor@example.com";
+  setTransportForTesting(failingAddressTransport(guestEmail, sentTo));
+
+  try {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        fields: validFields(date, "09:00"),
+      }),
+      "",
+    );
+    assertEquals(res.status, 303);
+    // Owner-first (lib/email.ts's sendBookingEmails): the owner's send
+    // is attempted, and succeeds, before the guest's send is even
+    // tried.
+    assertEquals(sentTo, [cfg.hostEmail], `sent: ${sentTo}`);
+    assertStringIncludes(
+      new URL(res.headers.get("location")!).searchParams.get("err") ?? "",
+      "the booking was not created",
+    );
+    assertEquals(
+      bookings.list().filter((b) => b.date === date && b.time === "09:00")
+        .length,
+      0,
+      "the rolled-back booking must not remain in the store",
+    );
+  } finally {
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+Deno.test("mig#19: an owner-send failure reaches nobody, then rolls back", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const sentTo: string[] = [];
+  setTransportForTesting(failingAddressTransport(cfg.hostEmail, sentTo));
+
+  try {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        fields: validFields(date, "09:00"),
+      }),
+      "",
+    );
+    assertEquals(res.status, 303);
+    // Owner-first means an owner-side failure never reaches the
+    // guest's send at all: sendBookingEmails awaits the owner send
+    // first and throws straight out of that await, so the guest send
+    // a moment later in the function body never runs. Swap the order
+    // in lib/email.ts back to guest-first and this goes red: the
+    // guest send would succeed before the owner one failed.
+    assertEquals(sentTo, [], `sent: ${sentTo}`);
+    assertEquals(
+      bookings.list().filter((b) => b.date === date && b.time === "09:00")
+        .length,
+      0,
+      "the rolled-back booking must not remain in the store",
     );
   } finally {
     setTransportForTesting(defaultTransport());

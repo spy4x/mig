@@ -99,14 +99,23 @@ export async function sendEmail(
   }
 }
 
+// mig#19: owner first, then guest. lib/book.ts rolls the booking back
+// on any send failure here, so a booking that ends up rolled back
+// must never have reached the guest with a "Booking confirmed"
+// message and a calendar invite for a meeting that no longer exists —
+// that phantom-meeting scenario is the bug #19 was filed for. Owner
+// first means an owner-side failure (e.g. a bad HOST_EMAIL) reaches
+// nobody; a guest-side failure after a successful owner send is
+// already covered separately by notifyBookingEmailFailed, which
+// tells the host regardless of which recipient's send actually threw.
 export async function sendBookingEmails(
   config: Config,
   booking: Booking,
   cancelUrl: string,
 ): Promise<void> {
   const emails = buildBookingEmails(config, booking, cancelUrl);
-  await sendEmail(config, emails.guest);
   await sendEmail(config, emails.owner);
+  await sendEmail(config, emails.guest);
 }
 
 export function buildBookingEmails(
