@@ -215,6 +215,61 @@ Deno.test('handleBookingSubmit: failure under "/embed" redirects to /embed?err='
   await rm(path);
 });
 
+Deno.test("mig#15 review: a validation failure keeps slot and tz on the redirect, not just date", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    fields: validFields(date, "09:00", {
+      name: "", // fails validation
+      guestTz: "America/New_York",
+    }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  // Before mig#15's review, only `date` survived a failed redirect —
+  // dropping `slot` sent the visitor back to the slot grid (losing
+  // their pick), and dropping `tz` sent /embed back to the
+  // host-timezone fallback and another redirect round-trip.
+  assertEquals(url.searchParams.get("date"), date);
+  assertEquals(url.searchParams.get("slot"), "09:00");
+  assertEquals(url.searchParams.get("tz"), "America/New_York");
+  await rm(path);
+});
+
+Deno.test("mig#15 review: an availability failure also keeps slot and tz on the redirect", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    // 08:00 is outside MON-FRI 09:00-17:00 — a real availability
+    // failure, past the schema-validation step.
+    fields: validFields(date, "08:00", {
+      guestTz: "America/New_York",
+    }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  assertEquals(url.searchParams.get("date"), date);
+  assertEquals(url.searchParams.get("slot"), "08:00");
+  assertEquals(url.searchParams.get("tz"), "America/New_York");
+  await rm(path);
+});
+
 // ─── Honeypot ──────────────────────────────────────────────────────────
 
 Deno.test('handleBookingSubmit: honeypot under "" redirects to /confirmed', async () => {

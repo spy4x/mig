@@ -30,9 +30,14 @@ export async function handleBookingSubmit(
   const cfg = ctx.state.config;
   const ip = clientIp(ctx.req);
 
-  function errRedirect(message: string, date?: string): Response {
+  function errRedirect(
+    message: string,
+    state?: { date?: string; slot?: string; tz?: string },
+  ): Response {
     const params = new URLSearchParams({ err: message });
-    if (date) params.set("date", date);
+    if (state?.date) params.set("date", state.date);
+    if (state?.slot) params.set("slot", state.slot);
+    if (state?.tz) params.set("tz", state.tz);
     return Response.redirect(
       new URL(`${formPath(basePath)}?${params.toString()}`, cfg.publicUrl)
         .toString(),
@@ -49,6 +54,17 @@ export async function handleBookingSubmit(
   }
 
   const form = await ctx.req.formData();
+  // Raw, unvalidated — used only to carry state back on a failed
+  // redirect (mig#15 review). A validation/availability/persist
+  // failure used to drop `slot` and the visitor's `tz` and send them
+  // back to the bare picker root; the route re-validates all three on
+  // the way back in, so passing the raw values through here never
+  // bypasses that.
+  const redirectState = {
+    date: String(form.get("date") || "") || undefined,
+    slot: String(form.get("slot") || "") || undefined,
+    tz: String(form.get("guestTz") || "") || undefined,
+  };
   const parsed = BookingSchema.safeParse({
     name: form.get("name"),
     email: form.get("email"),
@@ -59,7 +75,10 @@ export async function handleBookingSubmit(
     website: form.get("website") ?? "",
   });
   if (!parsed.success) {
-    return errRedirect(parsed.error.issues[0]?.message ?? "Invalid form data.");
+    return errRedirect(
+      parsed.error.issues[0]?.message ?? "Invalid form data.",
+      redirectState,
+    );
   }
   const input = parsed.data;
 
@@ -80,7 +99,7 @@ export async function handleBookingSubmit(
   const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000);
   const slotInstant = zonedDateTime(input.date, input.slot, cfg.hostTz);
   if (slotInstant < minStart) {
-    return errRedirect("That time is no longer available.", input.date);
+    return errRedirect("That time is no longer available.", redirectState);
   }
 
   // Check slot is in availability
@@ -101,7 +120,7 @@ export async function handleBookingSubmit(
   if (!inAvail) {
     return errRedirect(
       "That time is outside availability hours.",
-      input.date,
+      redirectState,
     );
   }
 
@@ -109,7 +128,7 @@ export async function handleBookingSubmit(
   if (cfg.blockedDates.has(input.date)) {
     return errRedirect(
       "That date is not available for booking.",
-      input.date,
+      redirectState,
     );
   }
 
@@ -156,7 +175,7 @@ export async function handleBookingSubmit(
     await notifyBookingEmailFailed(cfg, booking, msg);
     return errRedirect(
       "We couldn't send your confirmation email, so the booking was not created. Please try again in a moment.",
-      input.date,
+      redirectState,
     );
   }
 
@@ -186,7 +205,7 @@ export async function handleBookingSubmit(
       );
       return errRedirect(
         "That time was just booked by someone else. The confirmation email you received is no longer valid — please pick another time.",
-        input.date,
+        redirectState,
       );
     }
   } catch (e) {
@@ -199,7 +218,7 @@ export async function handleBookingSubmit(
     );
     return errRedirect(
       "Your confirmation was sent, but we couldn't save the booking on our end. Please contact the host directly to confirm.",
-      input.date,
+      redirectState,
     );
   }
 
