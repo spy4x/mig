@@ -1,22 +1,22 @@
 steps:
   check:
-    image: denoland/deno:alpine-2.5.0
+    image: denoland/deno:debian-2.9.5
     when:
       event: [push, pull_request, tag]
     commands:
       - deno --version
-      - deno fmt --check
-      - deno lint
-      - deno check
-      - deno test -A --no-check
+      - deno install
+      - deno task check
+      - deno task test
       - deno task build
 
   release:
-    image: denoland/deno:alpine-2.5.0
+    image: denoland/deno:debian-2.9.5
     when:
       event: [tag]
       tag: v*
     commands:
+      - deno install
       - deno task build
       - docker build -t antonshubin/mig:${CI_COMMIT_TAG} -t antonshubin/mig:latest .
       - docker push antonshubin/mig:${CI_COMMIT_TAG}
