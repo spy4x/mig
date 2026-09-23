@@ -314,6 +314,42 @@ Deno.test("mig#15 round 2: a slot-taken conflict drops slot from the redirect (k
   await rm(path);
 });
 
+// ─── Rate limit ────────────────────────────────────────────────────────
+
+Deno.test("mig#18 round 3: a rate-limited redirect keeps date and tz", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  // max: 1 — the first submission consumes the only slot in the
+  // window, so the second one below is the one that gets rate-limited.
+  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 1 });
+  const fields = validFields(date, "09:00", { guestTz: "America/New_York" });
+
+  const first = await handleBookingSubmit(
+    stubContext({ config: cfg, bookings, rateLimiter, fields }),
+    "",
+  );
+  assertEquals(first.status, 303);
+
+  const second = await handleBookingSubmit(
+    stubContext({ config: cfg, bookings, rateLimiter, fields }),
+    "",
+  );
+  assertEquals(second.status, 303);
+  const url = new URL(second.headers.get("location")!);
+  // Before this fix, a rate-limited redirect carried no `date` and no
+  // `tz`, sending the visitor back to the date picker from scratch.
+  assertEquals(url.searchParams.get("date"), date);
+  assertEquals(url.searchParams.get("tz"), "America/New_York");
+  // Unlike the other failure redirects, `slot` never rides along here
+  // — a rate-limited request never got far enough to confirm the slot
+  // is still free.
+  assertEquals(url.searchParams.get("slot"), null);
+  await rm(path);
+});
+
 // ─── Honeypot ──────────────────────────────────────────────────────────
 
 Deno.test('handleBookingSubmit: honeypot under "" redirects to /confirmed', async () => {

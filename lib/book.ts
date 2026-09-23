@@ -45,14 +45,13 @@ export async function handleBookingSubmit(
     );
   }
 
-  // Rate limit per IP
-  const limit = ctx.state.rateLimiter.check(ip);
-  if (!limit.ok) {
-    return errRedirect(
-      `Too many attempts. Try again in ${humanRetry(limit.retryAfterMs)}.`,
-    );
-  }
-
+  // Read the form before the rate-limit check, so a rate-limited
+  // submission still redirects with the visitor's picked date and
+  // zone (mig#18 round 3) — dropping both sent them back to the date
+  // picker from scratch. `slot` is deliberately left off that one
+  // redirect below: a rate-limited request never got far enough to
+  // confirm the slot is still free, unlike the failure modes below
+  // that already checked it moments earlier.
   const form = await ctx.req.formData();
   // Raw, unvalidated — used only to carry state back on a failed
   // redirect (mig#15 review). `date` and `tz` always ride along: the
@@ -73,6 +72,15 @@ export async function handleBookingSubmit(
     ...redirectDateTz,
     slot: String(form.get("slot") || "") || undefined,
   };
+
+  // Rate limit per IP
+  const limit = ctx.state.rateLimiter.check(ip);
+  if (!limit.ok) {
+    return errRedirect(
+      `Too many attempts. Try again in ${humanRetry(limit.retryAfterMs)}.`,
+      redirectDateTz,
+    );
+  }
   const parsed = BookingSchema.safeParse({
     name: form.get("name"),
     email: form.get("email"),
