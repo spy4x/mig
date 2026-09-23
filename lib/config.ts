@@ -1,44 +1,62 @@
-// Environment variable parsing + Zod validation.
+// Environment variable parsing + arktype validation.
 // All required vars cause the process to exit 1 if missing/malformed.
 
-import { z } from "zod";
+import { type } from "arktype";
 import { parseWeeklyAvailability } from "./availability.ts";
 import { parseBlockedDates } from "./availability.ts";
 import type { Config } from "./types.ts";
 
-const Required = z.string().min(1, "required");
-
-const RawSchema = z.object({
-  HOST_NAME: Required,
-  HOST_EMAIL: Required.email(),
-  HOST_TZ: Required,
-  MEETING_URL: Required.url(),
-  PUBLIC_URL: Required.url(),
-  WEEKLY_AVAILABILITY: Required,
-  SLOT_DURATION_MIN: z.coerce.number().int().positive().max(480),
-  MIN_NOTICE_HOURS: z.coerce.number().int().nonnegative().default(6),
-  BOOKING_HORIZON_DAYS: z.coerce.number().int().positive().max(365).default(14),
-  BLOCKED_DATES: z.string().optional().default(""),
-  RATE_LIMIT_PER_5MIN: z.coerce.number().int().positive().default(1),
-  THEME: z.enum(["light", "dark", "auto"]).default("auto"),
-  SMTP_HOST: Required,
-  SMTP_PORT: z.coerce.number().int().positive().default(587),
-  SMTP_USER: Required,
+// Field-level shape + constraints, applied to the already-defaulted/
+// coerced candidate built below. A field with a `.default()` in the
+// old Zod schema gets its default substituted here *before* this
+// schema ever sees it (see `withDefault`), so this only needs to
+// describe what a *provided* value must look like — every default
+// below also happens to satisfy its own constraint, so running it
+// through the schema unconditionally is safe.
+const ConfigSchema = type({
+  HOST_NAME: "string > 0",
+  HOST_EMAIL: "string.email",
+  HOST_TZ: "string > 0",
+  MEETING_URL: "string.url",
+  PUBLIC_URL: "string.url",
+  WEEKLY_AVAILABILITY: "string > 0",
+  SLOT_DURATION_MIN: "1 <= number.integer <= 480",
+  MIN_NOTICE_HOURS: "number.integer >= 0",
+  BOOKING_HORIZON_DAYS: "1 <= number.integer <= 365",
+  BLOCKED_DATES: "string",
+  RATE_LIMIT_PER_5MIN: "number.integer > 0",
+  THEME: "'light' | 'dark' | 'auto'",
+  SMTP_HOST: "string > 0",
+  SMTP_PORT: "number.integer > 0",
+  SMTP_USER: "string > 0",
   // Homelab convention is SMTP_PASSWORD (matches servers/{cloud,home}/.env).
-  // Also accept SMTP_PASS as a legacy alias so existing deployments don't
-  // silently fail.
-  SMTP_PASSWORD: Required,
-  SMTP_FROM: Required,
-  CANCEL_SECRET: Required.min(16, "min 16 chars"),
-  PORT: z.coerce.number().int().positive().default(8080),
-  DATA_PATH: z.string().default("./data/bookings.json"),
-  HIDE_BRANDING: z.coerce.boolean().default(false),
-  GITHUB_URL: z.string().url().default("https://github.com/spy4x/mig"),
+  SMTP_PASSWORD: "string > 0",
+  SMTP_FROM: "string > 0",
+  CANCEL_SECRET: "string >= 16",
+  PORT: "number.integer > 0",
+  DATA_PATH: "string",
+  HIDE_BRANDING: "boolean",
+  GITHUB_URL: "string.url",
   // Build identifier. Injected at container build time as a docker
   // --build-arg (see AGENTS.md "Build version"). Defaults to "dev" so
   // local `deno task dev` always shows something sensible.
-  MIG_VERSION: z.string().trim().max(64).optional().default("dev"),
+  MIG_VERSION: "string <= 64",
 });
+
+/** Mirrors Zod's `.default(x)`: use `defaultValue` untouched when the
+ *  key is absent from `env`; otherwise run the raw string through
+ *  `coerce` — the same "coerce, don't validate here" split
+ *  `z.coerce.number()`/`z.coerce.boolean()` had. */
+function withDefault<T>(
+  env: Record<string, string>,
+  key: string,
+  defaultValue: T,
+  coerce: (raw: string) => T,
+): T {
+  return key in env ? coerce(env[key]) : defaultValue;
+}
+
+const identity = (raw: string): string => raw;
 
 function loadEnv(): Record<string, string> {
   // Load .env if present; in production env is set by container.
@@ -69,15 +87,60 @@ function loadEnv(): Record<string, string> {
 
 function parseConfig(): Config {
   const env = loadEnv();
-  const raw = RawSchema.safeParse(env);
-  if (!raw.success) {
-    const issues = raw.error.issues
-      .map((i) => `  ${i.path.join(".")}: ${i.message}`)
+
+  // Required vars (no default in the old schema): pass the raw string
+  // straight through, undefined and all — ConfigSchema rejects a
+  // missing/empty one with a message naming the variable.
+  // Optional vars (had a `.default()`): substitute the default when
+  // the key is absent, coerce the raw string when it's present —
+  // z.coerce.number()/boolean() were literally `Number(x)`/`Boolean(x)`,
+  // so that's what `Number`/`Boolean` below reproduce, warts (e.g.
+  // `Boolean("false") === true`) and all.
+  const candidate = {
+    HOST_NAME: env.HOST_NAME,
+    HOST_EMAIL: env.HOST_EMAIL,
+    HOST_TZ: env.HOST_TZ,
+    MEETING_URL: env.MEETING_URL,
+    PUBLIC_URL: env.PUBLIC_URL,
+    WEEKLY_AVAILABILITY: env.WEEKLY_AVAILABILITY,
+    SLOT_DURATION_MIN: Number(env.SLOT_DURATION_MIN),
+    MIN_NOTICE_HOURS: withDefault(env, "MIN_NOTICE_HOURS", 6, Number),
+    BOOKING_HORIZON_DAYS: withDefault(env, "BOOKING_HORIZON_DAYS", 14, Number),
+    BLOCKED_DATES: withDefault(env, "BLOCKED_DATES", "", identity),
+    RATE_LIMIT_PER_5MIN: withDefault(env, "RATE_LIMIT_PER_5MIN", 1, Number),
+    THEME: withDefault(env, "THEME", "auto", identity),
+    SMTP_HOST: env.SMTP_HOST,
+    SMTP_PORT: withDefault(env, "SMTP_PORT", 587, Number),
+    SMTP_USER: env.SMTP_USER,
+    SMTP_PASSWORD: env.SMTP_PASSWORD,
+    SMTP_FROM: env.SMTP_FROM,
+    CANCEL_SECRET: env.CANCEL_SECRET,
+    PORT: withDefault(env, "PORT", 8080, Number),
+    DATA_PATH: withDefault(env, "DATA_PATH", "./data/bookings.json", identity),
+    HIDE_BRANDING: withDefault(env, "HIDE_BRANDING", false, Boolean),
+    GITHUB_URL: withDefault(
+      env,
+      "GITHUB_URL",
+      "https://github.com/spy4x/mig",
+      identity,
+    ),
+    MIG_VERSION: withDefault(
+      env,
+      "MIG_VERSION",
+      "dev",
+      (raw) => raw.trim(),
+    ),
+  };
+
+  const validated = ConfigSchema(candidate);
+  if (validated instanceof type.errors) {
+    const issues = [...validated]
+      .map((issue) => `  ${issue.path.join(".")}: ${issue.message}`)
       .join("\n");
     console.error(`mig: invalid environment configuration:\n${issues}`);
     Deno.exit(1);
   }
-  const r = raw.data;
+  const r = validated;
 
   // Parse availability + blocked dates (throw on bad syntax)
   let availability;

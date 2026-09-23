@@ -19,7 +19,7 @@ Thanks for your interest in mig! Contributions welcome.
   - `@tailwindcss/vite` (Vite plugin)
   - `vite` (build tool)
   - `nodemailer` (SMTP)
-  - `zod` (validation)
+  - `arktype` (validation)
   - `@std/assert` (tests)
   - `@std/ulid` (IDs)
 - **One logical change per commit.** Angular commit convention

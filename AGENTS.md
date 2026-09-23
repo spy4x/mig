@@ -63,7 +63,7 @@ src/
 │   ├── BookingForm.tsx
 │   └── ThemeToggle.tsx
 ├── lib/
-│   ├── config.ts            — env parsing + Zod validation
+│   ├── config.ts            — env parsing + arktype validation
 │   ├── availability.ts      — weekly pattern + blocked-dates parser
 │   ├── bookings.ts          — JSON store + AsyncMutex
 │   ├── tokens.ts            — ULID + HMAC sign/verify
@@ -71,7 +71,7 @@ src/
 │   ├── ics.ts               — ICS VCALENDAR generator
 │   ├── ratelimit.ts         — in-memory per-IP sliding window
 │   ├── tz.ts                — IANA tz helpers
-│   ├── validators.ts        — shared Zod schema for booking submission
+│   ├── validators.ts        — shared arktype schema for booking submission
 │   ├── book.ts              — POST /api/book + POST /embed/book handler
 │   ├── confirmed-data.ts    — shared /confirmed + /embed/confirmed lookup
 │   ├── picker-links.ts      — basePath-aware href builder for the picker
@@ -94,8 +94,8 @@ src/
 - **No third-party deps without justification.** `deno.json`'s imports are the
   budget: Fresh (`fresh`, `@fresh/plugin-vite`), Preact (`preact`,
   `preact-render-to-string`, `@preact/signals`), Tailwind (`tailwindcss`,
-  `@tailwindcss/vite`), `vite`, `nodemailer`, `zod`, `@std/assert`, `@std/ulid`.
-  Anything else needs a comment.
+  `@tailwindcss/vite`), `vite`, `nodemailer`, `arktype`, `@std/assert`,
+  `@std/ulid`. Anything else needs a comment.
 - **Concurrency:** every mutation goes through `bookings.mutate()` which
   acquires the in-process mutex. Never read-then-write the JSON directly.
 
