@@ -13,10 +13,10 @@
   `static/` and serves them with `deno serve -A --port=${PORT} _fresh/server.js`
   — not the `deno compile` binary from `deno task compile`, which is a separate,
   unused-in-prod option.
-- **CI:** Woodpecker `check` step — `deno install`, `deno task check` (fmt
-  --check + lint + type check), `deno task test`, `deno task build` — on every
-  push, pull request, tag and manual run; a tag-only `release` step then builds
-  and publishes the Docker image.
+- **CI:** Woodpecker `check` step — `deno install --frozen`, `deno task check`
+  (fmt --check + lint + type check), `deno task test`, `deno task build` — on
+  every push, pull request, tag and manual run; a tag-only `release` step then
+  builds and publishes the Docker image.
 - **Storage:** JSON file (`./data/bookings.json`) + in-process async mutex
 - **Email:** SMTP via `nodemailer`
 - **IDs:** ULID (Crockford base32, time-sortable)
@@ -150,12 +150,23 @@ before any task that touches TypeScript or builds: the `check` step runs it
 right after `deno --version`. The step calls the manifest's tasks instead of
 repeating their commands, so the pipeline can't drift from `deno task check`:
 
+- `deno install --frozen`
 - `deno task check` (fmt --check + lint + type check)
 - `deno task test`
 - `deno task build`
 
 `check` runs on push, pull request, tag and `manual` events, so it can also be
 started by hand from the Woodpecker UI.
+
+`deno install` runs as `deno install --frozen`. Without `--frozen`, a
+`deno.lock` that no longer matches `deno.json` gets silently rewritten instead
+of failing the build, so a drifted lock could reach `main` unnoticed. Verified
+in `denoland/deno:debian-2.9.5`, the step's own image: with the checked-in lock,
+`deno --version`, `deno install --frozen`, `deno task check`, `deno task test`
+and `deno task build` all pass, and `deno.lock` is byte-identical (`cmp`) before
+and after; with `deno.json` given an import the lock has no entry for,
+`deno install --frozen` alone exits non-zero and never reaches the later
+commands.
 
 `release` runs after `check` on a `v<digit>` tag and publishes `antonshubin/mig`
 to Docker Hub: `v1.2.3` and `latest`, built with `MIG_VERSION=1.2.3`. A
