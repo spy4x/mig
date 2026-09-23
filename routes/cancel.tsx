@@ -3,6 +3,7 @@ import { verifyCancelToken } from "../lib/tokens.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
 import {
+  formatClockShortAt,
   formatDateLong,
   formatTimeOfDay,
   isValidTimeZone,
@@ -24,6 +25,13 @@ interface CancelData {
     | null;
   token: string | null;
   cancelledAt: string | null;
+  // Needed to format `cancelledAt` in the right zone for the
+  // "already-cancelled" state, which otherwise carries no booking
+  // (mig#15 round 2 — this used to fall back to
+  // `Date.toLocaleString()`, which reads the *server process's* zone,
+  // not the visitor's or the host's).
+  hostTz: string | null;
+  guestTz: string | null;
 }
 
 export const handler = define.handlers({
@@ -40,6 +48,8 @@ export const handler = define.handlers({
           booking: null,
           token: null,
           cancelledAt: null,
+          hostTz: null,
+          guestTz: null,
         } satisfies CancelData,
       };
     }
@@ -52,6 +62,8 @@ export const handler = define.handlers({
           booking: null,
           token: null,
           cancelledAt: null,
+          hostTz: null,
+          guestTz: null,
         } satisfies CancelData,
       };
     }
@@ -68,6 +80,8 @@ export const handler = define.handlers({
           booking: null,
           token: null,
           cancelledAt: null,
+          hostTz: null,
+          guestTz: null,
         } satisfies CancelData,
       };
     }
@@ -79,6 +93,8 @@ export const handler = define.handlers({
           booking: null,
           token: null,
           cancelledAt: booking.cancelledAt ?? null,
+          hostTz: booking.hostTz,
+          guestTz: booking.guestTz ?? null,
         } satisfies CancelData,
       };
     }
@@ -96,6 +112,8 @@ export const handler = define.handlers({
         },
         token,
         cancelledAt: null,
+        hostTz: booking.hostTz,
+        guestTz: booking.guestTz ?? null,
       } satisfies CancelData,
     };
   },
@@ -111,6 +129,18 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
   ];
 
   if (errStates.includes(data.state)) {
+    // "Already cancelled" needs the cancellation instant formatted in
+    // the visitor's zone when known, else the host's — never
+    // `Date.toLocaleString()`, which reads the *server process's own*
+    // zone (mig#15 round 2), unrelated to either party's.
+    const cancelKnownGuestTz = !!data.guestTz && isValidTimeZone(data.guestTz);
+    const cancelDisplayTz = data.hostTz
+      ? validTimeZoneOr(data.guestTz ?? undefined, data.hostTz)
+      : null;
+    const cancelledAtLabel = data.cancelledAt && cancelDisplayTz
+      ? formatClockShortAt(new Date(data.cancelledAt), cancelDisplayTz)
+      : null;
+
     const messages: Record<typeof data.state, { title: string; body: string }> =
       {
         ok: { title: "", body: "" },
@@ -129,17 +159,14 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
         },
         "already-cancelled": {
           title: "Already cancelled",
-          body: data.cancelledAt
-            ? `This booking was cancelled on ${
-              new Date(data.cancelledAt).toLocaleString("en-GB", {
-                dateStyle: "medium",
-                timeStyle: "short",
-              })
-            }.`
+          body: cancelledAtLabel
+            ? `This booking was cancelled on ${cancelledAtLabel}.`
             : "This booking was cancelled on an earlier date.",
         },
       };
     const msg = messages[data.state];
+    const showCancelTzNote = data.state === "already-cancelled" &&
+      cancelledAtLabel && !cancelKnownGuestTz;
     return (
       <div class="min-h-dvh flex flex-col">
         <Header compact />
@@ -151,7 +178,18 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
             <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
               {msg.title}
             </h1>
-            <p class="text-sm text-ink-muted mb-6">{msg.body}</p>
+            <p
+              class={`text-sm text-ink-muted ${
+                showCancelTzNote ? "mb-1" : "mb-6"
+              }`}
+            >
+              {msg.body}
+            </p>
+            {showCancelTzNote && (
+              <p class="text-xs text-ink-subtle mb-6">
+                Times are shown in the host's timezone.
+              </p>
+            )}
             <a
               href="/"
               class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"

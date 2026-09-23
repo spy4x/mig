@@ -85,6 +85,8 @@ Deno.test("mig#15: cancel page shows the visitor's converted, labelled clock", (
         },
         token: "faketoken",
         cancelledAt: null,
+        hostTz: "Asia/Ho_Chi_Minh",
+        guestTz: "America/New_York",
       })}
     />,
   );
@@ -109,10 +111,67 @@ Deno.test("mig#15: cancel page falls back to the labelled host clock when no vis
         },
         token: "faketoken",
         cancelledAt: null,
+        hostTz: "Asia/Ho_Chi_Minh",
+        guestTz: null,
       })}
     />,
   );
   assert(html.includes("09:00, Ho Chi Minh, UTC+7"));
+  assert(
+    html.includes("Times are shown in the host&#39;s timezone."),
+    "expected the host-timezone fallback note",
+  );
+});
+
+// ─── mig#15 round 2: "already cancelled" no longer uses the server's own zone ──
+// This used to format `cancelledAt` with `Date.toLocaleString()`, which
+// reads the *server process's* zone — not the visitor's, not the
+// host's. Every assertion below passes an explicit zone through
+// hostTz/guestTz instead, so the result is identical no matter what
+// zone the Deno process itself happens to be running in; running with
+// `TZ=UTC` (or any other zone) makes no difference, which is the
+// actual regression test.
+
+Deno.test("mig#15 round 2: already-cancelled shows the visitor's dated, labelled clock — not the server's own zone", () => {
+  const html = renderToString(
+    <CancelPage
+      {...fakePageProps({
+        state: "already-cancelled" as const,
+        booking: null,
+        token: null,
+        // 2026-10-06T02:00:00Z = 09:00 Ho Chi Minh = 22:00 the
+        // previous day (5 Oct) in New York.
+        cancelledAt: "2026-10-06T02:00:00.000Z",
+        hostTz: "Asia/Ho_Chi_Minh",
+        guestTz: "America/New_York",
+      })}
+    />,
+  );
+  assert(
+    html.includes("cancelled on Mon 5 Oct 22:00, New York, UTC-4"),
+    "expected the visitor's dated, labelled clock in the message",
+  );
+  assertFalse(html.includes("Ho Chi Minh"));
+  assertFalse(html.includes("host&#39;s timezone"));
+});
+
+Deno.test("mig#15 round 2: already-cancelled falls back to the host's dated, labelled clock plus the note", () => {
+  const html = renderToString(
+    <CancelPage
+      {...fakePageProps({
+        state: "already-cancelled" as const,
+        booking: null,
+        token: null,
+        cancelledAt: "2026-10-06T02:00:00.000Z",
+        hostTz: "Asia/Ho_Chi_Minh",
+        guestTz: null,
+      })}
+    />,
+  );
+  assert(
+    html.includes("cancelled on Tue 6 Oct 09:00, Ho Chi Minh, UTC+7"),
+    "expected the host's dated, labelled clock in the message",
+  );
   assert(
     html.includes("Times are shown in the host&#39;s timezone."),
     "expected the host-timezone fallback note",
