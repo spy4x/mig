@@ -138,20 +138,21 @@ Dockerfile's build stage — the alpine variant's musl libc can't load
 `@tailwindcss/oxide`'s native binding, so `deno task build` fails under it).
 `nodeModulesDir` is `"manual"` in `deno.json`, so `deno install` must run before
 any task that touches TypeScript or builds: the `check` step runs it right after
-`deno --version`, and the `release` step runs it before its own
-`deno task build`. Both steps call the manifest's tasks instead of repeating
-their commands, so the pipeline can't drift from `deno task check`:
+`deno --version`. The step calls the manifest's tasks instead of repeating their
+commands, so the pipeline can't drift from `deno task check`:
 
 - `deno task check` (fmt --check + lint + type check)
 - `deno task test`
 - `deno task build`
 
+`check` runs on push, pull request, tag and `manual` events, so it can also be
+started by hand from the Woodpecker UI. There is no publish step yet: images on
+Docker Hub are pushed by hand (see #21).
+
 Woodpecker substitutes `${VAR}` in the whole file before it parses the YAML,
-including steps that will not run. On a manual run `CI_COMMIT_TAG` is empty, so
-`mig:${CI_COMMIT_TAG} -t` became `mig: -t` and YAML read the command as a map,
-which failed the whole pipeline. Write a variable the shell should expand at run
-time as `$${VAR}`. `check` also runs on `manual` events, so the pipeline can be
-started by hand from the Woodpecker UI.
+including steps that will not run. An empty variable can turn a command into
+invalid YAML: `mig:${CI_COMMIT_TAG} -t` became `mig: -t`, which YAML reads as a
+map. Write a variable the shell should expand at run time as `$${VAR}`.
 
 ## Hard rules
 
