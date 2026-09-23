@@ -6,10 +6,14 @@ import type { Config } from "./types.ts";
 import type { Booking } from "./types.ts";
 import { generateIcs } from "./ics.ts";
 import {
+  formatClockAt,
   formatInstantLong,
   formatInstantShort,
+  isValidTimeZone,
   validTimeZoneOr,
+  zoneCity,
   zonedDateTime,
+  zoneOffsetLabel,
 } from "./tz.ts";
 
 export interface SendEmailOpts {
@@ -116,7 +120,9 @@ export function buildBookingEmails(
   return {
     guest: {
       to: booking.guestEmail,
-      subject: `Booking confirmed: ${guestWhen}`,
+      subject: `Booking confirmed: ${guestWhen}, ${zoneCity(guestTz)}, ${
+        zoneOffsetLabel(guestTz, bookingInstant(booking))
+      }`,
       text: guestText(config, booking, cancelUrl),
       html: guestHtml(config, booking, cancelUrl),
       attachments: [
@@ -129,7 +135,9 @@ export function buildBookingEmails(
     },
     owner: {
       to: config.hostEmail,
-      subject: `New booking: ${booking.guestName} on ${ownerWhen}`,
+      subject: `New booking: ${booking.guestName} on ${ownerWhen}, ${
+        zoneCity(booking.hostTz)
+      }, ${zoneOffsetLabel(booking.hostTz, bookingInstant(booking))}`,
       text: ownerText(config, booking, cancelUrl),
       html: ownerHtml(config, booking, cancelUrl),
       attachments: [
@@ -161,8 +169,15 @@ export function buildCancellationEmails(
   reason: string | undefined,
 ): RecipientEmails {
   const guestTz = guestTimeZone(booking);
+  const instant = bookingInstant(booking);
   const guestWhen = whenShort(booking, guestTz);
   const ownerWhen = whenShort(booking, booking.hostTz);
+  const guestZoneLabel = `${zoneCity(guestTz)}, ${
+    zoneOffsetLabel(guestTz, instant)
+  }`;
+  const ownerZoneLabel = `${zoneCity(booking.hostTz)}, ${
+    zoneOffsetLabel(booking.hostTz, instant)
+  }`;
   const reasonText = reason?.trim() || "(no reason given)";
 
   // Each recipient gets a "Cancelled by:" line in their own frame of
@@ -170,10 +185,11 @@ export function buildCancellationEmails(
   // canceller's name (+ email) when the other party did. This avoids
   // the old "Cancelled by: the guest" line that left the host
   // wondering which guest it was.
-  const guestBody = `The meeting scheduled for ${guestWhen} (${guestTz}) ` +
+  const guestBody =
+    `The meeting scheduled for ${guestWhen}, ${guestZoneLabel} ` +
     `with ${config.hostName} has been cancelled.`;
   const hostBody =
-    `The meeting scheduled for ${ownerWhen} (${booking.hostTz}) ` +
+    `The meeting scheduled for ${ownerWhen}, ${ownerZoneLabel} ` +
     `with ${booking.guestName} has been cancelled.`;
   const guestCancellerLabel = cancelledBy === "guest"
     ? "you"
@@ -185,7 +201,7 @@ export function buildCancellationEmails(
   return {
     guest: {
       to: booking.guestEmail,
-      subject: `Your booking on ${guestWhen} was cancelled`,
+      subject: `Your booking on ${guestWhen}, ${guestZoneLabel} was cancelled`,
       text: cancellationText({
         greeting: `Hi ${booking.guestName},`,
         body: guestBody,
@@ -201,7 +217,8 @@ export function buildCancellationEmails(
     },
     owner: {
       to: config.hostEmail,
-      subject: `Booking cancelled: ${booking.guestName}, ${ownerWhen}`,
+      subject:
+        `Booking cancelled: ${booking.guestName}, ${ownerWhen}, ${ownerZoneLabel}`,
       text: cancellationText({
         greeting: `Hi ${config.hostName},`,
         body: hostBody,
@@ -279,7 +296,7 @@ function ownerText(
     `New booking received.`,
     "",
     `Guest:    ${booking.guestName} <${booking.guestEmail}>`,
-    `When:     ${whenLong(booking, booking.hostTz)}`,
+    `When:     ${ownerWhenLong(booking)}`,
   ];
   if (booking.notes?.trim()) {
     lines.push(`Notes:    ${booking.notes.trim()}`);
@@ -315,9 +332,7 @@ function ownerHtml(
       esc(booking.guestEmail)
     }&gt;</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">When</td>
-          <td style="padding:4px 0">${
-      esc(whenLong(booking, booking.hostTz))
-    }</td></tr>
+          <td style="padding:4px 0">${esc(ownerWhenLong(booking))}</td></tr>
       ${notesHtml}
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Booked at</td>
           <td style="padding:4px 0">${esc(booking.createdAt)}</td></tr>
@@ -387,8 +402,23 @@ function whenShort(booking: Booking, displayTz: string): string {
 }
 
 function whenLong(booking: Booking, displayTz: string): string {
-  return formatInstantLong(bookingInstant(booking), displayTz) +
-    ` (${displayTz})`;
+  const instant = bookingInstant(booking);
+  return `${formatInstantLong(instant, displayTz)}, ${zoneCity(displayTz)}, ${
+    zoneOffsetLabel(displayTz, instant)
+  }`;
+}
+
+// Owner-facing "When:" line: the host's own clock, plus the visitor's
+// clock alongside it whenever a valid visitor zone was captured — "so
+// the owner always sees the visitor's time and zone beside it" (mig#15).
+// Falls back to the host clock alone when no visitor zone is known
+// (never a guess at the visitor's zone).
+function ownerWhenLong(booking: Booking): string {
+  const instant = bookingInstant(booking);
+  const host = whenLong(booking, booking.hostTz);
+  const guestTzRaw = booking.guestTz;
+  if (!guestTzRaw || !isValidTimeZone(guestTzRaw)) return host;
+  return `${host} (visitor: ${formatClockAt(instant, guestTzRaw)})`;
 }
 
 function htmlWrap(config: Config, body: string): string {

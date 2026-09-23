@@ -1,0 +1,125 @@
+// mig#15: NTFY pushes are what the owner reads on their phone — they
+// must show the host's own clock plus the visitor's clock alongside
+// it (never a raw IANA zone name, and never a guessed visitor zone
+// when none was captured). These tests stub `fetch` so no network
+// call happens, and set the three NTFY_* env vars only for the
+// duration of each test.
+
+import { assertEquals, assertStringIncludes } from "@std/assert";
+import type { Booking, Config } from "./types.ts";
+import { notifyBookingCancelled, notifyBookingSucceeded } from "./notify.ts";
+
+function makeConfig(): Config {
+  return {
+    hostName: "Jane Doe",
+    hostEmail: "jane@example.com",
+    hostTz: "Asia/Ho_Chi_Minh",
+    meetingUrl: "https://meet.example.com/room",
+    publicUrl: "https://mig.example.com",
+    weeklyAvailability: {
+      MON: [],
+      TUE: [],
+      WED: [],
+      THU: [],
+      FRI: [],
+      SAT: [],
+      SUN: [],
+    },
+    slotDurationMin: 30,
+    minNoticeHours: 6,
+    bookingHorizonDays: 60,
+    blockedDates: new Set(),
+    rateLimitPer5Min: 1,
+    theme: "auto",
+    smtp: {
+      host: "smtp.example.com",
+      port: 587,
+      user: "user@example.com",
+      pass: "placeholder",
+      from: "Mig <mig@example.com>",
+    },
+    cancelSecret: "placeholder",
+    port: 8080,
+    dataPath: "./data/bookings.json",
+    hideBranding: false,
+    githubUrl: "https://github.com/spy4x/mig",
+    version: "test",
+  };
+}
+
+// Ho Chi Minh (host, no DST) / New York (guest, EDT in October — see
+// mig#15's PR body for why October is DST-unambiguous for both).
+function makeCrossZoneBooking(guestTz?: string): Booking {
+  return {
+    id: "01HXYZCROSSZONE",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    date: "2026-10-06",
+    time: "09:00",
+    hostTz: "Asia/Ho_Chi_Minh",
+    guestTz,
+    guestName: "Visitor",
+    guestEmail: "visitor@example.com",
+    cancelTokenHash: "hash",
+    status: "active",
+  };
+}
+
+async function captureNtfyBody(send: () => Promise<void>): Promise<string> {
+  const originalFetch = globalThis.fetch;
+  let body = "";
+  globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
+    body = String(init?.body ?? "");
+    return Promise.resolve(new Response(null, { status: 200 }));
+  }) as typeof fetch;
+  Deno.env.set("NTFY_URL", "https://ntfy.example.com");
+  Deno.env.set("NTFY_TOPIC", "mig-test");
+  Deno.env.set("NTFY_TOKEN", "test-token");
+  try {
+    await send();
+  } finally {
+    globalThis.fetch = originalFetch;
+    Deno.env.delete("NTFY_URL");
+    Deno.env.delete("NTFY_TOPIC");
+    Deno.env.delete("NTFY_TOKEN");
+    Deno.env.delete("NTFY_MODE");
+  }
+  return body;
+}
+
+Deno.test("mig#15: booking-succeeded NTFY body shows the host's clock and the visitor's alongside it", async () => {
+  const cfg = makeConfig();
+  const booking = makeCrossZoneBooking("America/New_York");
+  const body = await captureNtfyBody(() =>
+    notifyBookingSucceeded(cfg, booking)
+  );
+
+  assertStringIncludes(body, "Ho Chi Minh, UTC+7");
+  assertStringIncludes(body, "New York, UTC-4");
+  assertStringIncludes(body, "visitor: 22:00, New York, UTC-4");
+});
+
+Deno.test("mig#15: cancellation NTFY body shows the host's clock and the visitor's alongside it", async () => {
+  const cfg = makeConfig();
+  const booking = makeCrossZoneBooking("America/New_York");
+  const body = await captureNtfyBody(() =>
+    notifyBookingCancelled(cfg, booking, "guest", "changed my mind")
+  );
+
+  assertStringIncludes(body, "Ho Chi Minh, UTC+7");
+  assertStringIncludes(body, "New York, UTC-4");
+});
+
+Deno.test("mig#15: NTFY body never claims a visitor timezone that was never captured", async () => {
+  const cfg = makeConfig();
+  const booking = makeCrossZoneBooking(undefined);
+  const body = await captureNtfyBody(() =>
+    notifyBookingSucceeded(cfg, booking)
+  );
+
+  assertStringIncludes(body, "Ho Chi Minh, UTC+7");
+  assertEquals(
+    body.includes("visitor:"),
+    false,
+    "must not guess a visitor zone that was never captured",
+  );
+});

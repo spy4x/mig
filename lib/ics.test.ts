@@ -114,8 +114,13 @@ Deno.test("generateIcs — visitor description uses visitor timezone", async () 
   );
 
   assertEquals(ics.includes("DTSTART:20260828T080000Z"), true);
+  // mig#15: the description reads "..., City, UTC±N", not a raw IANA
+  // zone name — every comma in that trailer is itself escaped per RFC
+  // 5545, same as the one after "Friday".
   assertEquals(
-    ics.includes("Friday\\, 28 August 2026 at 04:00 (America/New_York)"),
+    ics.includes(
+      "Friday\\, 28 August 2026 at 04:00\\, New York\\, UTC-4",
+    ),
     true,
   );
 });
