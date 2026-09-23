@@ -175,17 +175,19 @@ export async function handleBookingSubmit(
   }
 
   // Transactional booking flow: save first, then send (mig#19). A
-  // saved booking with no email can still be undone — Phase 2's
-  // rollback below deletes it, and the guest is none the wiser. An
-  // email that went out for a booking that was never saved cannot be
-  // undone: there is no "unsend" for a "Booking confirmed" message
-  // that already carries a calendar invite, and the visitor is left
-  // holding a confirmation for a meeting the host never agreed to.
-  // The conflict check — the only place two concurrent requests for
-  // the same slot actually collide — therefore has to run before any
-  // mail goes out, not after. The previous order (email, then
-  // persist) got this backwards: the loser of the race still had its
-  // email sent before the conflict was ever detected.
+  // saved booking with no email can still be undone — both catch
+  // blocks below delete it again with a second mutate() (one for a
+  // save that half-failed, one for a send that failed outright), and
+  // the guest is none the wiser. An email that went out for a booking
+  // that was never saved cannot be undone: there is no "unsend" for a
+  // "Booking confirmed" message that already carries a calendar
+  // invite, and the visitor is left holding a confirmation for a
+  // meeting the host never agreed to. The conflict check — the only
+  // place two concurrent requests for the same slot actually collide
+  // — therefore has to run before any mail goes out, not after. The
+  // previous order (email, then persist) got this backwards: the
+  // loser of the race still had its email sent before the conflict
+  // was ever detected.
   const { raw: tokenRaw, hash: tokenHash } = await newCancelToken(
     cfg.cancelSecret,
   );
@@ -231,9 +233,31 @@ export async function handleBookingSubmit(
       );
     }
   } catch (e) {
-    // The save itself failed. Nothing was sent, so there's nothing to
-    // roll back — just tell the guest plainly and log loudly.
+    // The save itself failed — but BookingsStore.mutate() assigns
+    // `this.bookings = draft` *before* it awaits persist() (see
+    // lib/bookings.ts), so the booking pushed above is already
+    // sitting in the in-memory array even though the write to disk
+    // just threw. Left alone, the slot would show as booked, a retry
+    // would be told "just booked by someone else", nobody would ever
+    // get an email or a notification, and the next unrelated write
+    // would flush this orphan to disk. Undo the in-memory push with a
+    // second mutate() — the same shape as the rollback below — before
+    // telling the guest anything. That second mutate() assigns before
+    // it writes too, so the removal holds even if this write also
+    // fails.
     console.error("mig: persist FAILED; booking=" + bookingId, e);
+    try {
+      await ctx.state.bookings.mutate((draft) => {
+        const idx = draft.findIndex((b) => b.id === bookingId);
+        if (idx !== -1) draft.splice(idx, 1);
+      });
+    } catch (rollbackErr) {
+      console.error(
+        "mig: rollback FAILED after persist failed; booking=" +
+          bookingId + " may still be lingering in memory",
+        rollbackErr,
+      );
+    }
     return errRedirect(
       "We couldn't save your booking. Please try again in a moment.",
       redirectDateTz,
@@ -253,9 +277,10 @@ export async function handleBookingSubmit(
     const msg = (e as Error).message;
     console.error("mig: email send failed; rolling back booking:", msg);
     // Optional NTFY push so the host gets a heads-up outside the
-    // email channel. Fire-and-forget — we don't await the NTFY
-    // response before redirecting the user, so a slow NTFY won't
-    // add latency to the page.
+    // email channel. Awaited, not fire-and-forget: notify() in
+    // lib/notify.ts already swallows and logs its own transport
+    // errors, so awaiting it adds real latency but no new failure
+    // mode, and keeps the rollback below from racing it.
     await notifyBookingEmailFailed(cfg, booking, msg);
     try {
       await ctx.state.bookings.mutate((draft) => {

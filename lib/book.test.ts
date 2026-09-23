@@ -143,18 +143,18 @@ interface TestMail {
 type TestSendCallback = (err: Error | null, info?: unknown) => void;
 
 /** Test-only transport (mig#19): records every `to` address it is
- *  asked to send to, and doesn't resolve a send until `gate`
- *  resolves. Used to hold a winning request's email send open across
- *  an `await`, so a concurrently-running second request can genuinely
- *  be in flight at the same time — without any wall-clock sleep to
- *  fake it. */
-function gatedTransport(gate: Promise<void>, sentTo: string[]) {
+ *  asked to send to, and resolves immediately — no artificial delay.
+ *  A round-1 review found that an earlier version of this transport
+ *  held a send open behind a gate the race test below never actually
+ *  waited on; removed rather than fixed, since the race the test
+ *  needs doesn't come from timing at all (see the comment on that
+ *  test). */
+function recordingTransport(sentTo: string[]) {
   return nodemailer.createTransport({
-    name: "gated-test-transport",
+    name: "recording-test-transport",
     version: "1.0.0",
-    async send(mail: TestMail, callback: TestSendCallback) {
+    send(mail: TestMail, callback: TestSendCallback) {
       sentTo.push(String(mail.data.to));
-      await gate;
       callback(null, { envelope: mail.message.getEnvelope() });
     },
   });
@@ -170,6 +170,30 @@ function failingTransport(message: string) {
       callback(new Error(message));
     },
   });
+}
+
+/** Test-only (mig#19 review round 1): makes `store`'s very next
+ *  persist() call reject once, then delegates to the real
+ *  implementation for every call after that — simulating the disk
+ *  write failing on exactly one save. `persist` is a TypeScript
+ *  `private` method only at compile time; the modifier is erased at
+ *  runtime, so this overrides the instance's own copy, which a
+ *  `this.persist()` call inside `BookingsStore.mutate()` finds before
+ *  the class's prototype method. Call this *after* `store.init()`, so
+ *  the real write `init()` does for a missing file isn't the call
+ *  that fails. */
+function makePersistFailOnce(store: BookingsStore, message: string): void {
+  // deno-lint-ignore no-explicit-any
+  const anyStore = store as any;
+  const realPersist: () => Promise<void> = anyStore.persist.bind(store);
+  let failed = false;
+  anyStore.persist = async () => {
+    if (!failed) {
+      failed = true;
+      throw new Error(message);
+    }
+    await realPersist();
+  };
 }
 
 // ─── Success ─────────────────────────────────────────────────────────
@@ -324,8 +348,9 @@ Deno.test("mig#15 round 2: a slot-taken conflict drops slot from the redirect (k
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
   // Pre-populate the exact slot this submission will target, so
-  // Phase 2's conflict check (the email already sent by Phase 1) is
-  // the one that fires — not the schema or availability checks.
+  // Phase 1's conflict check (mig#19: save-then-send, so this is the
+  // very first thing that runs after the input validates) is the one
+  // that fires — not the schema or availability checks.
   await bookings.mutate((draft) => {
     draft.push({
       id: "01EXISTING",
@@ -355,6 +380,12 @@ Deno.test("mig#15 round 2: a slot-taken conflict drops slot from the redirect (k
   assertEquals(url.searchParams.get("slot"), null);
   assertEquals(url.searchParams.get("date"), date);
   assertEquals(url.searchParams.get("tz"), "America/New_York");
+  // mig#19 review round 1: the old message ("The confirmation email
+  // you received is no longer valid") only made sense when Phase 1
+  // sent mail before checking for a conflict. Nothing is ever sent to
+  // the loser now, so the message must not claim otherwise.
+  const err = (url.searchParams.get("err") ?? "").toLowerCase();
+  assertEquals(err.includes("email"), false, err);
   await rm(path);
 });
 
@@ -493,23 +524,29 @@ Deno.test("a validation-failure redirect caps an oversized slot, like date and t
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
   const hugeSlot = "9".repeat(200_000);
-  const ctx = stubContext({
-    config: cfg,
-    bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
-    // An invalid email fails BookingSchema, landing on the
-    // `redirectState` branch that carries `slot` along — the one
-    // mig#18's reviewer found left uncapped.
-    fields: validFields(date, hugeSlot, { email: "not-an-email" }),
-  });
 
-  const res = await handleBookingSubmit(ctx, "");
-  assertEquals(res.status, 303);
-  const loc = res.headers.get("location")!;
-  assertEquals(loc.startsWith(cfg.publicUrl), true, loc);
-  const url = new URL(loc);
-  assertEquals(url.searchParams.get("slot")?.length, 100);
-  await rm(path);
+  try {
+    const ctx = stubContext({
+      config: cfg,
+      bookings,
+      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      // An invalid email fails BookingSchema, landing on the
+      // `redirectState` branch that carries `slot` along — the one
+      // mig#18's reviewer found left uncapped.
+      fields: validFields(date, hugeSlot, { email: "not-an-email" }),
+    });
+
+    const res = await handleBookingSubmit(ctx, "");
+    assertEquals(res.status, 303);
+    const loc = res.headers.get("location")!;
+    assertEquals(loc.startsWith(cfg.publicUrl), true, loc);
+    const url = new URL(loc);
+    assertEquals(url.searchParams.get("slot")?.length, 100);
+  } finally {
+    // try/finally (mig#19 review round 1): a red assertion above must
+    // not skip this and leave /tmp/mig-book-test-*.json behind.
+    await rm(path);
+  }
 });
 
 // ─── mig#19: a lost race must send no email for a booking never saved ──
@@ -523,11 +560,7 @@ Deno.test("mig#19: the loser of a slot race sends no email and stores no booking
   const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 10 });
 
   const sentTo: string[] = [];
-  let releaseGate!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    releaseGate = resolve;
-  });
-  setTransportForTesting(gatedTransport(gate, sentTo));
+  setTransportForTesting(recordingTransport(sentTo));
 
   try {
     const fieldsAlice = validFields(date, "09:00", {
@@ -541,14 +574,28 @@ Deno.test("mig#19: the loser of a slot race sends no email and stores no booking
       guestTz: "America/New_York",
     });
 
-    // Both submissions are kicked off here, neither awaited before the
-    // other starts, so both are genuinely in flight — this is what
-    // makes handleBookingSubmit(alice) and handleBookingSubmit(bob)
-    // race for the same slot instead of running one after the other.
-    // Only once both have started do we release the gate that lets
-    // the winner's (held-open) email send finish — a promise-based
-    // seam instead of a wall-clock sleep, so there's no timing to get
-    // lucky or unlucky on.
+    // What actually makes these two race (mig#19 review round 1): an
+    // earlier version of this test held the winner's email send open
+    // behind a gate, on the theory that the delay was needed for the
+    // two requests to overlap. It wasn't — the gate was released
+    // before either promise below had even reached the transport, and
+    // removing it changes nothing. The real overlap comes from how
+    // these two calls are made: `handleBookingSubmit(alice)` and
+    // `handleBookingSubmit(bob)` are both invoked here with neither
+    // awaited first, so both run synchronously up to their own first
+    // `await` (`ctx.req.formData()`) before either suspends — by the
+    // time this function itself next awaits anything, both are
+    // already pending. From there the two interleave through the
+    // identical sequence of checks ahead of them, and
+    // `BookingsStore.mutate()`'s `AsyncMutex` is what actually
+    // decides the race: whichever call reaches `mutate()` first gets
+    // the slot, and the loser's own `mutate()` doesn't resolve until
+    // the winner's persist() has already completed, so the conflict
+    // it sees is never stale. None of that depends on wall-clock
+    // timing, which is why no gate or sleep is needed to make it
+    // deterministic — see mutation (a) in the PR body: reverting
+    // lib/book.ts to send-then-save turns this test red without any
+    // change here.
     const alicePromise = handleBookingSubmit(
       stubContext({
         config: cfg,
@@ -562,7 +609,6 @@ Deno.test("mig#19: the loser of a slot race sends no email and stores no booking
       stubContext({ config: cfg, bookings, rateLimiter, fields: fieldsBob }),
       "",
     );
-    releaseGate();
 
     const [aliceRes, bobRes] = await Promise.all([alicePromise, bobPromise]);
     const named = [{ who: "alice", res: aliceRes }, {
@@ -663,6 +709,84 @@ Deno.test("mig#19: a failed send after a save rolls the booking back and says so
     // `slot` rides along on this redirect — the slot is free again,
     // so retrying it is meaningful (unlike a real conflict).
     assertEquals(url.searchParams.get("slot"), "09:00");
+  } finally {
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+// ─── mig#19 review round 1: a failed initial save must roll itself back ──
+
+Deno.test("mig#19: a persist failure on the initial save leaves nothing behind and lets a retry through", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  makePersistFailOnce(
+    bookings,
+    "simulated disk write failure (mig#19 test)",
+  );
+  const date = futureWeekday(3, HOST_TZ);
+  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 10 });
+  const sentTo: string[] = [];
+  setTransportForTesting(recordingTransport(sentTo));
+
+  try {
+    const fields = validFields(date, "09:00");
+
+    // First attempt: the store's very next persist() call — Phase 1's
+    // save — throws, the same way a real disk write can fail.
+    const firstRes = await handleBookingSubmit(
+      stubContext({ config: cfg, bookings, rateLimiter, fields }),
+      "",
+    );
+    assertEquals(firstRes.status, 303);
+    const firstUrl = new URL(firstRes.headers.get("location")!);
+    // mig#19 review round 1: the old message ("Your confirmation was
+    // sent, but we couldn't save the booking") only made sense when
+    // Phase 1 sent mail before persisting. Nothing is sent before the
+    // save succeeds now, so the message must not claim a confirmation
+    // went out.
+    const err = (firstUrl.searchParams.get("err") ?? "").toLowerCase();
+    assertEquals(err.includes("sent"), false, err);
+
+    // Nothing was left behind in memory. BookingsStore.mutate()
+    // assigns `this.bookings = draft` *before* it awaits persist()
+    // (lib/bookings.ts), so without the rollback this test guards,
+    // the booking pushed by the failed save would still be sitting in
+    // the in-memory array — the slot would show as booked, and the
+    // retry below would be told it was "just booked by someone else"
+    // instead of succeeding.
+    assertEquals(
+      bookings.list().filter((b) => b.date === date && b.time === "09:00")
+        .length,
+      0,
+      "a booking must not survive a failed initial save",
+    );
+    // Nothing was ever sent — the failure happened before Phase 2 even
+    // built a cancel URL.
+    assertEquals(sentTo.length, 0, `sent: ${sentTo}`);
+
+    // Retry the same slot: makePersistFailOnce only fails the first
+    // call, so this attempt's persist() behaves normally and must
+    // succeed outright.
+    const secondRes = await handleBookingSubmit(
+      stubContext({ config: cfg, bookings, rateLimiter, fields }),
+      "",
+    );
+    assertEquals(secondRes.status, 303);
+    assertEquals(
+      locationPath(secondRes).startsWith("/confirmed?"),
+      true,
+      locationPath(secondRes),
+    );
+    assertEquals(
+      bookings.list().filter((b) =>
+        b.date === date && b.time === "09:00" && b.status === "active"
+      ).length,
+      1,
+      "the retry must have saved exactly one booking",
+    );
   } finally {
     setTransportForTesting(defaultTransport());
     await rm(path);
