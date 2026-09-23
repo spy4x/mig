@@ -6,6 +6,7 @@ import { DateCard } from "../components/DateCard.tsx";
 import { TimeCard } from "../components/TimeCard.tsx";
 import { BookingForm } from "../components/BookingForm.tsx";
 import { SummaryBar } from "../components/SummaryBar.tsx";
+import { pickerLinks } from "../lib/picker-links.ts";
 import {
   formatClockAt,
   formatDateLong,
@@ -249,19 +250,19 @@ export default function BookingFlow(props: BookingFlowProps) {
     slot?: string | null;
     month?: string;
   }): void {
-    const params = new URLSearchParams();
-    if (next.date) params.set("date", next.date);
-    if (next.slot) params.set("slot", next.slot);
-    if (next.month) params.set("month", next.month);
-    // mig#18: carries the visitor's zone the same way pickerHref does
-    // for the no-JS links below, so a reload, a copied URL, or the
-    // back/forward sync above keeps showing the visitor's own clocks
-    // instead of falling back to the host's. `linkTz` is declared
-    // further down (closed over here; pushUrl is only ever called
-    // from a handler, after the initial render has already set it).
-    if (linkTz) params.set("tz", linkTz);
-    const qs = params.toString();
-    const url = qs ? `/?${qs}` : "/";
+    // `links` (declared further down, closed over here — pushUrl is
+    // only ever called from a handler, after the initial render has
+    // already set it) binds the same `tz` this island's children
+    // render into their `<a href>`s (`links.tz` below) to the address
+    // pushed here (`links.pushAddress`), via lib/picker-links.ts's
+    // pickerLinks. No test calls pushUrl itself (a server render
+    // never does — its handlers only exist after client-side
+    // hydration), so an edit here that drops `tz` — building the
+    // address by hand, or binding `links` from `pickerLinks(null)` —
+    // stays green; see pickerPushAddress's doc comment in
+    // lib/picker-links.ts for the full picture of what is and isn't
+    // caught.
+    const url = links.pushAddress(next);
     if (globalThis.location.pathname + globalThis.location.search !== url) {
       globalThis.history.pushState({}, "", url);
     }
@@ -337,6 +338,12 @@ export default function BookingFlow(props: BookingFlowProps) {
   const linkTz: string | null = (mounted.value && guestTz.value)
     ? guestTz.value
     : props.tz;
+
+  // Shared by every `<a href>` below (`links.tz`) and by `pushUrl`
+  // (`links.pushAddress`) — see lib/picker-links.ts's pickerLinks doc
+  // comment for why binding `linkTz` once here, instead of passing it
+  // separately to each, is the point.
+  const links = pickerLinks(linkTz);
 
   const dateLabel: string | null = date.value
     ? formatDateLong(date.value, "12:00", hostTz, displayTz)
@@ -453,7 +460,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                 date={date.value!}
                 dateLabel={dateLabel ?? date.value!}
                 onClear={interactive ? clearDate : undefined}
-                tz={linkTz}
+                tz={links.tz}
               />
             )
             : (
@@ -466,7 +473,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                 hostTz={hostTz}
                 onSelectDate={interactive ? onSelectDate : undefined}
                 onSelectMonth={interactive ? onSelectMonth : undefined}
-                tz={linkTz}
+                tz={links.tz}
               />
             )}
         </div>
@@ -492,7 +499,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                   dateLabel={slotDateLabel ?? dateLabel ?? date.value!}
                   displaySlot={slotLabelVisitorTz ?? undefined}
                   onClear={interactive ? clearSlot : undefined}
-                  tz={linkTz}
+                  tz={links.tz}
                 />
               )
               : loading.value
@@ -509,7 +516,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                   slots={slotsForDisplay}
                   selectedSlot={null}
                   onSelectSlot={interactive ? onSelectSlot : undefined}
-                  tz={linkTz}
+                  tz={links.tz}
                 />
               )
               : (

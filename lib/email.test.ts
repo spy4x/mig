@@ -83,6 +83,58 @@ Deno.test("booking emails use recipient timezones", () => {
   );
 });
 
+// mig#24 review follow-up: buildBookingEmails's ownerIcs used to pass
+// only booking.hostTz through to generateIcs, so the owner's calendar
+// invite showed the host clock alone even though the owner's email
+// body (asserted above) already shows the visitor's clock alongside
+// it. These three pin the invite to match.
+Deno.test("owner invite ICS carries the visitor's clock alongside the host's", () => {
+  const emails = buildBookingEmails(
+    makeConfig(),
+    makeBooking("America/New_York"),
+    "https://mig.example.com/cancel",
+  );
+  const ownerIcs = emails.owner.attachments![0].content.replace(
+    /\r\n[ \t]/g,
+    "",
+  );
+  assertStringIncludes(ownerIcs, "10:00");
+  assertStringIncludes(ownerIcs, "Berlin");
+  assertStringIncludes(ownerIcs, "visitor: 04:00");
+  assertStringIncludes(ownerIcs, "New York");
+});
+
+Deno.test("owner invite ICS shows the host clock alone when no visitor zone was captured", () => {
+  const emails = buildBookingEmails(
+    makeConfig(),
+    makeBooking(undefined),
+    "https://mig.example.com/cancel",
+  );
+  const ownerIcs = emails.owner.attachments![0].content.replace(
+    /\r\n[ \t]/g,
+    "",
+  );
+  assertStringIncludes(ownerIcs, "Berlin");
+  assertEquals(ownerIcs.includes("visitor:"), false);
+});
+
+Deno.test("guest invite ICS is unaffected by the owner invite's visitor-clock change", () => {
+  const emails = buildBookingEmails(
+    makeConfig(),
+    makeBooking("America/New_York"),
+    "https://mig.example.com/cancel",
+  );
+  const guestIcs = emails.guest.attachments![0].content.replace(
+    /\r\n[ \t]/g,
+    "",
+  );
+  // Same DESCRIPTION time string the guest email itself shows — the
+  // guest's own booking confirmation, never the owner's combined one.
+  assertStringIncludes(guestIcs, "04:00");
+  assertStringIncludes(guestIcs, "New York");
+  assertEquals(guestIcs.includes("visitor:"), false);
+});
+
 Deno.test("cancellation emails use recipient timezones", () => {
   const emails = buildCancellationEmails(
     makeConfig(),

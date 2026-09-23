@@ -90,7 +90,7 @@ async function getEmbedData(
   }
 }
 
-Deno.test("mig#15 round 2: after a conflict, the slot list shows the taken slot disabled", async () => {
+Deno.test("after a conflict, the slot list shows the taken slot disabled", async () => {
   // Companion to lib/book.test.ts's conflict-drops-slot test: once the
   // booking exists, the picker route itself (not the write path) must
   // show that slot disabled so the visitor can't pick it again.
@@ -149,7 +149,7 @@ Deno.test("mig#15: /embed with a valid tz renders the slot list in the visitor's
   );
 });
 
-Deno.test("mig#15 round 2: slotDateLabel comes from the slot's own instant, not noon of the host day", async () => {
+Deno.test("slotDateLabel comes from the slot's own instant, not noon of the host day", async () => {
   // The 09:00 Ho Chi Minh slot on 2026-10-06 (Tuesday) is 22:00 the
   // *previous* evening in New York — Monday 5 October. Noon of the
   // same host day converts to 01:00 New York, still Tuesday 6 October
@@ -216,7 +216,7 @@ Deno.test("mig#15: /embed with an invalid tz falls back to the host's zone", asy
   assertEquals(first!.displayTime, "09:00, Ho Chi Minh, UTC+7");
 });
 
-Deno.test("mig#15 round 2: /embed keeps modern zone names exactly as sent (never a legacy rename)", async () => {
+Deno.test("/embed keeps modern zone names exactly as sent (never a legacy rename)", async () => {
   // Deno's ICU (and any other browser/runtime) rewrites these four
   // modern names to legacy backward-compat links via
   // resolvedOptions() — round 1's canonicalTimeZone did exactly that,

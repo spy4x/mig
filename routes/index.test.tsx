@@ -15,10 +15,24 @@ import type { Config } from "../lib/types.ts";
 import { BookingsStore } from "../lib/bookings.ts";
 import { RateLimiter } from "../lib/ratelimit.ts";
 import { parseWeeklyAvailability } from "../lib/availability.ts";
+import { addDays, dayOfWeek, isoDateInTz } from "../lib/tz.ts";
 import Index from "./index.tsx";
 
 const HOST_TZ = "Asia/Ho_Chi_Minh";
 const TEST_DATE = "2026-10-06"; // Tuesday, within MON-FRI 09:00-17:00
+
+/** A bookable weekday at least `daysAhead` days out, computed from
+ *  whenever the suite actually runs — same helper as lib/book.test.ts's
+ *  futureWeekday, needed here too so a test isn't pinned to a literal
+ *  date that eventually lands in the past (see the slot-link test
+ *  below). */
+function futureWeekday(daysAhead: number, tz: string): string {
+  let d = addDays(isoDateInTz(new Date(), tz), daysAhead, tz);
+  while (dayOfWeek(d, tz) === "SAT" || dayOfWeek(d, tz) === "SUN") {
+    d = addDays(d, 1, tz);
+  }
+  return d;
+}
 
 function fakeConfig(): Config {
   return {
@@ -148,6 +162,48 @@ Deno.test("mig#18: the standalone time card shows the slot's date and clock in t
   const [, clock, dateText] = match!;
   assertEquals(clock.trim(), "22:00, New York, UTC-4");
   assertEquals(dateText.trim(), "Sunday, 27 September 2026");
+});
+
+// mig#18 review follow-up: a reviewer removed `tz` from every link
+// BookingFlow's children render (and from pushUrl) and every existing
+// test stayed green — nothing asserted the no-JS / pre-hydration slot
+// links actually carry it. This renders the real route + island, the
+// same technique as the tests above, and is scoped to a slot link's
+// own `href` rather than a whole-page `includes` — the tz query param
+// also shows up (correctly) elsewhere on the page (the date card),
+// so a whole-page check wouldn't catch the link this tz actually
+// needs to survive on: the one a no-JS visitor clicks to advance the
+// flow.
+Deno.test("mig#18: standalone / keeps tz on every slot link", async () => {
+  // review follow-up: a past date renders its slots disabled and
+  // without links, so the loop below would never run — this test
+  // computes a bookable weekday relative to whenever the suite
+  // actually runs, the same way lib/book.test.ts's futureWeekday does.
+  const date = futureWeekday(3, HOST_TZ);
+  const html = await renderIndex(
+    `http://localhost/?date=${date}&tz=America/New_York`,
+  );
+  // A single `html.match` (no `g` flag) only ever checks the *first*
+  // slot link — a mutation that dropped `tz` from every link except
+  // the first would have stayed green. `matchAll` with `g` collects
+  // every slot link's `href` so all of them are checked, not just one.
+  const slotLinks = [...html.matchAll(/href="([^"]*slot=[^"]*)"/g)].map((
+    m,
+  ) => m[1]);
+  // Guards against the vacuous pass above: an empty page (wrong date,
+  // broken availability config, a future regression in this test
+  // itself) must fail loudly instead of the `for` loop below silently
+  // running zero times and reporting success.
+  assert(
+    slotLinks.length > 0,
+    `expected at least one slot link in the rendered HTML, got ${slotLinks.length}`,
+  );
+  for (const href of slotLinks) {
+    assert(
+      href.includes("tz=America%2FNew_York"),
+      `expected every slot link to carry tz=, got "${href}"`,
+    );
+  }
 });
 
 Deno.test("mig#18: the host-timezone <noscript> note is hidden when the tz query param sets a different zone", async () => {

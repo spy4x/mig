@@ -299,13 +299,16 @@ export async function handleBookingSubmit(
       });
     } catch (rollbackErr) {
       rolledBack = false;
-      // The booking is now stuck on disk with no email ever sent —
-      // the one state this whole reorder exists to avoid. Log loudly
-      // so the host can clean it up by hand; still redirect the guest
-      // with the same message, since they genuinely got no email.
+      // The booking is now stuck on disk — log loudly so the host can
+      // clean it up by hand; still redirect the guest with the same
+      // message, since they genuinely never got a confirmation. The
+      // log says whether the owner's email went out before the guest's
+      // one failed (ownerEmailSucceeded, set above), since that used
+      // to always say "no email sent", which is false whenever it did.
       console.error(
         "mig: rollback FAILED after email send failed; booking=" +
-          bookingId + " may still be on disk with no email sent",
+          bookingId + " may still be on disk; owner email " +
+          (ownerEmailSucceeded ? "was sent" : "was not sent"),
         rollbackErr,
       );
     }
@@ -336,8 +339,14 @@ export async function handleBookingSubmit(
         );
       }
     }
+    // review follow-up: this message used to say "we couldn't send
+    // your confirmation email", which names the visitor's own email
+    // as the culprit even when it was the *owner's* send that failed
+    // (the guest's never even ran) — the visitor has no way to know
+    // which recipient's send actually failed, so the message must not
+    // guess. Neutral wording covers both failure modes identically.
     return errRedirect(
-      "We couldn't send your confirmation email, so the booking was not created. Please try again in a moment.",
+      "Something went wrong, so the booking was not created. Please try again in a moment.",
       redirectState,
     );
   }
