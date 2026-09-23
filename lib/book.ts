@@ -23,6 +23,20 @@ function formPath(basePath: string): string {
   return basePath === "" ? "/" : basePath;
 }
 
+// mig#18: a redirect field's raw form value, truncated to a sane
+// length. `date` and `tz` never legitimately exceed a few dozen
+// characters (an ISO date, an IANA zone name) — this is purely a cap
+// against carrying an attacker-sized value into a `Location` header
+// before BookingSchema's own validation ever gets a chance to reject
+// it outright.
+const MAX_REDIRECT_FIELD_LEN = 100;
+
+function capRedirectField(value: string | undefined): string | undefined {
+  return value !== undefined && value.length > MAX_REDIRECT_FIELD_LEN
+    ? value.slice(0, MAX_REDIRECT_FIELD_LEN)
+    : value;
+}
+
 export async function handleBookingSubmit(
   ctx: Context<State>,
   basePath: string,
@@ -47,11 +61,11 @@ export async function handleBookingSubmit(
 
   // Read the form before the rate-limit check, so a rate-limited
   // submission still redirects with the visitor's picked date and
-  // zone (mig#18 round 3) — dropping both sent them back to the date
-  // picker from scratch. `slot` is deliberately left off that one
-  // redirect below: a rate-limited request never got far enough to
-  // confirm the slot is still free, unlike the failure modes below
-  // that already checked it moments earlier.
+  // zone (mig#18) — dropping both sent them back to the date picker
+  // from scratch. `slot` is deliberately left off that one redirect
+  // below: a rate-limited request never got far enough to confirm the
+  // slot is still free, unlike the failure modes below that already
+  // checked it moments earlier.
   const form = await ctx.req.formData();
   // Raw, unvalidated — used only to carry state back on a failed
   // redirect (mig#15 review). `date` and `tz` always ride along: the
@@ -64,9 +78,17 @@ export async function handleBookingSubmit(
   // land the visitor back on the confirm step for a slot they can't
   // actually book, and resubmitting would send another false
   // confirmation (mig#15 round 2 — see each call site below).
+  //
+  // mig#18: these come straight off the wire, before BookingSchema's
+  // own length limits run (a rate-limited or otherwise-early-failing
+  // request never reaches `safeParse` below) — an attacker sending a
+  // 200,000-character `date` or `tz` would otherwise ride, uncapped,
+  // straight into the redirect's `Location` header. Capped here, not
+  // just left to the redirect target's own route to re-reject, so the
+  // header itself never grows past a form value's worth of junk.
   const redirectDateTz = {
-    date: String(form.get("date") || "") || undefined,
-    tz: String(form.get("guestTz") || "") || undefined,
+    date: capRedirectField(String(form.get("date") || "") || undefined),
+    tz: capRedirectField(String(form.get("guestTz") || "") || undefined),
   };
   const redirectState = {
     ...redirectDateTz,

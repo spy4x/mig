@@ -316,7 +316,7 @@ Deno.test("mig#15 round 2: a slot-taken conflict drops slot from the redirect (k
 
 // ─── Rate limit ────────────────────────────────────────────────────────
 
-Deno.test("mig#18 round 3: a rate-limited redirect keeps date and tz", async () => {
+Deno.test("a rate-limited redirect keeps date and tz", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });
@@ -347,6 +347,52 @@ Deno.test("mig#18 round 3: a rate-limited redirect keeps date and tz", async () 
   // — a rate-limited request never got far enough to confirm the slot
   // is still free.
   assertEquals(url.searchParams.get("slot"), null);
+  await rm(path);
+});
+
+Deno.test("a rate-limited redirect caps an oversized date or tz instead of carrying it whole", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  // max: 1 — the first submission consumes the only slot in the
+  // window, same as the test above, so the second one is the one
+  // that's rate-limited and hits the cap.
+  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 1 });
+  const first = await handleBookingSubmit(
+    stubContext({
+      config: cfg,
+      bookings,
+      rateLimiter,
+      fields: validFields(date, "09:00", { guestTz: "America/New_York" }),
+    }),
+    "",
+  );
+  assertEquals(first.status, 303);
+
+  const hugeDate = "2".repeat(200_000);
+  const hugeTz = "America/New_York".repeat(20_000);
+  const fields = validFields(hugeDate, "09:00", { guestTz: hugeTz });
+
+  const res = await handleBookingSubmit(
+    stubContext({ config: cfg, bookings, rateLimiter, fields }),
+    "",
+  );
+  assertEquals(res.status, 303);
+  const loc = res.headers.get("location")!;
+  // Short: capped at 100 chars per field, not the 200,000 sent in.
+  // (Well under 1000 — a generous margin above "two 100-char fields
+  // plus a handful of literal query-string characters".)
+  assertEquals(
+    loc.length < 1000,
+    true,
+    `Location header too long: ${loc.length}`,
+  );
+  assertEquals(loc.startsWith(cfg.publicUrl), true, loc);
+  const url = new URL(loc);
+  assertEquals(url.searchParams.get("date")?.length, 100);
+  assertEquals(url.searchParams.get("tz")?.length, 100);
   await rm(path);
 });
 
