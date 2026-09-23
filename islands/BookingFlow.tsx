@@ -12,6 +12,7 @@ import {
   isoDateInTz,
   zonedDateTime,
 } from "../lib/tz.ts";
+import { slotDateLabel as computeSlotDateLabel } from "../lib/slot-date-label.ts";
 
 /*
   BookingFlow — client-driven booking picker.
@@ -324,7 +325,7 @@ export default function BookingFlow(props: BookingFlowProps) {
   // `dateLabel` above (noon-based) still feeds DateCard, which shows
   // the *picked calendar day*, not a specific time.
   const slotDateLabel: string | null = date.value && slot.value
-    ? formatDateLongInTz(date.value, slot.value, hostTz, displayTz)
+    ? computeSlotDateLabel(date.value, slot.value, hostTz, displayTz)
     : null;
 
   // Slot clock in visitor TZ ("11:00, New York, UTC-4" — mig#15). The
