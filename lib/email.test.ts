@@ -367,6 +367,10 @@ Deno.test("sendBookingCorrectionEmail: rolledBack true keeps the removed/free wo
     assertStringIncludes(sent[0].subject ?? "", "Not booked:");
     assertStringIncludes(
       sent[0].text ?? "",
+      "The booking below was NOT created after all.",
+    );
+    assertStringIncludes(
+      sent[0].text ?? "",
       "was removed and the slot is free again",
     );
     assertStringIncludes(
@@ -392,12 +396,23 @@ Deno.test("sendBookingCorrectionEmail: rolledBack false does not claim the booki
     const html = sent[0].html ?? "";
     assertEquals(/removed|free/i.test(text), false, `text: ${text}`);
     assertEquals(/removed|free/i.test(html), false, `html: ${html}`);
-    assertEquals(text.includes("NOT created"), false, `text: ${text}`);
-    assertEquals(html.includes("NOT created"), false, `html: ${html}`);
+    // The HTML wraps "NOT" in <strong>...</strong>, so a plain
+    // substring check on "NOT created" would never match either way —
+    // these allow markup (or a single space) between "not" and
+    // "created" so the assertion actually exercises the wording.
+    assertEquals(/not\s*created/i.test(text), false, `text: ${text}`);
+    assertEquals(
+      /not(<[^>]+>|\s)*created/i.test(html),
+      false,
+      `html: ${html}`,
+    );
     assertStringIncludes(text, booking.id);
     assertStringIncludes(html, booking.id);
     assertStringIncludes(text.toLowerCase(), "remove it by hand");
     assertStringIncludes(text, '"New booking"');
+    assertStringIncludes(text, "after a restart");
+    assertStringIncludes(html, "after a restart");
+    assertStringIncludes(html, "disregard");
   } finally {
     setTransportForTesting(null);
   }
