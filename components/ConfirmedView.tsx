@@ -18,7 +18,12 @@
                   link already opens in a new tab on both.
 */
 
-import { formatDateLong, formatTimeOfDay, validTimeZoneOr } from "../lib/tz.ts";
+import {
+  formatDateLong,
+  formatTimeOfDay,
+  isValidTimeZone,
+  validTimeZoneOr,
+} from "../lib/tz.ts";
 import { ArrowLeft, ArrowRight, Check, InfoCircle, Minus } from "./icons.tsx";
 import type { ConfirmedBooking, ConfirmedData } from "../lib/confirmed-data.ts";
 
@@ -96,12 +101,20 @@ export function ConfirmedView(props: ConfirmedViewProps) {
   const b: ConfirmedBooking = booking;
   // Display the booking time in the visitor's TZ when we captured one
   // at submit time. Falls back to host TZ when guestTz is missing or
-  // invalid (older bookings, bad data, hidden legacy paths). The
-  // page is server-rendered — we have access to guestTz from the
-  // booking record, no client Intl needed.
+  // invalid (older bookings, bad data, hidden legacy paths, or a
+  // visitor who booked without JavaScript on /embed). The page is
+  // server-rendered — we have access to guestTz from the booking
+  // record, no client Intl needed.
+  //
+  // mig#15: both helpers take `b.hostTz` (the zone `b.date`/`b.time`
+  // are actually stored in) alongside `displayTz` (the zone to show
+  // them in) — they used to be called with `displayTz` for both,
+  // which built the instant in the wrong zone and silently skipped
+  // the conversion.
+  const knownGuestTz = !!b.guestTz && isValidTimeZone(b.guestTz);
   const displayTz = validTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
-  const dateLabel = formatDateLong(b.date, displayTz);
-  const timeLabel = formatTimeOfDay(b.date, b.time, displayTz);
+  const dateLabel = formatDateLong(b.date, b.time, b.hostTz, displayTz);
+  const timeLabel = formatTimeOfDay(b.date, b.time, b.hostTz, displayTz);
 
   if (mode === "cancelled") {
     return (
@@ -117,6 +130,11 @@ export function ConfirmedView(props: ConfirmedViewProps) {
             <p class="text-sm text-ink-muted tnum">
               {dateLabel} · {timeLabel}
             </p>
+            {!knownGuestTz && (
+              <p class="text-xs text-ink-subtle mt-1">
+                Times are shown in the host's timezone.
+              </p>
+            )}
             <p class="text-sm text-ink-muted mt-4">
               Both you and {hostName} have been notified.
             </p>
@@ -169,6 +187,12 @@ export function ConfirmedView(props: ConfirmedViewProps) {
             }
           />
         </div>
+
+        {!knownGuestTz && (
+          <p class="text-xs text-ink-subtle mt-3 text-center">
+            Times are shown in the host's timezone.
+          </p>
+        )}
 
         <div class="mt-5 flex items-center justify-between gap-4 text-sm">
           <a

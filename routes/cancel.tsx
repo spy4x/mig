@@ -2,7 +2,12 @@ import { define } from "../lib/utils.ts";
 import { verifyCancelToken } from "../lib/tokens.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
-import { formatDateLong, formatTimeOfDay, validTimeZoneOr } from "../lib/tz.ts";
+import {
+  formatDateLong,
+  formatTimeOfDay,
+  isValidTimeZone,
+  validTimeZoneOr,
+} from "../lib/tz.ts";
 import { InfoCircle } from "../components/icons.tsx";
 
 interface CancelData {
@@ -169,10 +174,13 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
   // Render the booking time in the visitor's TZ when we captured one
   // at submit time — same convention as the /confirmed page. Falls
   // back to host TZ for older bookings without guestTz, or for
-  // invalid values.
+  // invalid values. Both helpers need `b.hostTz` (the zone `b.date`/
+  // `b.time` are actually stored in) as well as `displayTz` — see
+  // lib/tz.ts, mig#15.
+  const knownGuestTz = !!b.guestTz && isValidTimeZone(b.guestTz);
   const displayTz = validTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
-  const whenDate = formatDateLong(b.date, displayTz);
-  const whenTime = formatTimeOfDay(b.date, b.time, displayTz);
+  const whenDate = formatDateLong(b.date, b.time, b.hostTz, displayTz);
+  const whenTime = formatTimeOfDay(b.date, b.time, b.hostTz, displayTz);
 
   return (
     <div class="min-h-dvh flex flex-col">
@@ -189,6 +197,11 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
               <p class="text-xs text-ink-subtle mt-1">
                 with {cfg.hostName}
               </p>
+              {!knownGuestTz && (
+                <p class="text-xs text-ink-subtle mt-1">
+                  Times are shown in the host's timezone.
+                </p>
+              )}
             </div>
 
             <form
