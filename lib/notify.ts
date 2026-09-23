@@ -197,15 +197,17 @@ export function notifyBookingCancelled(
 
 export interface EmailFailedOpts {
   /** Whether the post-send-failure rollback actually removed the
-   *  booking. Defaults to true, the common case, so the one existing
-   *  call site (and any future one that doesn't care) needs no
-   *  change. False means the rollback's own disk write also failed —
-   *  BookingsStore.mutate() (lib/bookings.ts) assigns its in-memory
-   *  array before it awaits the write, so the in-memory removal still
-   *  held, but the booking may still be on disk and would come back
-   *  after a restart. The push must not claim it was removed or that
-   *  the slot is free in that case. */
-  rolledBack?: boolean;
+   *  booking. Required — no default. A silent "assume success"
+   *  default would repeat the exact bug this option exists to fix: a
+   *  caller that forgets to check the rollback's own outcome would
+   *  get the same false "removed, slot free again" text that shipped
+   *  before this option existed. False means the rollback's own disk
+   *  write also failed — BookingsStore.mutate() (lib/bookings.ts)
+   *  assigns its in-memory array before it awaits the write, so the
+   *  in-memory removal still held, but the booking may still be on
+   *  disk and would come back after a restart. The push must not
+   *  claim it was removed or that the slot is free in that case. */
+  rolledBack: boolean;
 }
 
 // mig#19 review round 3: the previous wording ("booking confirmation
@@ -216,15 +218,19 @@ export interface EmailFailedOpts {
 // say what actually happened: removed and the slot is free again when
 // the rollback succeeded, or — when the rollback's own write also
 // failed — that the booking may still be on disk and needs removing
-// by hand.
+// by hand. The rollback-failed wording says "an email failed to
+// send", not "the confirmation email" specifically: the failure can
+// be the owner's own "New booking" email (sent first in lib/book.ts),
+// not only the guest's confirmation, and the `Error:` line below
+// already carries the detail.
 export function notifyBookingEmailFailed(
   config: Config,
   booking: Booking | null,
   error: string,
-  opts: EmailFailedOpts = {},
+  opts: EmailFailedOpts,
 ): Promise<void> {
   if (!isEventEnabled("error")) return Promise.resolve();
-  const rolledBack = opts.rolledBack ?? true;
+  const { rolledBack } = opts;
   const lines = [
     booking
       ? (rolledBack
@@ -232,9 +238,9 @@ export function notifyBookingEmailFailed(
           `confirmation email failed, so it was removed and the slot is ` +
           `free again`
         : `mig: a booking for ${booking.guestName} was NOT confirmed — ` +
-          `the confirmation email failed, and removing it failed too. It ` +
-          `may still be on disk and come back after a restart. Remove ` +
-          `it by hand: id ${booking.id} in the data file.`)
+          `an email failed to send, and removing the booking failed too. ` +
+          `It may still be on disk and come back after a restart. ` +
+          `Remove it by hand: id ${booking.id} in the data file.`)
       : "mig: a booking was NOT created (no record — the send failed " +
         "before anything was saved)",
     "",
