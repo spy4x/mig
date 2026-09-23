@@ -1,4 +1,4 @@
-# Build stage — deno + nodejs.
+# Build stage.
 FROM denoland/deno:debian-2.9.5 AS build
 
 # Build identifier. Wired through to the runtime ENV so mig can render
@@ -9,46 +9,15 @@ ARG MIG_VERSION=dev
 
 WORKDIR /src
 
-# Install unzip + nodejs + npm (used by vite during build).
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl unzip nodejs npm \
-    && npm install -g npm@^11.0.0 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Bring in source.
-COPY deno.json ./
 COPY . .
 
-# Workaround: delete deno.lock before npm install runs — deno.lock's
-# presence makes npm v11 throw "Tracker idealTree already exists".
-RUN rm -f deno.lock
-
-# Pull deps via npm in an empty /tmp dir so there's no project context
-# to confuse the resolver. --omit=optional skips optional platform binaries.
-#
-# IMPORTANT: this `mv` step assumes /src/node_modules is empty. The
-# host's node_modules must not be carried into the build context —
-# it's excluded via .dockerignore. If it ever leaks back in (e.g.
-# someone adds a host that doesn't honour .dockerignore), the npm
-# tree merges with the Deno `manual`-layout host tree, vite resolves
-# preact via two paths, and Preact's `vnode.type === S` Fragment
-# check silently fails at render time. Symptom: 77-byte HTML
-# responses with empty <body> on every page route. Don't remove the
-# dockerignore entries without a replacement.
-RUN mkdir /tmp/npm-install && cd /tmp/npm-install && \
-    npm install --no-save --ignore-scripts --no-audit --no-fund \
-      --omit=optional \
-      vite@^7.1.3 \
-      @tailwindcss/vite@^4.1.18 \
-      tailwindcss@^4.1.18 \
-      preact@^10.29.1 \
-      @preact/signals@^2.9.0 \
-      nodemailer@^7.0.0 && \
-    mv node_modules /src/node_modules && \
-    cd /src && rm -rf /tmp/npm-install
-
-# Bring in JSR-only deps (zod, @std/*, fresh core) into deno's cache.
-RUN deno install --allow-scripts || true
+# nodeModulesDir is "manual" in deno.json, so deno install must run
+# before any task that touches TypeScript. --frozen fails instead of
+# silently rewriting deno.lock when it no longer matches deno.json —
+# the same guarantee CI's own `deno install --frozen` step already
+# gives (see AGENTS.md, CI), so the image is built from the exact
+# dependency versions CI tested, not from a separate npm resolution.
+RUN deno install --frozen
 
 # Build the SSR + client bundle via Vite.
 RUN deno task build
@@ -63,8 +32,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy only what's needed at runtime. The Vite-bundled _fresh/ is
-# self-contained for HTTP serving; node_modules only needed for the
-# Tailwind/Vite processing at build time.
+# self-contained for HTTP serving; deno's npm cache (build stage only)
+# is needed just for the Tailwind/Vite processing at build time.
 COPY --from=build /src/_fresh ./_fresh
 COPY --from=build /src/static ./static
 
