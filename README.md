@@ -97,23 +97,30 @@ docker run -d --name mig \
 ```
 
 The container runs as `deno`, uid/gid 1993 — not root. `./data` must be writable
-by that uid. A fresh directory only your own user can write is owned by _your_
-uid, not 1993, so make it writable first:
+by that uid. Create it yourself first — `docker run` would otherwise create a
+missing bind-mount source owned by root, which neither the default user nor
+`--user` below could write to — then make it writable:
 
 ```bash
-mkdir -p ./data && chown 1993:1993 ./data
+mkdir -p ./data
+sudo chown 1993:1993 ./data
 ```
 
-or, instead of `chown`, run the container as your own user (it already owns the
-directory it just created):
+`chown`ing to a different uid needs root, hence `sudo`; a plain `chown` as your
+own user fails with "Operation not permitted". If you'd rather not use `sudo`,
+run the container as your own user instead — this works because you created
+`./data` yourself above, so you already own it:
 
 ```bash
+mkdir -p ./data
 docker run --user "$(id -u):$(id -g)" ...
 ```
 
-A Docker named volume (`-v mig-data:/data` instead of a host path) needs neither
-step — Docker creates it owned by `deno` already, since `/data` inside the image
-is.
+A **new, empty** Docker named volume (`-v mig-data:/data` instead of a host
+path) needs neither step — Docker creates it owned by `deno` already, since
+`/data` inside the image is. A named volume already used by mig before this
+change is still owned by root; see the CHANGELOG's 0.4.0 upgrade note for the
+fix.
 
 ### Docker Compose
 
@@ -144,9 +151,10 @@ services:
       PUBLIC_URL: "https://meet.example.com"
 ```
 
-`./data` needs the same non-root fix as the Docker quick start above
-(`chown 1993:1993 ./data`, or add `user: "1000:1000"` — your own uid/gid — to
-the service).
+`./data` needs the same non-root fix as the Docker quick start above: create it
+first (`mkdir -p ./data`), then `sudo chown 1993:1993 ./data`, or add a
+`user: "1000:1000"` — your own uid/gid — line to the service instead (only works
+if you created `./data` yourself first, same as above).
 
 See `.env.example` for the full list of env vars.
 
