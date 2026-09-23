@@ -291,18 +291,14 @@ export async function handleBookingSubmit(
   } catch (e) {
     const msg = (e as Error).message;
     console.error("mig: email send failed; rolling back booking:", msg);
-    // Optional NTFY push so the host gets a heads-up outside the
-    // email channel. Awaited, not fire-and-forget: notify() in
-    // lib/notify.ts already swallows and logs its own transport
-    // errors, so awaiting it adds real latency but no new failure
-    // mode, and keeps the rollback below from racing it.
-    await notifyBookingEmailFailed(cfg, booking, msg);
+    let rolledBack = true;
     try {
       await ctx.state.bookings.mutate((draft) => {
         const idx = draft.findIndex((b) => b.id === bookingId);
         if (idx !== -1) draft.splice(idx, 1);
       });
     } catch (rollbackErr) {
+      rolledBack = false;
       // The booking is now stuck on disk with no email ever sent —
       // the one state this whole reorder exists to avoid. Log loudly
       // so the host can clean it up by hand; still redirect the guest
@@ -313,6 +309,16 @@ export async function handleBookingSubmit(
         rollbackErr,
       );
     }
+    // Optional NTFY push so the host gets a heads-up outside the
+    // email channel. Sent after the rollback above, not before: its
+    // wording depends on whether the rollback actually removed the
+    // booking, and that's only known once the rollback has run — a
+    // push sent earlier would always claim "removed, slot free again"
+    // even on the rare run where the rollback write itself also
+    // fails. Awaited, not fire-and-forget: notify() in lib/notify.ts
+    // already swallows and logs its own transport errors, so awaiting
+    // it adds real latency but no new failure mode.
+    await notifyBookingEmailFailed(cfg, booking, msg, { rolledBack });
     // mig#19 review round 3: the owner's "New booking" email (and
     // calendar invite) already went out above — correct it, since the
     // NTFY push just above is optional and off unless NTFY_* is
