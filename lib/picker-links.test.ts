@@ -1,22 +1,22 @@
-// mig#18 review follow-up: nothing tested that pushUrl (islands/
-// BookingFlow.tsx) actually carries the visitor's tz into the address
-// it pushes — a reviewer removed it once and every test stayed green.
-// pickerPushAddress is the pure function pushUrl delegates to, and
-// pickerLinks is what BookingFlow.tsx actually calls (it binds one tz
-// to both the children's `<a href>`s and pushUrl's address, so a
-// mutation has nowhere smaller to live than the `pickerLinks(linkTz)`
-// call itself) — both are unit-testable here without driving a real
-// history.pushState.
+// pickerPushAddress is the pure function BookingFlow.tsx's pushUrl
+// delegates to (via pickerLinks), and pickerLinks is what pushUrl and
+// the picker's children actually call — both are unit-testable here
+// without driving a real history.pushState.
 //
-// What these tests do NOT prove: that pushUrl still calls
-// `links.pushAddress` at all, rather than building its own
-// URLSearchParams by hand. That's invisible to a unit test of
-// picker-links.ts (it never sees islands/BookingFlow.tsx's source)
-// and to a server-rendered test of routes/index.tsx (a server render
-// never calls pushUrl — its handlers only exist after client-side
-// hydration). Catching that form of the mutation needs a real browser
-// driving a click and reading location.search afterward; this repo
-// has no such test today.
+// What these tests do NOT prove: that pushUrl itself still calls
+// `links.pushAddress`, rather than building its own URLSearchParams
+// by hand, or calling `pickerLinks(null).pushAddress(next)`, or
+// `pickerPushAddress(next, null)` directly. Every one of those drops
+// `tz` from the address pushUrl writes, and none of them is visible
+// to a unit test of picker-links.ts (it never sees
+// islands/BookingFlow.tsx's source) or to a server-rendered test of
+// routes/index.tsx (a server render never calls pushUrl — its
+// handlers only exist after client-side hydration). Catching any of
+// those forms needs a real browser driving a click and reading
+// location.search afterward; this repo has no such test today. What
+// *is* caught: an edit to the `pickerLinks(linkTz)` binding itself in
+// BookingFlow.tsx, because the same binding also feeds the `tz` on
+// every `<a href>` routes/index.test.tsx checks.
 
 import { assertEquals } from "@std/assert";
 import {

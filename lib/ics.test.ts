@@ -240,16 +240,12 @@ Deno.test("generateIcs — visitorTz folds the visitor's clock into the descript
   );
 });
 
-// mig#24 review follow-up: an earlier version of the `when` line
-// passed `displayTz` as formatOwnerClock's `hostTz` argument, which
-// doubles as the zone `booking.date`/`booking.time` (host-local
-// wall-clock values) are *interpreted* in — not a generic "which zone
-// to show". Called with a `displayTz` other than `booking.hostTz`,
-// that built a description from a wall clock reinterpreted in the
-// wrong zone entirely: a different instant than DTSTART, not just a
-// different zone label on the same instant. This pins the fix: the
-// description always matches DTSTART's real instant, regardless of
-// `displayTz`.
+// formatOwnerClock's `hostTz` argument doubles as the zone
+// `booking.date`/`booking.time` (host-local wall-clock values) are
+// *interpreted* in — not a generic "which zone to show". Calling
+// generateIcs with a `displayTz` other than `booking.hostTz` must not
+// change what instant the description describes: it always matches
+// DTSTART's real instant, regardless of `displayTz`.
 Deno.test("generateIcs — visitorTz anchors the host clock to the real host zone, even when displayTz differs", async () => {
   const cfg = makeConfig();
   const b: Booking = {

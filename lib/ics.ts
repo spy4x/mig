@@ -148,16 +148,11 @@ export function generateIcs(
   // formatOwnerClock's `hostTz` parameter (lib/tz.ts) is not a
   // generic "which zone to show" — it doubles as the zone `date` and
   // `time` (host-local wall-clock values per the `Booking` type) are
-  // *interpreted* in, so it must always be `booking.hostTz`, the real
-  // storage zone, never `displayTz`. An earlier version of this line
-  // passed `displayTz` here instead: whenever a caller's `displayTz`
-  // happened to differ from `booking.hostTz`, formatOwnerClock built
-  // its own instant from the wrong wall-clock interpretation entirely
-  // — not just a mislabelled zone, but a different moment in time
-  // than `start` (and DTSTART) below. Every real caller (lib/email.ts)
-  // always passes `booking.hostTz` as `displayTz` for the owner's
-  // invite, so this never showed up in practice; passing
-  // `booking.hostTz` directly here instead removes the possibility.
+  // *interpreted* in. It must always be `booking.hostTz`, the real
+  // storage zone, never `displayTz`: passing anything else would have
+  // formatOwnerClock build its own instant from the wrong wall-clock
+  // interpretation entirely — not just a mislabelled zone, but a
+  // different moment in time than `start` (and DTSTART) below.
   const when = visitorTz !== undefined
     ? formatOwnerClock(
       booking.date,

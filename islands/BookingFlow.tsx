@@ -250,15 +250,18 @@ export default function BookingFlow(props: BookingFlowProps) {
     slot?: string | null;
     month?: string;
   }): void {
-    // mig#18 review follow-up: `links` (declared further down, closed
-    // over here — pushUrl is only ever called from a handler, after
-    // the initial render has already set it) binds the same `tz`
-    // this island's children render into their `<a href>`s (`links.tz`
-    // below) to the address pushed here (`links.pushAddress`), via
-    // lib/picker-links.ts's pickerLinks — one shared value instead of
-    // two separate call sites a regression could drop `tz` from
-    // independently. See pickerLinks's doc comment for what this
-    // still can't catch.
+    // `links` (declared further down, closed over here — pushUrl is
+    // only ever called from a handler, after the initial render has
+    // already set it) binds the same `tz` this island's children
+    // render into their `<a href>`s (`links.tz` below) to the address
+    // pushed here (`links.pushAddress`), via lib/picker-links.ts's
+    // pickerLinks. No test calls pushUrl itself (a server render
+    // never does — its handlers only exist after client-side
+    // hydration), so an edit here that drops `tz` — building the
+    // address by hand, or passing `null` to `pushAddress` — stays
+    // green; see pickerPushAddress's doc comment in
+    // lib/picker-links.ts for the full picture of what is and isn't
+    // caught.
     const url = links.pushAddress(next);
     if (globalThis.location.pathname + globalThis.location.search !== url) {
       globalThis.history.pushState({}, "", url);

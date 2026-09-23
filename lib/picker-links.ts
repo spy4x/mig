@@ -42,10 +42,19 @@ export function pickerHref(
  *
  *  Pulled out of `pushUrl` as a pure function so *this* piece of the
  *  behaviour — given a `tz`, does the address it builds carry it —
- *  is unit-testable without driving a real `history.pushState`. It
- *  does not, by itself, prove `pushUrl` actually calls it with the
- *  right `tz`: see `pickerLinks` below for the part that closes that
- *  gap, and its doc comment for the one gap neither of them closes. */
+ *  is unit-testable without driving a real `history.pushState`.
+ *
+ *  No test runs `pushUrl` itself: a server render never calls it (its
+ *  handlers only exist after client-side hydration), and this file's
+ *  own tests call `pushAddress`/`pickerPushAddress` directly, not
+ *  through `pushUrl`. So an edit inside `pushUrl` that drops `tz` —
+ *  whether it builds its own `URLSearchParams` by hand, calls
+ *  `pickerLinks(null).pushAddress(next)`, or calls
+ *  `pickerPushAddress(next, null)` directly — stays green. The one
+ *  thing a test *does* catch is an edit to the `pickerLinks(linkTz)`
+ *  binding in `BookingFlow.tsx` (see `pickerLinks` below), because
+ *  that same binding also feeds the `tz` on every `<a href>` the
+ *  server-rendered test in `routes/index.test.tsx` checks. */
 export function pickerPushAddress(
   next: { date: string | null; slot?: string | null; month?: string },
   tz: string | null,
@@ -58,32 +67,19 @@ export function pickerPushAddress(
 }
 
 /** Binds one `tz` for both halves of the picker's tz-carrying
- *  behaviour (mig#18 review follow-up): the `<a href>`s the picker's
- *  children render (via `tz`) and the address `pushUrl` pushes (via
- *  `pushAddress`). `BookingFlow.tsx` computes `linkTz` once per
- *  render and used to thread it through by hand — `tz={linkTz}` on
- *  four separate children, and a separate `pickerPushAddress(next,
- *  linkTz)` call inside `pushUrl` — which left a call site for a
- *  regression to hide in: swapping either call's `linkTz` for `null`
- *  changed nothing else in the file, so nothing about the *shape* of
- *  the code caught it, only a test exercising that exact call would.
- *  `pickerLinks(linkTz)` replaces both call sites with one shared
- *  value: `links.tz` for every child, `links.pushAddress(next)`
- *  inside `pushUrl`. A mutation now has nowhere smaller to live than
- *  the `pickerLinks(linkTz)` call itself, and its nearest form —
- *  `pickerLinks(null)` — empties every link `tz`, including the ones
- *  a server-rendered test already checks (`routes/index.test.tsx`).
+ *  behaviour: the `<a href>`s the picker's children render (via
+ *  `tz`) and the address `pushUrl` pushes (via `pushAddress`).
+ *  `BookingFlow.tsx` computes `linkTz` once per render and passes it
+ *  here, then uses `links.tz` for every child and
+ *  `links.pushAddress(next)` inside `pushUrl` — one shared value
+ *  instead of threading `linkTz` to five separate call sites by hand.
  *
- *  What this still doesn't cover: `pushUrl` could be rewritten to
- *  build its own `URLSearchParams` from scratch, bypassing
- *  `pushAddress` (and therefore `pickerPushAddress`) entirely. That
- *  form of the mutation is invisible to every test in this suite —
- *  `pickerLinks`'s own tests call `pushAddress` directly, and a
- *  server render never calls `pushUrl` at all, since the handlers
- *  that call it are wired up client-side after hydration. Catching
- *  it needs a real browser driving a click and reading
- *  `location.search` afterward; this repo has no such test
- *  infrastructure today. */
+ *  What a test can and can't see through this binding: the
+ *  `<a href>`s and `pickerPushAddress`/`pushAddress` themselves are
+ *  unit- and server-render-tested (`routes/index.test.tsx`,
+ *  `lib/picker-links.test.ts`). `pushUrl` itself is not — see
+ *  `pickerPushAddress`'s doc comment above for exactly what that
+ *  leaves uncaught. */
 export function pickerLinks(tz: string | null): {
   tz: string | null;
   pushAddress(
