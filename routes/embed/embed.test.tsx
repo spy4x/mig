@@ -103,8 +103,10 @@ function embedData(overrides: Partial<EmbedData>): EmbedData {
     dates: DATES,
     selectedDateLabel: null,
     slots: [],
+    slotDateLabel: null,
     monthAnchor: "2027-01-01",
     error: null,
+    tz: null,
     ...overrides,
   };
 }
@@ -247,6 +249,190 @@ Deno.test("embed form never renders BookingSubmit, the standalone island", async
   );
 });
 
+// ─── mig#15: tz query param survives navigation ──────────────────────
+
+Deno.test("mig#15: every picker link carries tz once the visitor's zone is known", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slots: SLOTS,
+        tz: "America/New_York",
+      }))}
+    />,
+  );
+  const links = [
+    ...anchors(html).map((a) => a.href),
+    ...formActions(html),
+  ];
+  assert(links.length > 0, "expected at least one link to check");
+  for (const link of links) {
+    assert(
+      link.includes("tz=America%2FNew_York") || link === "/embed/book",
+      `expected "${link}" to carry tz= (form actions never carry query params)`,
+    );
+  }
+});
+
+Deno.test("mig#15: BookingForm pre-fills the hidden guestTz field from the known tz", () => {
+  // Regression guard: without this pre-fill, a visitor whose device
+  // zone differs from what the page actually rendered (a shared link,
+  // or a mid-flow zone change) could submit a guestTz that disagrees
+  // with every time they were just shown on screen.
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slot: "09:00",
+        slots: SLOTS,
+        tz: "America/New_York",
+      }))}
+    />,
+  );
+  const inputTag = html.match(/<input[^>]*name="guestTz"[^>]*>/)?.[0];
+  assert(inputTag, "expected a guestTz hidden input");
+  assertEquals(attr(inputTag!, "value"), "America/New_York");
+});
+
+Deno.test("mig#15: calendar date links and month-nav links carry tz (step 1, no date picked)", () => {
+  // Regression guard for Calendar.tsx: date cells and the prev/next
+  // month arrows are only reachable when no date is picked yet — the
+  // blanket "every link carries tz" test above always picks a date,
+  // so it never exercises this component's own tz threading.
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({ tz: "America/New_York" }))}
+    />,
+  );
+  const dateLinks = anchors(html).map((a) => a.href).filter((h) =>
+    /[?&]date=/.test(h)
+  );
+  const monthLinks = anchors(html).map((a) => a.href).filter((h) =>
+    /[?&]month=/.test(h)
+  );
+  assert(dateLinks.length > 0, "expected at least one calendar date link");
+  assert(monthLinks.length > 0, "expected at least one month-nav link");
+  for (const link of [...dateLinks, ...monthLinks]) {
+    assert(
+      link.includes("tz=America%2FNew_York"),
+      `expected "${link}" to carry tz=`,
+    );
+  }
+});
+
+Deno.test("mig#15: the time card's Change link carries tz (step 2, slot picked)", () => {
+  // Regression guard for TimeCard.tsx: this link is only reachable
+  // once a slot is picked — the blanket test above never picks one.
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slot: "09:00",
+        slots: SLOTS,
+        tz: "America/New_York",
+      }))}
+    />,
+  );
+  // TimeCard's own Change link goes back to the date-picked step (its
+  // href carries `date=` but never `slot=`); DateCard's Change link
+  // (also on screen at this step) carries neither.
+  const changeLink = anchors(html).find((a) =>
+    a.href.includes("date=") && !a.href.includes("slot=")
+  );
+  assert(changeLink, "expected the TimeCard 'Change' link");
+  assert(
+    changeLink!.href.includes("tz=America%2FNew_York"),
+    `expected "${changeLink!.href}" to carry tz=`,
+  );
+});
+
+Deno.test("mig#15 round 2: /embed's own confirm label converts into the visitor's zone, not the host's", () => {
+  // Regression guard for routes/embed/index.tsx's confirmLabel: it's
+  // computed inside the page component itself (not passed in via
+  // EmbedData), so this has to render the real component with a real
+  // date+slot+tz combination that crosses a date boundary — same pair
+  // as lib/tz.test.ts's cross-zone case (09:00 Tuesday Ho Chi Minh =
+  // 22:00 Monday New York).
+  //
+  // mig#15 round 2 fix: the assertion is scoped to the confirm
+  // button's own text, extracted by regex, not `html.includes(...)`
+  // over the whole page — the time card (tested separately below)
+  // renders the same "22:00, New York, UTC-4" and "5 Oct" substrings
+  // on its own, so a whole-page `includes` check stayed green even
+  // when confirmLabel itself was reverted to the host zone.
+  const cfg: Config = { ...FAKE_CONFIG, hostTz: "Asia/Ho_Chi_Minh" };
+  const props = {
+    ...fakePageProps(embedData({
+      date: "2026-10-06",
+      slot: "09:00",
+      selectedDateLabel: "Tuesday, 6 October 2026",
+      slots: SLOTS,
+      tz: "America/New_York",
+    })),
+    state: { config: cfg } as unknown as State,
+  };
+  const html = renderToString(<EmbedPage {...props} />);
+  const confirmButtonText = html.match(/Confirm — [^<]+/)?.[0];
+  assertEquals(
+    confirmButtonText,
+    "Confirm — Mon, 5 Oct, 22:00, New York, UTC-4",
+  );
+});
+
+Deno.test("mig#15 round 2: the time card shows the slot's own converted date when the route supplies slotDateLabel", () => {
+  // Companion to the confirm-label test above, scoped the same way:
+  // extracts the time card's own date text (after the "·" separator)
+  // rather than checking the whole page. This exercises Picker's
+  // slotDateLabel-over-selectedDateLabel precedence with a fabricated
+  // EmbedData; routes/embed/index.test.ts separately proves the real
+  // GET handler actually *computes* slotDateLabel from the slot's own
+  // instant rather than noon of the host day — the two together are
+  // the full regression guard.
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2026-10-06",
+        slot: "09:00",
+        selectedDateLabel: "Tuesday, 6 October 2026",
+        slotDateLabel: "Monday, 5 October 2026",
+        slots: SLOTS,
+        tz: "America/New_York",
+      }))}
+    />,
+  );
+  const timeCardDate = html.match(/· ([^<]+)</)?.[1];
+  assertEquals(timeCardDate, "Monday, 5 October 2026");
+});
+
+Deno.test("mig#15: no tz known yet (missing or invalid) — links have no tz param, and the redirect script is present", () => {
+  // The route resolves both a missing `tz` param and a present-but-
+  // invalid one to the same `tz: null` — the page (and the always-
+  // present redirect script) render identically either way; only the
+  // script's own client-side comparison (lib/guest-tz-script.ts:
+  // shouldRedirectTz) decides whether to actually redirect, so a
+  // page-level test can't (and shouldn't) tell the two cases apart.
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({ tz: null }))}
+    />,
+  );
+  const links = anchors(html).map((a) => a.href);
+  for (const link of links) {
+    assert(!link.includes("tz="), `expected "${link}" to carry no tz param`);
+  }
+  assert(
+    html.includes("location.replace"),
+    "expected the tz-redirect script",
+  );
+  assert(
+    html.includes("Times are shown in the host&#39;s timezone."),
+    "expected the host-timezone fallback note",
+  );
+});
+
 Deno.test("embed picker: month navigation links stay under /embed", () => {
   const html = renderToString(
     <EmbedPage {...fakePageProps(embedData({ monthAnchor: "2027-02-01" }))} />,
@@ -378,6 +564,57 @@ for (const state of ["missing", "invalid", "expired"] as const) {
     assertEquals(links, ["/embed"]);
   });
 }
+
+// ─── mig#15: confirmation page shows the visitor's labelled clock ────
+
+Deno.test("mig#15: confirmed page shows the visitor's converted, labelled clock, not the host's", () => {
+  const html = renderToString(
+    <ConfirmedPage
+      {...fakePageProps(confirmedData({
+        booking: {
+          id: "01JBOOKINGFAKE00000000000",
+          date: "2026-10-06",
+          time: "09:00",
+          hostTz: "Asia/Ho_Chi_Minh",
+          guestTz: "America/New_York",
+          guestName: "Visitor",
+          guestEmail: "visitor@example.com",
+          cancelToken: "faketoken",
+        },
+      }))}
+    />,
+  );
+  assert(html.includes("22:00, New York, UTC-4"));
+  assert(html.includes("Monday, 5 October 2026"));
+  // Never the raw host time/date, and never the host-fallback note —
+  // the visitor's zone is known here.
+  assertFalse(html.includes("09:00, Ho Chi Minh"));
+  assertFalse(html.includes("host&#39;s timezone"));
+});
+
+Deno.test("mig#15: confirmed page falls back to the labelled host clock when no visitor zone was captured", () => {
+  const html = renderToString(
+    <EmbedConfirmedPage
+      {...fakePageProps(confirmedData({
+        booking: {
+          id: "01JBOOKINGFAKE00000000000",
+          date: "2026-10-06",
+          time: "09:00",
+          hostTz: "Asia/Ho_Chi_Minh",
+          guestTz: null,
+          guestName: "Visitor",
+          guestEmail: "visitor@example.com",
+          cancelToken: "faketoken",
+        },
+      }))}
+    />,
+  );
+  assert(html.includes("09:00, Ho Chi Minh, UTC+7"));
+  assert(
+    html.includes("Times are shown in the host&#39;s timezone."),
+    "expected the host-timezone fallback note",
+  );
+});
 
 // ─── Baseline: default basePath must still be "/" ───────────────────
 // Guards against the base path default silently changing for the

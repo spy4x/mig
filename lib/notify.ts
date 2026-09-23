@@ -12,6 +12,7 @@
 
 import type { Config } from "./types.ts";
 import type { Booking } from "./types.ts";
+import { formatClockShortAt, formatOwnerClock } from "./tz.ts";
 
 export type NtfyMode = "all" | "errors" | "booking" | "cancel";
 
@@ -130,6 +131,22 @@ export async function notify(
 
 // ─── Event-specific helpers ───────────────────────────────────────────
 
+// Owner-facing "When:" line for a push notification — the host's own
+// dated clock, plus the visitor's clock (and date, if it differs)
+// alongside it whenever a valid visitor zone was captured (mig#15: the
+// owner always sees where the visitor is, not just the host's own
+// time). Falls back to the host clock alone when no visitor zone is
+// known. Delegates to lib/tz.ts's formatOwnerClock — the same helper
+// the owner's email uses — so the two can't drift.
+function ownerWhenLabel(booking: Booking): string {
+  return formatOwnerClock(
+    booking.date,
+    booking.time,
+    booking.hostTz,
+    booking.guestTz,
+  );
+}
+
 export function notifyBookingSucceeded(
   config: Config,
   booking: Booking,
@@ -141,9 +158,11 @@ export function notifyBookingSucceeded(
       `mig: ${config.hostName} got a new booking.`,
       "",
       `Guest:  ${booking.guestName} <${booking.guestEmail}>`,
-      `When:   ${booking.date} ${booking.time} (${booking.hostTz})`,
+      `When:   ${ownerWhenLabel(booking)}`,
       `Notes:  ${booking.notes?.trim() || "(none)"}`,
-      `Booked: ${booking.createdAt}`,
+      `Booked: ${
+        formatClockShortAt(new Date(booking.createdAt), config.hostTz)
+      }`,
     ].join("\n"),
     priority: 3,
     tags: ["mig", "booking"],
@@ -166,10 +185,10 @@ export function notifyBookingCancelled(
       `mig: ${config.hostName}'s booking was cancelled.`,
       "",
       `Cancelled by: ${cancellerLabel}`,
-      `When:    ${booking.date} ${booking.time} (${booking.hostTz})`,
+      `When:    ${ownerWhenLabel(booking)}`,
       `Guest:   ${booking.guestName} <${booking.guestEmail}>`,
       `Reason:  ${reason?.trim() || "(none)"}`,
-      `At:      ${new Date().toISOString()}`,
+      `At:      ${formatClockShortAt(new Date(), config.hostTz)}`,
     ].join("\n"),
     priority: 3,
     tags: ["mig", "cancel"],
@@ -193,9 +212,11 @@ export function notifyBookingEmailFailed(
     lines.push(
       "",
       `Guest:  ${booking.guestName} <${booking.guestEmail}>`,
-      `When:   ${booking.date} ${booking.time} (${booking.hostTz})`,
+      `When:   ${ownerWhenLabel(booking)}`,
       `Notes:  ${booking.notes?.trim() || "(none)"}`,
-      `Booked: ${booking.createdAt}`,
+      `Booked: ${
+        formatClockShortAt(new Date(booking.createdAt), config.hostTz)
+      }`,
     );
   }
   return notify(config, {

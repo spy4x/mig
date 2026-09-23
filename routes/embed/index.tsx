@@ -4,11 +4,33 @@ import {
   countSlotsForDate,
   getCandidateDates,
 } from "../../lib/availability.ts";
-import { isoDateInTz, minToHHMM, zonedDateTime } from "../../lib/tz.ts";
+import {
+  canonicalValidTimeZoneOrNull,
+  formatClockAt,
+  formatDateLong,
+  formatShortDateAt,
+  isoDateInTz,
+  minToHHMM,
+  zonedDateTime,
+} from "../../lib/tz.ts";
+import { embedTzRedirectScript } from "../../lib/guest-tz-script.ts";
 
 interface DateCell {
   date: string;
   slots: number;
+}
+
+interface SlotCell {
+  time: string;
+  available: boolean;
+  /** Full "HH:MM, City, UTC±N" clock string in the display zone
+   *  (visitor's zone when known, host's otherwise — mig#15). */
+  displayTime?: string;
+  /** "Wed 23 Sep" — set only when this slot's visitor-local date
+   *  differs from the picked host day (mig#15 review), so a slot that
+   *  wraps to the previous or next day still tells the visitor which
+   *  day it actually falls on. */
+  dateNote?: string;
 }
 
 export interface EmbedData {
@@ -16,9 +38,22 @@ export interface EmbedData {
   slot: string | null;
   dates: DateCell[];
   selectedDateLabel: string | null;
-  slots: Array<{ time: string; available: boolean }>;
+  /** The selected slot's own date, built from its exact instant, not
+   *  noon of the host day (mig#15 review) — e.g. "Wednesday, 23
+   *  September 2026" for a 09:00 Thursday Ho Chi Minh slot shown to a
+   *  New York visitor as 22:00 Wednesday. Feeds TimeCard specifically;
+   *  `selectedDateLabel` (noon-based) still feeds DateCard, which
+   *  shows the *picked calendar day*, not a specific time. */
+  slotDateLabel: string | null;
+  slots: SlotCell[];
   monthAnchor: string;
   error: string | null;
+  /** The visitor's IANA zone, once known from the `tz` query param
+   *  (mig#15), canonicalized (canonicalValidTimeZoneOrNull) so a
+   *  legacy alias or odd casing in the URL always resolves to one
+   *  real zone. An invalid or missing value is `null` and always
+   *  falls back to the host's zone rather than an error page. */
+  tz: string | null;
 }
 
 function parseDateParam(v: string | null): string | null {
@@ -74,6 +109,15 @@ export const handler = define.handlers({
     const monthParam = parseMonthParam(url.searchParams.get("month"));
     const error = url.searchParams.get("err");
 
+    // Visitor timezone (mig#15) — the slot list has to render in the
+    // visitor's zone from the first paint, not just at submit, and
+    // /embed mounts no island to do that client-side after the fact
+    // (issue #11). Canonicalized + validated the same way `guestTz` is
+    // on submit (lib/validators.ts): an invalid or missing value falls
+    // back to `null` (host zone), never an error page.
+    const tz = canonicalValidTimeZoneOrNull(url.searchParams.get("tz"));
+    const displayTz = tz ?? cfg.hostTz;
+
     const minStart = minStartInstant(cfg.minNoticeHours);
     const today = isoDateInTz(new Date(), cfg.hostTz);
     const candidates = getCandidateDates(
@@ -105,11 +149,18 @@ export const handler = define.handlers({
       return { date: d, slots };
     });
 
+    // Date label for the picked day. Converted into the display zone
+    // the same way the standalone island does (both now call
+    // lib/tz.ts's formatDateLong with "12:00" — noon of the
+    // host-local date, formatted in displayTz): the calendar grid
+    // itself stays host-anchored (mig#15 allows this for the month
+    // grid), but the single picked day's own label reads correctly in
+    // the visitor's zone.
     let selectedDateLabel: string | null = null;
     if (date) {
       const dt = zonedDateTime(date, "12:00", cfg.hostTz);
       selectedDateLabel = new Intl.DateTimeFormat("en-GB", {
-        timeZone: cfg.hostTz,
+        timeZone: displayTz,
         weekday: "long",
         day: "numeric",
         month: "long",
@@ -117,7 +168,13 @@ export const handler = define.handlers({
       }).format(dt);
     }
 
-    const slots: EmbedData["slots"] = [];
+    // The selected slot's own date, from its exact instant — see the
+    // EmbedData.slotDateLabel doc comment (mig#15 review).
+    const slotDateLabel = date && slot
+      ? formatDateLong(date, slot, cfg.hostTz, displayTz)
+      : null;
+
+    let slots: SlotCell[] = [];
     if (date && !cfg.blockedDates.has(date)) {
       const dayBookings = ctx.state.bookings.forDate(date);
       const dayName = dayNameFromDate(date, cfg.hostTz);
@@ -125,6 +182,7 @@ export const handler = define.handlers({
       const booked = new Set(
         dayBookings.filter((b) => b.status === "active").map((b) => b.time),
       );
+      const withInstant: Array<SlotCell & { instant: Date }> = [];
       for (const r of ranges) {
         for (
           let m = r.startMin;
@@ -133,16 +191,39 @@ export const handler = define.handlers({
         ) {
           const time = minToHHMM(m);
           const instant = zonedDateTime(date, time, cfg.hostTz);
-          slots.push({
+          const visitorDate = isoDateInTz(instant, displayTz);
+          withInstant.push({
             time,
+            instant,
             available: !booked.has(time) && instant >= minStart,
+            displayTime: formatClockAt(instant, displayTz),
+            dateNote: visitorDate !== date
+              ? formatShortDateAt(instant, displayTz)
+              : undefined,
           });
         }
       }
+      // Sorted by instant (mig#15 review) — host-local generation order
+      // already happens to be instant-ordered for a single host day,
+      // but making the sort explicit means a slot that wraps into the
+      // previous or next visitor-local day still renders in true
+      // chronological order rather than relying on that coincidence.
+      withInstant.sort((a, b) => a.instant.getTime() - b.instant.getTime());
+      slots = withInstant.map(({ instant: _instant, ...s }) => s);
     }
 
     return {
-      data: { date, slot, dates, selectedDateLabel, slots, monthAnchor, error },
+      data: {
+        date,
+        slot,
+        dates,
+        selectedDateLabel,
+        slotDateLabel,
+        slots,
+        monthAnchor,
+        error,
+        tz,
+      },
     };
   },
 });
@@ -159,36 +240,67 @@ export const handler = define.handlers({
       navigated out of it (issue #11).
     - Tighter padding — embedders get a smaller drop-in.
     - Same booking flow, same URL contract, offset by /embed.
+    - Timezone (mig#15): every link the Picker renders carries `?tz=`
+      once known, and the very first load (no `tz` yet) emits a tiny
+      script that redirects once to the same URL with the visitor's
+      detected zone appended — see lib/guest-tz-script.ts for why a
+      query param was chosen over a cookie.
 
   Auto-sizing: the parent page should set `style="width:100%;max-width:36rem"`
   on the iframe and listen to postMessage if they want dynamic height.
 */
 export default define.page<typeof handler>(function Embed({ data, state }) {
-  const { date, slot, dates, selectedDateLabel, slots, monthAnchor, error } =
-    data;
+  const {
+    date,
+    slot,
+    dates,
+    selectedDateLabel,
+    slotDateLabel,
+    slots,
+    monthAnchor,
+    error,
+    tz,
+  } = data;
   const cfg = state.config;
+  const displayTz = tz ?? cfg.hostTz;
 
-  // Pre-compute the confirm label for the picker.
+  // Pre-compute the confirm label for the picker, in the display zone.
   const confirmLabel = (() => {
     if (!date || !slot) return null;
     const dt = zonedDateTime(date, slot, cfg.hostTz);
     const weekday = new Intl.DateTimeFormat("en-GB", {
-      timeZone: cfg.hostTz,
+      timeZone: displayTz,
       weekday: "short",
     }).format(dt);
     const day = new Intl.DateTimeFormat("en-GB", {
-      timeZone: cfg.hostTz,
+      timeZone: displayTz,
       day: "numeric",
     }).format(dt);
     const month = new Intl.DateTimeFormat("en-GB", {
-      timeZone: cfg.hostTz,
+      timeZone: displayTz,
       month: "short",
     }).format(dt);
-    return `Confirm — ${weekday}, ${day} ${month}, ${slot}`;
+    return `Confirm — ${weekday}, ${day} ${month}, ${
+      formatClockAt(dt, displayTz)
+    }`;
   })();
+
+  const displaySlot = date && slot
+    ? formatClockAt(zonedDateTime(date, slot, cfg.hostTz), displayTz)
+    : null;
 
   return (
     <div class="min-h-dvh bg-surface text-ink">
+      {
+        /* mig#15 — always emitted; the script itself only redirects
+           when the browser's detected zone doesn't already match the
+           URL's `tz` param, so a correct param (or the very next load
+           after a redirect) never loops. See
+           lib/guest-tz-script.ts:shouldRedirectTz for the decision. */
+      }
+      <script
+        dangerouslySetInnerHTML={{ __html: embedTzRedirectScript() }}
+      />
       <main id="main" class="px-4 sm:px-5 py-4 sm:py-5">
         {
           /* A plain <div>, not a <header> element — /embed must not
@@ -200,6 +312,11 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
           <h1 class="text-base font-semibold tracking-(--tracking-tight) text-ink">
             Book {cfg.hostName}
           </h1>
+          {!tz && (
+            <p class="text-xs text-ink-subtle mt-1">
+              Times are shown in the host's timezone.
+            </p>
+          )}
         </div>
 
         <Picker
@@ -215,6 +332,9 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
           error={error}
           confirmLabel={confirmLabel}
           basePath="/embed"
+          tz={tz}
+          displaySlot={displaySlot}
+          slotDateLabel={slotDateLabel}
         />
       </main>
     </div>

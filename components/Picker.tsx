@@ -35,6 +35,8 @@ interface DateCell {
 interface SlotCell {
   time: string;
   available: boolean;
+  displayTime?: string;
+  dateNote?: string;
 }
 
 interface PickerProps {
@@ -48,13 +50,30 @@ interface PickerProps {
   hostName: string;
   hostTz: string;
   error: string | null;
-  /** "Fri, 28 Aug, 14:00" — host-local. Computed by the route so the
+  /** "Fri, 28 Aug, 14:00, New York, UTC-4" — in the visitor's zone
+   *  when known, host's otherwise. Computed by the route so the
    *  button label matches what's already on screen. */
   confirmLabel: string | null;
   /** "" for the standalone page, "/embed" for the iframe variant.
    *  Threaded down to every link/form so the flow never leaves the
    *  base path it started in (issue #11). Defaults to "". */
   basePath?: string;
+  /** The visitor's IANA zone, once known (mig#15) — threaded onto
+   *  every link this component renders (Calendar, DateCard, TimeCard,
+   *  TimeSlots) so /embed's `tz` query param survives the whole flow,
+   *  and into BookingForm's hidden `guestTz` field. Omit while the
+   *  zone is still unknown (the host-timezone fallback). */
+  tz?: string | null;
+  /** "Fri, 28 Aug, 11:00, New York, UTC-4" — the selected slot's full
+   *  clock string in the visitor's zone, for TimeCard. Falls back to
+   *  the bare host-local `selectedSlot` when omitted. */
+  displaySlot?: string | null;
+  /** "Wednesday, 23 September 2026" — the selected slot's own date,
+   *  built from its exact instant, not noon of the host day (mig#15
+   *  review). Feeds TimeCard specifically; falls back to
+   *  `selectedDateLabel` when omitted (no slot picked yet, or the
+   *  caller hasn't computed one — e.g. the standalone baseline test). */
+  slotDateLabel?: string | null;
 }
 
 export function Picker(props: PickerProps) {
@@ -71,6 +90,9 @@ export function Picker(props: PickerProps) {
     error,
     confirmLabel,
     basePath = "",
+    tz,
+    displaySlot,
+    slotDateLabel,
   } = props;
 
   const slotsByDate: Record<string, number> = {};
@@ -120,6 +142,7 @@ export function Picker(props: PickerProps) {
                 date={selectedDate!}
                 dateLabel={selectedDateLabel ?? selectedDate!}
                 basePath={basePath}
+                tz={tz}
               />
             )
             : (
@@ -131,6 +154,7 @@ export function Picker(props: PickerProps) {
                 selectedDate={selectedDate}
                 hostTz={hostTz}
                 basePath={basePath}
+                tz={tz}
               />
             )}
         </div>
@@ -153,8 +177,11 @@ export function Picker(props: PickerProps) {
                 <TimeCard
                   date={selectedDate!}
                   slot={selectedSlot!}
-                  dateLabel={selectedDateLabel ?? selectedDate!}
+                  dateLabel={slotDateLabel ?? selectedDateLabel ??
+                    selectedDate!}
+                  displaySlot={displaySlot ?? undefined}
                   basePath={basePath}
+                  tz={tz}
                 />
               )
               : slots.length > 0
@@ -165,6 +192,7 @@ export function Picker(props: PickerProps) {
                   slots={slots}
                   selectedSlot={selectedSlot}
                   basePath={basePath}
+                  tz={tz}
                 />
               )
               : (
@@ -195,6 +223,7 @@ export function Picker(props: PickerProps) {
               error={null}
               confirmLabel={confirmLabel ?? `Confirm — ${selectedSlot}`}
               basePath={basePath}
+              guestTz={tz}
             />
           </div>
         </section>

@@ -215,6 +215,187 @@ Deno.test('handleBookingSubmit: failure under "/embed" redirects to /embed?err='
   await rm(path);
 });
 
+Deno.test("mig#15 review: a validation failure keeps slot and tz on the redirect, not just date", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    fields: validFields(date, "09:00", {
+      name: "", // fails validation
+      guestTz: "America/New_York",
+    }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  // Before mig#15's review, only `date` survived a failed redirect —
+  // dropping `slot` sent the visitor back to the slot grid (losing
+  // their pick), and dropping `tz` sent /embed back to the
+  // host-timezone fallback and another redirect round-trip.
+  assertEquals(url.searchParams.get("date"), date);
+  assertEquals(url.searchParams.get("slot"), "09:00");
+  assertEquals(url.searchParams.get("tz"), "America/New_York");
+  await rm(path);
+});
+
+Deno.test("mig#15 round 2: an availability failure drops slot but keeps date and tz on the redirect", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    // 08:00 is outside MON-FRI 09:00-17:00 — a real availability
+    // failure, past the schema-validation step.
+    fields: validFields(date, "08:00", {
+      guestTz: "America/New_York",
+    }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  assertEquals(url.searchParams.get("date"), date);
+  // mig#15 round 2: 08:00 was never a bookable slot at all — keeping
+  // it on the redirect would land the visitor on the confirm step for
+  // a slot that was never valid to begin with.
+  assertEquals(url.searchParams.get("slot"), null);
+  assertEquals(url.searchParams.get("tz"), "America/New_York");
+  await rm(path);
+});
+
+Deno.test("mig#15 round 2: a slot-taken conflict drops slot from the redirect (keeps date and tz)", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  // Pre-populate the exact slot this submission will target, so
+  // Phase 2's conflict check (the email already sent by Phase 1) is
+  // the one that fires — not the schema or availability checks.
+  await bookings.mutate((draft) => {
+    draft.push({
+      id: "01EXISTING",
+      createdAt: new Date().toISOString(),
+      date,
+      time: "09:00",
+      hostTz: HOST_TZ,
+      guestName: "Someone Else",
+      guestEmail: "else@example.com",
+      cancelTokenHash: "h",
+      status: "active",
+    });
+  });
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    fields: validFields(date, "09:00", { guestTz: "America/New_York" }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  // A gone slot must not come back on the redirect — landing on the
+  // confirm step for it would let the visitor resubmit and trigger a
+  // second, false confirmation email pair (mig#15 round 2).
+  assertEquals(url.searchParams.get("slot"), null);
+  assertEquals(url.searchParams.get("date"), date);
+  assertEquals(url.searchParams.get("tz"), "America/New_York");
+  await rm(path);
+});
+
+// ─── Rate limit ────────────────────────────────────────────────────────
+
+Deno.test("a rate-limited redirect keeps date and tz", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  // max: 1 — the first submission consumes the only slot in the
+  // window, so the second one below is the one that gets rate-limited.
+  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 1 });
+  const fields = validFields(date, "09:00", { guestTz: "America/New_York" });
+
+  const first = await handleBookingSubmit(
+    stubContext({ config: cfg, bookings, rateLimiter, fields }),
+    "",
+  );
+  assertEquals(first.status, 303);
+
+  const second = await handleBookingSubmit(
+    stubContext({ config: cfg, bookings, rateLimiter, fields }),
+    "",
+  );
+  assertEquals(second.status, 303);
+  const url = new URL(second.headers.get("location")!);
+  // Before this fix, a rate-limited redirect carried no `date` and no
+  // `tz`, sending the visitor back to the date picker from scratch.
+  assertEquals(url.searchParams.get("date"), date);
+  assertEquals(url.searchParams.get("tz"), "America/New_York");
+  // Unlike the other failure redirects, `slot` never rides along here
+  // — a rate-limited request never got far enough to confirm the slot
+  // is still free.
+  assertEquals(url.searchParams.get("slot"), null);
+  await rm(path);
+});
+
+Deno.test("a rate-limited redirect caps an oversized date or tz instead of carrying it whole", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  // max: 1 — the first submission consumes the only slot in the
+  // window, same as the test above, so the second one is the one
+  // that's rate-limited and hits the cap.
+  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 1 });
+  const first = await handleBookingSubmit(
+    stubContext({
+      config: cfg,
+      bookings,
+      rateLimiter,
+      fields: validFields(date, "09:00", { guestTz: "America/New_York" }),
+    }),
+    "",
+  );
+  assertEquals(first.status, 303);
+
+  const hugeDate = "2".repeat(200_000);
+  const hugeTz = "America/New_York".repeat(20_000);
+  const fields = validFields(hugeDate, "09:00", { guestTz: hugeTz });
+
+  const res = await handleBookingSubmit(
+    stubContext({ config: cfg, bookings, rateLimiter, fields }),
+    "",
+  );
+  assertEquals(res.status, 303);
+  const loc = res.headers.get("location")!;
+  // Short: capped at 100 chars per field, not the 200,000 sent in.
+  // (Well under 1000 — a generous margin above "two 100-char fields
+  // plus a handful of literal query-string characters".)
+  assertEquals(
+    loc.length < 1000,
+    true,
+    `Location header too long: ${loc.length}`,
+  );
+  assertEquals(loc.startsWith(cfg.publicUrl), true, loc);
+  const url = new URL(loc);
+  assertEquals(url.searchParams.get("date")?.length, 100);
+  assertEquals(url.searchParams.get("tz")?.length, 100);
+  await rm(path);
+});
+
 // ─── Honeypot ──────────────────────────────────────────────────────────
 
 Deno.test('handleBookingSubmit: honeypot under "" redirects to /confirmed', async () => {

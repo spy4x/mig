@@ -3,13 +3,21 @@ import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
 import BookingFlow from "../islands/BookingFlow.tsx";
 import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
-import { isoDateInTz, minToHHMM, zonedDateTime } from "../lib/tz.ts";
+import {
+  canonicalValidTimeZoneOrNull,
+  formatClockAt,
+  isoDateInTz,
+  minToHHMM,
+  zonedDateTime,
+} from "../lib/tz.ts";
 
 interface IndexData {
   date: string | null;
   slot: string | null;
   dates: Array<{ date: string; slots: number }>;
-  slots: Array<{ time: string; available: boolean }>;
+  slots: Array<
+    { time: string; available: boolean; displayTime?: string }
+  >;
   error: string | null;
   monthAnchor: string;
 }
@@ -70,6 +78,15 @@ export default define.page(function Index(ctx) {
   const error = url.searchParams.get("err");
   const monthParam = parseMonthParam(url.searchParams.get("month"));
 
+  // Visitor timezone (mig#18) — read and validated the same way
+  // routes/embed/index.tsx does, so a visitor who arrives at "/" with
+  // a shared `?tz=` link (or before BookingFlow's own hydration runs)
+  // sees every clock and date in their own zone from the first paint,
+  // not the host's. An invalid or missing value falls back to `null`
+  // (host zone), never an error page — same contract as /embed.
+  const tz = canonicalValidTimeZoneOrNull(url.searchParams.get("tz"));
+  const displayTz = tz ?? cfg.hostTz;
+
   const minStart = minStartInstant(cfg.minNoticeHours);
   const today = isoDateInTz(new Date(), cfg.hostTz);
   const candidates = getCandidateDates(
@@ -124,6 +141,15 @@ export default define.page(function Index(ctx) {
         slots.push({
           time,
           available: !booked.has(time) && instant >= minStart,
+          // Labelled in the display zone (mig#18: the `tz` query
+          // param when known, host zone otherwise) — the same
+          // "HH:MM, City, UTC±N" clock /embed shows. BookingFlow's
+          // hydration replaces this with the browser-detected zone
+          // once mounted; a no-JS visitor, or the pre-hydration first
+          // paint, keeps this one, which is why it's never bare HH:MM
+          // and never silently reverts to the host's zone when the
+          // visitor arrived with a `?tz=` already set.
+          displayTime: formatClockAt(instant, displayTz),
         });
       }
     }
@@ -144,6 +170,27 @@ export default define.page(function Index(ctx) {
             durationMin={cfg.slotDurationMin}
           />
 
+          {
+            /* mig#15 review: only ever rendered when JavaScript is
+               unavailable — browsers strip <noscript> content the
+               instant JS is enabled, before hydration timing is even
+               relevant, so there's no flash either way. When JS *is*
+               available, BookingFlow's own hydration silently swaps
+               the host-labelled clocks below for the visitor's.
+
+               mig#18: only true, and so only shown, when the display
+               zone actually is the host's — a visitor who arrived
+               with a valid `?tz=` already sees their own zone above,
+               not the host's, so this note would be wrong for them. */
+          }
+          {displayTz === cfg.hostTz && (
+            <noscript>
+              <p class="mt-4 text-xs text-ink-subtle">
+                Times are shown in the host's timezone.
+              </p>
+            </noscript>
+          )}
+
           <div class="mt-8 sm:mt-10">
             <BookingFlow
               dates={dates}
@@ -155,6 +202,7 @@ export default define.page(function Index(ctx) {
               hostName={cfg.hostName}
               hostTz={cfg.hostTz}
               error={error}
+              tz={tz}
             />
           </div>
         </div>

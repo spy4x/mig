@@ -6,7 +6,13 @@ import { DateCard } from "../components/DateCard.tsx";
 import { TimeCard } from "../components/TimeCard.tsx";
 import { BookingForm } from "../components/BookingForm.tsx";
 import { SummaryBar } from "../components/SummaryBar.tsx";
-import { isoDateInTz, zonedDateTime } from "../lib/tz.ts";
+import {
+  formatClockAt,
+  formatDateLong,
+  formatShortDateAt,
+  isoDateInTz,
+  zonedDateTime,
+} from "../lib/tz.ts";
 
 /*
   BookingFlow — client-driven booking picker.
@@ -48,6 +54,8 @@ interface DateCell {
 interface SlotCell {
   time: string;
   available: boolean;
+  displayTime?: string;
+  dateNote?: string;
 }
 
 interface BookingFlowProps {
@@ -60,27 +68,25 @@ interface BookingFlowProps {
   hostName: string;
   hostTz: string;
   error: string | null;
+  /** The visitor's IANA zone, once known from the server-side `tz`
+   *  query param (mig#18) — canonicalized the same way /embed does
+   *  (routes/index.tsx). `null` when missing or invalid. This is the
+   *  island's *initial* display zone, used for every clock and date
+   *  it renders before mount; after mount, the browser's own detected
+   *  zone (`guestTz` below) takes over, same as before mig#18. Without
+   *  this, the pre-mount render (including the no-JS fallback and the
+   *  first paint before hydration) always used to fall back to
+   *  `hostTz`, even when the visitor arrived with `?tz=` already set —
+   *  the standalone time card's date, unlike everything else on the
+   *  page, went untested for this, so a change that broke it (e.g.
+   *  building the date from noon instead of the slot's own instant)
+   *  left every existing test green (mig#18 round 4 review). */
+  tz: string | null;
 }
 
 // ─── Client-side time helpers ────────────────────────────────────────
 // Use lib/tz.ts directly — it's dependency-free (no zod) and already
 // bundled into the client via Calendar's imports.
-
-function formatDateLongInTz(
-  date: string,
-  time: string,
-  hostTz: string,
-  displayTz: string,
-): string {
-  const dt = zonedDateTime(date, time, hostTz);
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: displayTz,
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(dt);
-}
 
 // Compact "Thu, 28 Aug" used in the mobile SummaryBar. Mirrors
 // TimeCard's display so the two stay in lockstep.
@@ -100,38 +106,33 @@ function formatDateShortInTz(
   return fmt.format(dt).replace(/^([^,]+),/, "$1");
 }
 
-// HH:MM in the visitor's TZ, formatted from a host-local (date, time).
-// Returns null if the formatting fails (rare; the Intl call is
-// permissive).
-function formatTimeInTz(
+// "HH:MM, City, UTC±N" in the visitor's TZ, formatted from a
+// host-local (date, time) — mig#15: every time shown to a person
+// carries its city and offset, not a bare HH:MM. Returns null if the
+// formatting fails (rare; the Intl call is permissive).
+function formatClockInTz(
   date: string,
   time: string,
   hostTz: string,
   displayTz: string,
 ): string | null {
   try {
-    const dt = zonedDateTime(date, time, hostTz);
-    return new Intl.DateTimeFormat("en-GB", {
-      timeZone: displayTz,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(dt);
+    return formatClockAt(zonedDateTime(date, time, hostTz), displayTz);
   } catch {
     return null;
   }
 }
 
-// Same as formatConfirmLabelInTz but takes the already-computed
-// visitor-TZ time string so the button shows visitor time, not
-// host time. Used when displayTz !== hostTz (the common case after
-// hydration).
-function formatConfirmLabelWithTime(
+// Takes the already-computed visitor-TZ clock string ("11:00, New
+// York, UTC-4" — mig#15) so the button shows the visitor's labelled
+// time, not a bare host time. Used when displayTz !== hostTz (the
+// common case after hydration).
+function formatConfirmLabelWithClock(
   date: string,
   time: string,
   hostTz: string,
   displayTz: string,
-  visitorTime: string,
+  visitorClock: string,
 ): string {
   const dt = zonedDateTime(date, time, hostTz);
   const weekday = new Intl.DateTimeFormat("en-GB", {
@@ -146,7 +147,7 @@ function formatConfirmLabelWithTime(
     timeZone: displayTz,
     month: "short",
   }).format(dt);
-  return `Confirm — ${weekday}, ${day} ${month}, ${visitorTime}`;
+  return `Confirm — ${weekday}, ${day} ${month}, ${visitorClock}`;
 }
 
 // ─── URL helpers ─────────────────────────────────────────────────────
@@ -252,6 +253,13 @@ export default function BookingFlow(props: BookingFlowProps) {
     if (next.date) params.set("date", next.date);
     if (next.slot) params.set("slot", next.slot);
     if (next.month) params.set("month", next.month);
+    // mig#18: carries the visitor's zone the same way pickerHref does
+    // for the no-JS links below, so a reload, a copied URL, or the
+    // back/forward sync above keeps showing the visitor's own clocks
+    // instead of falling back to the host's. `linkTz` is declared
+    // further down (closed over here; pushUrl is only ever called
+    // from a handler, after the initial render has already set it).
+    if (linkTz) params.set("tz", linkTz);
     const qs = params.toString();
     const url = qs ? `/?${qs}` : "/";
     if (globalThis.location.pathname + globalThis.location.search !== url) {
@@ -307,26 +315,55 @@ export default function BookingFlow(props: BookingFlowProps) {
 
   // ─── Derived labels (visitor TZ after hydration) ────────────────
 
-  const displayTz = (mounted.value && guestTz.value) ? guestTz.value : hostTz;
+  // The zone every clock and date on this island renders in before
+  // mount (mig#18) — the server-validated `tz` query param
+  // (routes/index.tsx, same validation as /embed) when the visitor
+  // arrived with one, host zone otherwise. Before mig#18 this was
+  // always `hostTz`, so a visitor sharing a `?tz=` link (or a no-JS
+  // client) saw the host's time even though the server itself knew
+  // better.
+  const initialDisplayTz = props.tz ?? hostTz;
+  const displayTz = (mounted.value && guestTz.value)
+    ? guestTz.value
+    : initialDisplayTz;
+
+  // The zone reflected in every `<a href>` this island's children
+  // render for the no-JS / pre-hydration fallback, and in the URL
+  // `pushUrl` writes once interactive (mig#18). `null` omits the
+  // `?tz=` param entirely — e.g. a visitor with no query param and no
+  // detected zone yet never carries a redundant one around, matching
+  // /embed. Once the browser's own zone is detected, links switch to
+  // carrying that instead of the query param they arrived with.
+  const linkTz: string | null = (mounted.value && guestTz.value)
+    ? guestTz.value
+    : props.tz;
 
   const dateLabel: string | null = date.value
-    ? formatDateLongInTz(date.value, "12:00", hostTz, displayTz)
+    ? formatDateLong(date.value, "12:00", hostTz, displayTz)
     : null;
 
   const dateLabelShort: string | null = date.value
     ? formatDateShortInTz(date.value, "12:00", hostTz, displayTz)
     : null;
 
-  // Slot time in visitor TZ. The slot grid is rendered in host TZ
-  // (HH:MM strings are host-local by definition), but once the user
-  // picks one, we display it in the visitor's TZ on the confirm
-  // button + TimeCard to match the visitor's local clock.
+  // The selected slot's own date, from its exact instant, not noon of
+  // the host day (mig#15 review) — feeds TimeCard specifically.
+  // `dateLabel` above (noon-based) still feeds DateCard, which shows
+  // the *picked calendar day*, not a specific time.
+  const slotDateLabel: string | null = date.value && slot.value
+    ? formatDateLong(date.value, slot.value, hostTz, displayTz)
+    : null;
+
+  // Slot clock in visitor TZ ("11:00, New York, UTC-4" — mig#15). The
+  // slot grid is rendered in host TZ (HH:MM strings are host-local by
+  // definition), but once the user picks one, we display the labelled
+  // visitor clock on the confirm button + TimeCard.
   const slotLabelVisitorTz: string | null = date.value && slot.value
-    ? formatTimeInTz(date.value, slot.value, hostTz, displayTz)
+    ? formatClockInTz(date.value, slot.value, hostTz, displayTz)
     : null;
 
   const confirmLabel: string | null = date.value && slot.value
-    ? formatConfirmLabelWithTime(
+    ? formatConfirmLabelWithClock(
       date.value,
       slot.value,
       hostTz,
@@ -335,22 +372,40 @@ export default function BookingFlow(props: BookingFlowProps) {
     )
     : null;
 
-  // Re-format every slot's HH:MM string in the visitor's TZ for
-  // display. SSR + `/embed` + pre-hydration leave `displayTime`
-  // unset, so TimeSlots falls back to the host-local `time` (the
-  // authoritative value the server books against — never swapped).
-  // After hydration Preact diffs the text node and updates in place;
-  // the surrounding DOM structure stays identical.
+  // Re-format every slot's HH:MM string into the full visitor-TZ
+  // clock string for display (mig#15). SSR + `/embed` + pre-hydration
+  // leave `displayTime` unset, so TimeSlots falls back to the
+  // host-local `time` (the authoritative value the server books
+  // against — never swapped). After hydration Preact diffs the text
+  // node and updates in place; the surrounding DOM structure stays
+  // identical.
+  //
+  // Also sorted by instant and labelled with a `dateNote` when a
+  // slot's visitor-local date differs from the picked day (mig#15
+  // review) — the fetched `slots.value` from GET /api/slots is
+  // already host-chronological (and therefore instant-ordered), but
+  // sorting explicitly here — the same as routes/embed/index.tsx —
+  // means a slot that wraps into the previous or next visitor-local
+  // day renders in true chronological order rather than relying on
+  // that coincidence.
   const slotsForDisplay = (mounted.value && date.value)
-    ? slots.value.map((s) => ({
-      ...s,
-      displayTime: formatTimeInTz(
-        date.value!,
-        s.time,
-        hostTz,
-        displayTz,
-      ) ?? s.time,
-    }))
+    ? slots.value
+      .map((s) => {
+        const instant = zonedDateTime(date.value!, s.time, hostTz);
+        const visitorDate = isoDateInTz(instant, displayTz);
+        return {
+          ...s,
+          instant,
+          displayTime:
+            formatClockInTz(date.value!, s.time, hostTz, displayTz) ??
+              s.time,
+          dateNote: visitorDate !== date.value
+            ? formatShortDateAt(instant, displayTz)
+            : undefined,
+        };
+      })
+      .sort((a, b) => a.instant.getTime() - b.instant.getTime())
+      .map(({ instant: _instant, ...s }) => s)
     : slots.value;
 
   // ─── Render ──────────────────────────────────────────────────────
@@ -398,6 +453,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                 date={date.value!}
                 dateLabel={dateLabel ?? date.value!}
                 onClear={interactive ? clearDate : undefined}
+                tz={linkTz}
               />
             )
             : (
@@ -410,6 +466,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                 hostTz={hostTz}
                 onSelectDate={interactive ? onSelectDate : undefined}
                 onSelectMonth={interactive ? onSelectMonth : undefined}
+                tz={linkTz}
               />
             )}
         </div>
@@ -432,9 +489,10 @@ export default function BookingFlow(props: BookingFlowProps) {
                 <TimeCard
                   date={date.value!}
                   slot={slot.value!}
-                  dateLabel={dateLabel ?? date.value!}
+                  dateLabel={slotDateLabel ?? dateLabel ?? date.value!}
                   displaySlot={slotLabelVisitorTz ?? undefined}
                   onClear={interactive ? clearSlot : undefined}
+                  tz={linkTz}
                 />
               )
               : loading.value
@@ -451,6 +509,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                   slots={slotsForDisplay}
                   selectedSlot={null}
                   onSelectSlot={interactive ? onSelectSlot : undefined}
+                  tz={linkTz}
                 />
               )
               : (

@@ -2,7 +2,12 @@
 // so calendar clients display the meeting in their configured timezone.
 
 import type { Booking, Config } from "./types.ts";
-import { formatInstantLong, validTimeZoneOr, zonedDateTime } from "./tz.ts";
+import {
+  formatClockLongAt,
+  formatInstantLong,
+  validTimeZoneOr,
+  zonedDateTime,
+} from "./tz.ts";
 
 const PRODID = "-//mig//EN";
 const VERSION = "2.0";
@@ -108,7 +113,7 @@ export function generateIcs(
   //   3. Notes: guest's notes, if any
   //   4. Cancel URL — wrapped in a single trailing line so the URL
   //      and its label travel together
-  const when = `${formatInstantLong(start, displayTz)} (${displayTz})`;
+  const when = formatClockLongAt(start, displayTz);
 
   const descLines: string[] = [
     `Meeting with ${config.hostName}`,

@@ -23,6 +23,20 @@ function formPath(basePath: string): string {
   return basePath === "" ? "/" : basePath;
 }
 
+// mig#18: a redirect field's raw form value, truncated to a sane
+// length. `date` and `tz` never legitimately exceed a few dozen
+// characters (an ISO date, an IANA zone name) — this is purely a cap
+// against carrying an attacker-sized value into a `Location` header
+// before BookingSchema's own validation ever gets a chance to reject
+// it outright.
+const MAX_REDIRECT_FIELD_LEN = 100;
+
+function capRedirectField(value: string | undefined): string | undefined {
+  return value !== undefined && value.length > MAX_REDIRECT_FIELD_LEN
+    ? value.slice(0, MAX_REDIRECT_FIELD_LEN)
+    : value;
+}
+
 export async function handleBookingSubmit(
   ctx: Context<State>,
   basePath: string,
@@ -30,9 +44,14 @@ export async function handleBookingSubmit(
   const cfg = ctx.state.config;
   const ip = clientIp(ctx.req);
 
-  function errRedirect(message: string, date?: string): Response {
+  function errRedirect(
+    message: string,
+    state?: { date?: string; slot?: string; tz?: string },
+  ): Response {
     const params = new URLSearchParams({ err: message });
-    if (date) params.set("date", date);
+    if (state?.date) params.set("date", state.date);
+    if (state?.slot) params.set("slot", state.slot);
+    if (state?.tz) params.set("tz", state.tz);
     return Response.redirect(
       new URL(`${formPath(basePath)}?${params.toString()}`, cfg.publicUrl)
         .toString(),
@@ -40,15 +59,50 @@ export async function handleBookingSubmit(
     );
   }
 
+  // Read the form before the rate-limit check, so a rate-limited
+  // submission still redirects with the visitor's picked date and
+  // zone (mig#18) — dropping both sent them back to the date picker
+  // from scratch. `slot` is deliberately left off that one redirect
+  // below: a rate-limited request never got far enough to confirm the
+  // slot is still free, unlike the failure modes below that already
+  // checked it moments earlier.
+  const form = await ctx.req.formData();
+  // Raw, unvalidated — used only to carry state back on a failed
+  // redirect (mig#15 review). `date` and `tz` always ride along: the
+  // route re-validates both on the way back in, so passing the raw
+  // values through here never bypasses that. `slot` only comes along
+  // for a failure that leaves the slot itself still meaningful to
+  // retry (bad form input, or the confirmation email failing to send
+  // — the slot is still free either way); every other failure means
+  // the slot itself is gone or was never valid, so keeping it would
+  // land the visitor back on the confirm step for a slot they can't
+  // actually book, and resubmitting would send another false
+  // confirmation (mig#15 round 2 — see each call site below).
+  //
+  // mig#18: these come straight off the wire, before BookingSchema's
+  // own length limits run (a rate-limited or otherwise-early-failing
+  // request never reaches `safeParse` below) — an attacker sending a
+  // 200,000-character `date` or `tz` would otherwise ride, uncapped,
+  // straight into the redirect's `Location` header. Capped here, not
+  // just left to the redirect target's own route to re-reject, so the
+  // header itself never grows past a form value's worth of junk.
+  const redirectDateTz = {
+    date: capRedirectField(String(form.get("date") || "") || undefined),
+    tz: capRedirectField(String(form.get("guestTz") || "") || undefined),
+  };
+  const redirectState = {
+    ...redirectDateTz,
+    slot: String(form.get("slot") || "") || undefined,
+  };
+
   // Rate limit per IP
   const limit = ctx.state.rateLimiter.check(ip);
   if (!limit.ok) {
     return errRedirect(
       `Too many attempts. Try again in ${humanRetry(limit.retryAfterMs)}.`,
+      redirectDateTz,
     );
   }
-
-  const form = await ctx.req.formData();
   const parsed = BookingSchema.safeParse({
     name: form.get("name"),
     email: form.get("email"),
@@ -59,7 +113,10 @@ export async function handleBookingSubmit(
     website: form.get("website") ?? "",
   });
   if (!parsed.success) {
-    return errRedirect(parsed.error.issues[0]?.message ?? "Invalid form data.");
+    return errRedirect(
+      parsed.error.issues[0]?.message ?? "Invalid form data.",
+      redirectState,
+    );
   }
   const input = parsed.data;
 
@@ -77,10 +134,14 @@ export async function handleBookingSubmit(
   }
 
   // Sanity: slot must be within availability, not booked, not in the past.
+  // This and every other availability/conflict/persist failure below
+  // drops `slot` — it's no longer a valid pick, so keeping it would
+  // land the visitor back on the confirm step for a slot they can't
+  // book (mig#15 round 2).
   const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000);
   const slotInstant = zonedDateTime(input.date, input.slot, cfg.hostTz);
   if (slotInstant < minStart) {
-    return errRedirect("That time is no longer available.", input.date);
+    return errRedirect("That time is no longer available.", redirectDateTz);
   }
 
   // Check slot is in availability
@@ -101,7 +162,7 @@ export async function handleBookingSubmit(
   if (!inAvail) {
     return errRedirect(
       "That time is outside availability hours.",
-      input.date,
+      redirectDateTz,
     );
   }
 
@@ -109,7 +170,7 @@ export async function handleBookingSubmit(
   if (cfg.blockedDates.has(input.date)) {
     return errRedirect(
       "That date is not available for booking.",
-      input.date,
+      redirectDateTz,
     );
   }
 
@@ -156,7 +217,7 @@ export async function handleBookingSubmit(
     await notifyBookingEmailFailed(cfg, booking, msg);
     return errRedirect(
       "We couldn't send your confirmation email, so the booking was not created. Please try again in a moment.",
-      input.date,
+      redirectState,
     );
   }
 
@@ -186,7 +247,7 @@ export async function handleBookingSubmit(
       );
       return errRedirect(
         "That time was just booked by someone else. The confirmation email you received is no longer valid — please pick another time.",
-        input.date,
+        redirectDateTz,
       );
     }
   } catch (e) {
@@ -199,7 +260,7 @@ export async function handleBookingSubmit(
     );
     return errRedirect(
       "Your confirmation was sent, but we couldn't save the booking on our end. Please contact the host directly to confirm.",
-      input.date,
+      redirectDateTz,
     );
   }
 
