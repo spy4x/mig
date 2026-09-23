@@ -24,10 +24,14 @@ interface TimeCardProps {
   /** "" for the standalone page, "/embed" for the iframe variant.
    *  Defaults to "". */
   basePath?: string;
+  /** The visitor's IANA zone, once known (mig#15) — threaded onto the
+   *  Change link so /embed's tz query param survives. */
+  tz?: string | null;
 }
 
 export function TimeCard(
-  { date, slot, dateLabel, displaySlot, onClear, basePath = "" }: TimeCardProps,
+  { date, slot, dateLabel, displaySlot, onClear, basePath = "", tz }:
+    TimeCardProps,
 ) {
   const shownSlot = displaySlot ?? slot;
   // Focus styles live on the outer <button>/<a> — same reason as
@@ -65,7 +69,7 @@ export function TimeCard(
         )
         : (
           <a
-            href={pickerHref(basePath, { date })}
+            href={pickerHref(basePath, { date }, tz)}
             aria-label="Change time"
             class={changeClass}
           >

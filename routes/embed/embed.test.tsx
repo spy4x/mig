@@ -105,6 +105,8 @@ function embedData(overrides: Partial<EmbedData>): EmbedData {
     slots: [],
     monthAnchor: "2027-01-01",
     error: null,
+    tz: null,
+    showTzRedirect: true,
     ...overrides,
   };
 }
@@ -247,6 +249,69 @@ Deno.test("embed form never renders BookingSubmit, the standalone island", async
   );
 });
 
+// ─── mig#15: tz query param survives navigation ──────────────────────
+
+Deno.test("mig#15: every picker link carries tz once the visitor's zone is known", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slots: SLOTS,
+        tz: "America/New_York",
+        showTzRedirect: false,
+      }))}
+    />,
+  );
+  const links = [
+    ...anchors(html).map((a) => a.href),
+    ...formActions(html),
+  ];
+  assert(links.length > 0, "expected at least one link to check");
+  for (const link of links) {
+    assert(
+      link.includes("tz=America%2FNew_York") || link === "/embed/book",
+      `expected "${link}" to carry tz= (form actions never carry query params)`,
+    );
+  }
+});
+
+Deno.test("mig#15: no tz known yet — links have no tz param, and the redirect script is present", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({ tz: null, showTzRedirect: true }))}
+    />,
+  );
+  const links = anchors(html).map((a) => a.href);
+  for (const link of links) {
+    assert(!link.includes("tz="), `expected "${link}" to carry no tz param`);
+  }
+  assert(
+    html.includes("location.replace"),
+    "expected the tz-redirect script",
+  );
+  assert(
+    html.includes("Times are shown in the host&#39;s timezone."),
+    "expected the host-timezone fallback note",
+  );
+});
+
+Deno.test("mig#15: an invalid tz (already resolved to null) shows the host-timezone note without the redirect script", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({ tz: null, showTzRedirect: false }))}
+    />,
+  );
+  assert(
+    !html.includes("location.replace"),
+    "must not redirect again on a present-but-invalid tz",
+  );
+  assert(
+    html.includes("Times are shown in the host&#39;s timezone."),
+    "expected the host-timezone fallback note",
+  );
+});
+
 Deno.test("embed picker: month navigation links stay under /embed", () => {
   const html = renderToString(
     <EmbedPage {...fakePageProps(embedData({ monthAnchor: "2027-02-01" }))} />,
@@ -378,6 +443,57 @@ for (const state of ["missing", "invalid", "expired"] as const) {
     assertEquals(links, ["/embed"]);
   });
 }
+
+// ─── mig#15: confirmation page shows the visitor's labelled clock ────
+
+Deno.test("mig#15: confirmed page shows the visitor's converted, labelled clock, not the host's", () => {
+  const html = renderToString(
+    <ConfirmedPage
+      {...fakePageProps(confirmedData({
+        booking: {
+          id: "01JBOOKINGFAKE00000000000",
+          date: "2026-10-06",
+          time: "09:00",
+          hostTz: "Asia/Ho_Chi_Minh",
+          guestTz: "America/New_York",
+          guestName: "Visitor",
+          guestEmail: "visitor@example.com",
+          cancelToken: "faketoken",
+        },
+      }))}
+    />,
+  );
+  assert(html.includes("22:00, New York, UTC-4"));
+  assert(html.includes("Monday, 5 October 2026"));
+  // Never the raw host time/date, and never the host-fallback note —
+  // the visitor's zone is known here.
+  assertFalse(html.includes("09:00, Ho Chi Minh"));
+  assertFalse(html.includes("host&#39;s timezone"));
+});
+
+Deno.test("mig#15: confirmed page falls back to the labelled host clock when no visitor zone was captured", () => {
+  const html = renderToString(
+    <EmbedConfirmedPage
+      {...fakePageProps(confirmedData({
+        booking: {
+          id: "01JBOOKINGFAKE00000000000",
+          date: "2026-10-06",
+          time: "09:00",
+          hostTz: "Asia/Ho_Chi_Minh",
+          guestTz: null,
+          guestName: "Visitor",
+          guestEmail: "visitor@example.com",
+          cancelToken: "faketoken",
+        },
+      }))}
+    />,
+  );
+  assert(html.includes("09:00, Ho Chi Minh, UTC+7"));
+  assert(
+    html.includes("Times are shown in the host&#39;s timezone."),
+    "expected the host-timezone fallback note",
+  );
+});
 
 // ─── Baseline: default basePath must still be "/" ───────────────────
 // Guards against the base path default silently changing for the

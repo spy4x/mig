@@ -14,12 +14,21 @@ export function pickerPath(basePath: string): string {
 
 /** Build an `href` for a picker link, e.g. `pickerHref("/embed", {
  *  date: "2026-09-21" })` → `"/embed?date=2026-09-21"`. Omit `params`
- *  (or pass an empty object) for a bare link back to the picker root. */
+ *  (or pass an empty object) for a bare link back to the picker root.
+ *
+ *  `tz` (mig#15) is the visitor's IANA zone, once known — pass it and
+ *  every link the picker renders carries it forward, so /embed stays
+ *  in the visitor's timezone across the whole flow without a cookie
+ *  (see lib/guest-tz-script.ts for why a query param was chosen over
+ *  one). Omit it (or pass null/undefined) before the zone is known. */
 export function pickerHref(
   basePath: string,
   params?: Record<string, string>,
+  tz?: string | null,
 ): string {
   const path = pickerPath(basePath);
-  if (!params || Object.keys(params).length === 0) return path;
-  return `${path}?${new URLSearchParams(params).toString()}`;
+  const merged: Record<string, string> = { ...params };
+  if (tz) merged.tz = tz;
+  if (Object.keys(merged).length === 0) return path;
+  return `${path}?${new URLSearchParams(merged).toString()}`;
 }

@@ -48,6 +48,12 @@ interface CalendarProps {
    *  Only affects the SSR / no-JS `<a href>` fallbacks. Defaults to
    *  "". */
   basePath?: string;
+  /** The visitor's IANA zone, once known (mig#15) — threaded onto
+   *  every `<a href>` this component renders so /embed's tz query
+   *  param survives month navigation and date picks. Only affects the
+   *  no-JS fallback links; the interactive `onSelect*` path never
+   *  navigates. */
+  tz?: string | null;
 }
 
 const DOW_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -107,6 +113,7 @@ export function Calendar(props: CalendarProps) {
     onSelectDate,
     onSelectMonth,
     basePath = "",
+    tz,
   } = props;
 
   const firstOfMonth = startOfMonth(monthAnchor);
@@ -169,7 +176,7 @@ export function Calendar(props: CalendarProps) {
             )
             : (
               <a
-                href={pickerHref(basePath, { month: prevMonth })}
+                href={pickerHref(basePath, { month: prevMonth }, tz)}
                 aria-label="Previous month"
                 class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                   prevHasContent ? "" : "opacity-30 pointer-events-none"
@@ -194,7 +201,7 @@ export function Calendar(props: CalendarProps) {
             )
             : (
               <a
-                href={pickerHref(basePath, { month: nextMonth })}
+                href={pickerHref(basePath, { month: nextMonth }, tz)}
                 aria-label="Next month"
                 class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                   nextHasContent ? "" : "opacity-30 pointer-events-none"
@@ -293,7 +300,7 @@ export function Calendar(props: CalendarProps) {
           return (
             <a
               key={date}
-              href={pickerHref(basePath, { date })}
+              href={pickerHref(basePath, { date }, tz)}
               aria-label={ariaLabel}
               aria-current={isSelected ? "date" : undefined}
               class={`${cellBase} ${cellState} focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised ${

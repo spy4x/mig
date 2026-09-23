@@ -5,13 +5,17 @@
   Slot links go to /?date=...&slot=HH:MM so the URL stays the source
   of truth — no JS required to advance the booking flow.
 
-  Display TZ: each slot's HH:MM is stored as host-local time (the
-  authoritative value the server books against). The island can pass
-  a `displayTime` per slot — the HH:MM string the visitor actually
-  sees, formatted in their TZ. SSR / no-JS / `/embed` leave it unset
-  and the host-local string renders. Bucketing into Morning /
-  Afternoon / Evening uses `displayTime` when present so the label
-  agrees with the displayed time.
+  Display TZ: each slot's `time` is stored as host-local HH:MM (the
+  authoritative value the server books against). The route/island can
+  pass a `displayTime` per slot — the full "HH:MM, City, UTC±N" clock
+  string the visitor actually sees, in their own zone (mig#15 — every
+  time shown to a person carries its city and offset, not a bare
+  HH:MM). SSR / no-JS leave it unset and the host-local HH:MM renders
+  bare (the visitor's zone genuinely isn't known yet in that case — see
+  the "Times are shown in the host's timezone" note the caller renders
+  alongside). Bucketing into Morning / Afternoon / Evening reads the
+  first two characters of `displayTime` (still HH) when present, so
+  the bucket agrees with the displayed time.
 
   Periods (based on the time being displayed):
     morning   05:00–11:59
@@ -24,10 +28,12 @@ import { pickerHref } from "../lib/picker-links.ts";
 interface SlotCell {
   time: string; // host-local HH:MM, authoritative
   available: boolean;
-  /** Optional visitor-TZ HH:MM. When present, the button renders
-   *  this string instead of `time`, and the period bucket is
-   *  computed from this. Falls back to `time` (host TZ) when
-   *  absent — e.g. SSR pass before hydration, or `/embed`. */
+  /** Optional full "HH:MM, City, UTC±N" clock string in the
+   *  visitor's zone (mig#15). When present, the button renders this
+   *  instead of `time`, and the period bucket is computed from it.
+   *  Falls back to bare `time` (host TZ) when absent — the visitor's
+   *  zone isn't known yet (SSR pass before hydration, or /embed
+   *  before its tz redirect lands). */
   displayTime?: string;
 }
 
@@ -44,6 +50,9 @@ interface TimeSlotsProps {
   /** "" for the standalone page, "/embed" for the iframe variant.
    *  Defaults to "". */
   basePath?: string;
+  /** The visitor's IANA zone, once known (mig#15) — threaded onto
+   *  every slot's `<a href>` so /embed's tz query param survives. */
+  tz?: string | null;
 }
 
 type Period = "morning" | "afternoon" | "evening";
@@ -64,7 +73,7 @@ const PERIOD_LABEL: Record<Period, string> = {
 const PERIOD_ORDER: Period[] = ["morning", "afternoon", "evening"];
 
 export function TimeSlots(
-  { date, dateLabel, slots, selectedSlot, onSelectSlot, basePath = "" }:
+  { date, dateLabel, slots, selectedSlot, onSelectSlot, basePath = "", tz }:
     TimeSlotsProps,
 ) {
   if (slots.length === 0) {
@@ -110,6 +119,7 @@ export function TimeSlots(
                   selected={selectedSlot === s.time}
                   onSelect={onSelectSlot}
                   basePath={basePath}
+                  tz={tz}
                 />
               ))}
             </div>
@@ -121,12 +131,13 @@ export function TimeSlots(
 }
 
 function SlotButton(
-  { date, slot, selected, onSelect, basePath }: {
+  { date, slot, selected, onSelect, basePath, tz }: {
     date: string;
     slot: SlotCell;
     selected: boolean;
     onSelect?: (date: string, slot: string) => void;
     basePath: string;
+    tz?: string | null;
   },
 ) {
   const base =
@@ -174,7 +185,7 @@ function SlotButton(
 
   return (
     <a
-      href={pickerHref(basePath, { date, slot: slot.time })}
+      href={pickerHref(basePath, { date, slot: slot.time }, tz)}
       class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
     >
       {shownTime}

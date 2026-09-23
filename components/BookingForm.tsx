@@ -48,6 +48,13 @@ interface BookingFormProps {
    *  for the iframe variant (posts to /embed/book, no island). Defaults
    *  to "". */
   basePath?: string;
+  /** The visitor's IANA zone, already known from /embed's `tz` query
+   *  param (mig#15) — pre-fills the hidden `guestTz` field so a
+   *  booking is correct even if the confirm step's inline capture
+   *  script (below) never runs. Ignored on the standalone page, which
+   *  has no query-param zone and relies on the BookingSubmit island
+   *  instead. */
+  guestTz?: string | null;
 }
 
 export function BookingForm({
@@ -59,6 +66,7 @@ export function BookingForm({
   error,
   confirmLabel,
   basePath = "",
+  guestTz,
 }: BookingFormProps) {
   const embed = basePath !== "";
   const action = embed ? `${basePath}/book` : "/api/book";
@@ -145,7 +153,12 @@ export function BookingForm({
         }
         {embed && (
           <>
-            <input type="hidden" name="guestTz" id={GUEST_TZ_INPUT_ID} />
+            <input
+              type="hidden"
+              name="guestTz"
+              id={GUEST_TZ_INPUT_ID}
+              value={guestTz ?? ""}
+            />
             <script
               dangerouslySetInnerHTML={{
                 __html: guestTzCaptureScript(GUEST_TZ_INPUT_ID),
