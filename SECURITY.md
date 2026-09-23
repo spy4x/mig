@@ -48,7 +48,7 @@ coordinate disclosure on a timeline that makes sense for the actual exposure.
 
 - Spam protection (honeypot + per-IP rate limit).
 - Tampering with cancel links (HMAC-SHA-256 of random token).
-- Email injection (Zod-validated fields; SMTP via denomailer).
+- Email injection (Zod-validated fields; SMTP via nodemailer).
 - Booking slot conflicts (atomic mutex around read-modify-write).
 
 **Out of scope:**
