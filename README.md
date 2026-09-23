@@ -78,7 +78,7 @@ admin UI.
 ```bash
 docker run -d --name mig \
   -p 8080:8080 \
-  -v ./data:/app/data \
+  -v ./data:/data \
   -e HOST_NAME="Jane Doe" \
   -e HOST_EMAIL="jane@example.com" \
   -e HOST_TZ="Europe/Berlin" \
@@ -96,6 +96,25 @@ docker run -d --name mig \
   antonshubin/mig:latest
 ```
 
+The container runs as `deno`, uid/gid 1993 — not root. `./data` must be writable
+by that uid. A fresh directory only your own user can write is owned by _your_
+uid, not 1993, so make it writable first:
+
+```bash
+mkdir -p ./data && chown 1993:1993 ./data
+```
+
+or, instead of `chown`, run the container as your own user (it already owns the
+directory it just created):
+
+```bash
+docker run --user "$(id -u):$(id -g)" ...
+```
+
+A Docker named volume (`-v mig-data:/data` instead of a host path) needs neither
+step — Docker creates it owned by `deno` already, since `/data` inside the image
+is.
+
 ### Docker Compose
 
 ```yaml
@@ -107,7 +126,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/app/data
+      - ./data:/data
     environment:
       HOST_NAME: "Jane Doe"
       HOST_EMAIL: "jane@example.com"
@@ -124,6 +143,10 @@ services:
       CANCEL_SECRET: "<REDACTED:CANCEL_SECRET>"
       PUBLIC_URL: "https://meet.example.com"
 ```
+
+`./data` needs the same non-root fix as the Docker quick start above
+(`chown 1993:1993 ./data`, or add `user: "1000:1000"` — your own uid/gid — to
+the service).
 
 See `.env.example` for the full list of env vars.
 

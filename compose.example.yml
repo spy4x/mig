@@ -8,8 +8,11 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    # The container runs as uid 1993 (see Dockerfile) — ./data must be
+    # writable by that uid: `chown 1993:1993 ./data`, or add a
+    # `user: "1000:1000"` line above with your own uid:gid instead.
     volumes:
-      - ./data:/app/data
+      - ./data:/data
     env_file:
       - .env
     healthcheck:
