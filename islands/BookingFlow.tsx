@@ -6,6 +6,7 @@ import { DateCard } from "../components/DateCard.tsx";
 import { TimeCard } from "../components/TimeCard.tsx";
 import { BookingForm } from "../components/BookingForm.tsx";
 import { SummaryBar } from "../components/SummaryBar.tsx";
+import { pickerPushAddress } from "../lib/picker-links.ts";
 import {
   formatClockAt,
   formatDateLong,
@@ -249,19 +250,16 @@ export default function BookingFlow(props: BookingFlowProps) {
     slot?: string | null;
     month?: string;
   }): void {
-    const params = new URLSearchParams();
-    if (next.date) params.set("date", next.date);
-    if (next.slot) params.set("slot", next.slot);
-    if (next.month) params.set("month", next.month);
     // mig#18: carries the visitor's zone the same way pickerHref does
     // for the no-JS links below, so a reload, a copied URL, or the
     // back/forward sync above keeps showing the visitor's own clocks
     // instead of falling back to the host's. `linkTz` is declared
     // further down (closed over here; pushUrl is only ever called
     // from a handler, after the initial render has already set it).
-    if (linkTz) params.set("tz", linkTz);
-    const qs = params.toString();
-    const url = qs ? `/?${qs}` : "/";
+    // The address itself is built by lib/picker-links.ts's
+    // pickerPushAddress — see its doc comment for why that's a
+    // separate, unit-tested function rather than inline here.
+    const url = pickerPushAddress(next, linkTz);
     if (globalThis.location.pathname + globalThis.location.search !== url) {
       globalThis.history.pushState({}, "", url);
     }

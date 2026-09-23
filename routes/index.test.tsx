@@ -150,6 +150,28 @@ Deno.test("mig#18: the standalone time card shows the slot's date and clock in t
   assertEquals(dateText.trim(), "Sunday, 27 September 2026");
 });
 
+// mig#18 review follow-up: a reviewer removed `tz` from every link
+// BookingFlow's children render (and from pushUrl) and every existing
+// test stayed green — nothing asserted the no-JS / pre-hydration slot
+// links actually carry it. This renders the real route + island, the
+// same technique as the tests above, and is scoped to a slot link's
+// own `href` rather than a whole-page `includes` — the tz query param
+// also shows up (correctly) elsewhere on the page (the calendar nav,
+// the date card), so a whole-page check wouldn't catch the link this
+// tz actually needs to survive on: the one a no-JS visitor clicks to
+// advance the flow.
+Deno.test("mig#18: standalone / keeps tz on every slot link", async () => {
+  const html = await renderIndex(
+    `http://localhost/?date=${TEST_DATE}&tz=America/New_York`,
+  );
+  const slotLink = html.match(/href="([^"]*slot=[^"]*)"/);
+  assert(slotLink, "expected a slot link in the rendered HTML");
+  assert(
+    slotLink![1].includes("tz=America%2FNew_York"),
+    `expected the slot link to carry tz=, got "${slotLink![1]}"`,
+  );
+});
+
 Deno.test("mig#18: the host-timezone <noscript> note is hidden when the tz query param sets a different zone", async () => {
   // The note claims "Times are shown in the host's timezone" — false
   // once a visitor arrives with a valid, non-host `?tz=`, since the
