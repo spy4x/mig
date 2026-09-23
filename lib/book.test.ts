@@ -137,7 +137,7 @@ setTransportForTesting(defaultTransport());
 // `mail.data.to` / `mail.message.getEnvelope()` access pattern this
 // mirrors.
 interface TestMail {
-  data: { to?: string };
+  data: { to?: string; subject?: string };
   message: { getEnvelope(): unknown };
 }
 type TestSendCallback = (err: Error | null, info?: unknown) => void;
@@ -174,10 +174,17 @@ function failingTransport(message: string) {
 
 /** Test-only transport (mig#19 review round 1): fails only the send
  *  to `addressToFail`, records every other `to` address it succeeds
- *  on. Lets a test single out an owner-send failure from a
+ *  on (and, if `sentSubjects` is passed, each one's subject too —
+ *  round 3 needs that to tell the "New booking" email apart from the
+ *  correction that follows it, both sent `to` the same owner
+ *  address). Lets a test single out an owner-send failure from a
  *  guest-send failure without caring which one lib/email.ts happens
  *  to attempt first. */
-function failingAddressTransport(addressToFail: string, sentTo: string[]) {
+function failingAddressTransport(
+  addressToFail: string,
+  sentTo: string[],
+  sentSubjects?: string[],
+) {
   return nodemailer.createTransport({
     name: "failing-address-test-transport",
     version: "1.0.0",
@@ -188,6 +195,34 @@ function failingAddressTransport(addressToFail: string, sentTo: string[]) {
         return;
       }
       sentTo.push(to);
+      sentSubjects?.push(String(mail.data.subject ?? ""));
+      callback(null, { envelope: mail.message.getEnvelope() });
+    },
+  });
+}
+
+/** Test-only transport (mig#19 review round 3): the very first send
+ *  fails; every send after that succeeds and is recorded (`to` and
+ *  subject). Simulates the owner's own send failing in a way that
+ *  would still reveal a wrongly-sent correction afterward —
+ *  `failingAddressTransport(cfg.hostEmail, ...)` can't do that, since
+ *  it rejects every send to the owner's address, including a
+ *  correction that also targets it, so a bug that skipped the
+ *  `ownerEmailSucceeded` guard would still show up as "nothing sent"
+ *  there. */
+function failFirstSendTransport(sentTo: string[], sentSubjects: string[]) {
+  let calls = 0;
+  return nodemailer.createTransport({
+    name: "fail-first-send-test-transport",
+    version: "1.0.0",
+    send(mail: TestMail, callback: TestSendCallback) {
+      calls++;
+      if (calls === 1) {
+        callback(new Error("simulated SMTP failure for the first send"));
+        return;
+      }
+      sentTo.push(String(mail.data.to));
+      sentSubjects.push(String(mail.data.subject ?? ""));
       callback(null, { envelope: mail.message.getEnvelope() });
     },
   });
@@ -204,8 +239,7 @@ function failingAddressTransport(addressToFail: string, sentTo: string[]) {
  *  the real write `init()` does for a missing file isn't the call
  *  that fails. */
 function makePersistFailOnce(store: BookingsStore, message: string): void {
-  // deno-lint-ignore no-explicit-any
-  const anyStore = store as any;
+  const anyStore = store as unknown as { persist: () => Promise<void> };
   const realPersist: () => Promise<void> = anyStore.persist.bind(store);
   let failed = false;
   anyStore.persist = async () => {
@@ -385,29 +419,34 @@ Deno.test("mig#15 round 2: a slot-taken conflict drops slot from the redirect (k
       status: "active",
     });
   });
-  const ctx = stubContext({
-    config: cfg,
-    bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
-    fields: validFields(date, "09:00", { guestTz: "America/New_York" }),
-  });
+  try {
+    const ctx = stubContext({
+      config: cfg,
+      bookings,
+      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      fields: validFields(date, "09:00", { guestTz: "America/New_York" }),
+    });
 
-  const res = await handleBookingSubmit(ctx, "");
-  assertEquals(res.status, 303);
-  const url = new URL(res.headers.get("location")!);
-  // A gone slot must not come back on the redirect — landing on the
-  // confirm step for it would let the visitor resubmit and trigger a
-  // second, false confirmation email pair (mig#15 round 2).
-  assertEquals(url.searchParams.get("slot"), null);
-  assertEquals(url.searchParams.get("date"), date);
-  assertEquals(url.searchParams.get("tz"), "America/New_York");
-  // mig#19 review round 1: the old message ("The confirmation email
-  // you received is no longer valid") only made sense when Phase 1
-  // sent mail before checking for a conflict. Nothing is ever sent to
-  // the loser now, so the message must not claim otherwise.
-  const err = (url.searchParams.get("err") ?? "").toLowerCase();
-  assertEquals(err.includes("email"), false, err);
-  await rm(path);
+    const res = await handleBookingSubmit(ctx, "");
+    assertEquals(res.status, 303);
+    const url = new URL(res.headers.get("location")!);
+    // A gone slot must not come back on the redirect — landing on the
+    // confirm step for it would let the visitor resubmit and trigger a
+    // second, false confirmation email pair (mig#15 round 2).
+    assertEquals(url.searchParams.get("slot"), null);
+    assertEquals(url.searchParams.get("date"), date);
+    assertEquals(url.searchParams.get("tz"), "America/New_York");
+    // mig#19 review round 1: the old message ("The confirmation email
+    // you received is no longer valid") only made sense when Phase 1
+    // sent mail before checking for a conflict. Nothing is ever sent
+    // to the loser now, so the message must not claim otherwise.
+    const err = (url.searchParams.get("err") ?? "").toLowerCase();
+    assertEquals(err.includes("email"), false, err);
+  } finally {
+    // try/finally (mig#19 review round 3): a red assertion above must
+    // not skip this and leave /tmp/mig-book-test-*.json behind.
+    await rm(path);
+  }
 });
 
 // ─── Rate limit ────────────────────────────────────────────────────────
@@ -614,9 +653,8 @@ Deno.test("mig#19: the loser of a slot race sends no email and stores no booking
     // the winner's persist() has already completed, so the conflict
     // it sees is never stale. None of that depends on wall-clock
     // timing, which is why no gate or sleep is needed to make it
-    // deterministic — see mutation (a) in the PR body: reverting
-    // lib/book.ts to send-then-save turns this test red without any
-    // change here.
+    // deterministic: reverting lib/book.ts to send-then-save turns
+    // this test red without any change here.
     const alicePromise = handleBookingSubmit(
       stubContext({
         config: cfg,
@@ -816,16 +854,19 @@ Deno.test("mig#19: a persist failure on the initial save leaves nothing behind a
 
 // ─── mig#19 review round 1: owner email goes out first, then guest ──────
 
-Deno.test("mig#19: a guest-send failure still reaches the owner first, then rolls back", async () => {
+Deno.test("mig#19: a guest-send failure corrects the owner after rolling back", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
   const sentTo: string[] = [];
+  const sentSubjects: string[] = [];
   // validFields()'s default guest address.
   const guestEmail = "visitor@example.com";
-  setTransportForTesting(failingAddressTransport(guestEmail, sentTo));
+  setTransportForTesting(
+    failingAddressTransport(guestEmail, sentTo, sentSubjects),
+  );
 
   try {
     const res = await handleBookingSubmit(
@@ -838,10 +879,21 @@ Deno.test("mig#19: a guest-send failure still reaches the owner first, then roll
       "",
     );
     assertEquals(res.status, 303);
-    // Owner-first (lib/email.ts's sendBookingEmails): the owner's send
-    // is attempted, and succeeds, before the guest's send is even
-    // tried.
-    assertEquals(sentTo, [cfg.hostEmail], `sent: ${sentTo}`);
+    // mig#19 review round 3: the owner gets exactly two emails — the
+    // "New booking" one (which is why a correction is owed at all),
+    // then the correction, both `to` the owner since the guest's send
+    // never succeeds here. The guest gets neither.
+    assertEquals(sentTo, [cfg.hostEmail, cfg.hostEmail], `sent: ${sentTo}`);
+    assertEquals(sentSubjects.length, 2, `subjects: ${sentSubjects}`);
+    assertStringIncludes(sentSubjects[0], "New booking");
+    // "or similar" per the review: this pins the correction subject's
+    // intent, not its exact copy — see sendBookingCorrectionEmail in
+    // lib/email.ts for the literal text.
+    assertEquals(
+      /not.*(booked|created)/i.test(sentSubjects[1]),
+      true,
+      `correction subject: ${sentSubjects[1]}`,
+    );
     assertStringIncludes(
       new URL(res.headers.get("location")!).searchParams.get("err") ?? "",
       "the booking was not created",
@@ -858,14 +910,21 @@ Deno.test("mig#19: a guest-send failure still reaches the owner first, then roll
   }
 });
 
-Deno.test("mig#19: an owner-send failure reaches nobody, then rolls back", async () => {
+Deno.test("mig#19: an owner-send failure reaches nobody, sends no correction", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
   const sentTo: string[] = [];
-  setTransportForTesting(failingAddressTransport(cfg.hostEmail, sentTo));
+  const sentSubjects: string[] = [];
+  // failFirstSendTransport, not failingAddressTransport: a correction
+  // that were wrongly sent despite the owner send failing would also
+  // target the owner's address, so a transport that always rejects
+  // that address couldn't tell "no correction attempted" apart from
+  // "a correction was attempted and also rejected". Failing only the
+  // first call can.
+  setTransportForTesting(failFirstSendTransport(sentTo, sentSubjects));
 
   try {
     const res = await handleBookingSubmit(
@@ -878,13 +937,14 @@ Deno.test("mig#19: an owner-send failure reaches nobody, then rolls back", async
       "",
     );
     assertEquals(res.status, 303);
-    // Owner-first means an owner-side failure never reaches the
-    // guest's send at all: sendBookingEmails awaits the owner send
-    // first and throws straight out of that await, so the guest send
-    // a moment later in the function body never runs. Swap the order
-    // in lib/email.ts back to guest-first and this goes red: the
-    // guest send would succeed before the owner one failed.
+    // lib/book.ts awaits sendOwnerBookingEmail first and throws
+    // straight out of that await on failure, so neither the guest
+    // send nor (since `ownerEmailSucceeded` never got set) the
+    // correction ever runs. Swap lib/book.ts's two `await
+    // send*BookingEmail` calls and this goes red: the guest send
+    // would succeed (as the second call) before the owner one failed.
     assertEquals(sentTo, [], `sent: ${sentTo}`);
+    assertEquals(sentSubjects, [], `subjects: ${sentSubjects}`);
     assertEquals(
       bookings.list().filter((b) => b.date === date && b.time === "09:00")
         .length,

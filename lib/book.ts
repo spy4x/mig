@@ -11,7 +11,11 @@
 import type { Context } from "fresh";
 import type { State } from "./utils.ts";
 import { generateBookingId, newCancelToken } from "./tokens.ts";
-import { sendBookingEmails } from "./email.ts";
+import {
+  sendBookingCorrectionEmail,
+  sendGuestBookingEmail,
+  sendOwnerBookingEmail,
+} from "./email.ts";
 import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts";
 import { clientIp, humanRetry } from "./ratelimit.ts";
 import { zonedDateTime } from "./tz.ts";
@@ -252,9 +256,13 @@ export async function handleBookingSubmit(
         if (idx !== -1) draft.splice(idx, 1);
       });
     } catch (rollbackErr) {
+      // mutate() assigns `this.bookings = draft` *before* it awaits
+      // persist(), so the in-memory removal above always lands even
+      // when this second write also fails — only the on-disk copy can
+      // still hold the booking here.
       console.error(
         "mig: rollback FAILED after persist failed; booking=" +
-          bookingId + " may still be lingering in memory",
+          bookingId + " may still be on disk",
         rollbackErr,
       );
     }
@@ -264,15 +272,22 @@ export async function handleBookingSubmit(
     );
   }
 
-  // Phase 2: the booking is saved — send the emails. A failed send
-  // here undoes the save instead of leaving a booking on disk with no
-  // confirmation and no working cancel link.
+  // Phase 2: the booking is saved — send the emails, owner first
+  // (lib/email.ts). A failed send here undoes the save instead of
+  // leaving a booking on disk with no confirmation and no working
+  // cancel link. `ownerEmailSucceeded` records whether the owner's
+  // "New booking" email actually went out before a later failure, so
+  // the catch block below knows whether it needs to correct that
+  // email rather than just roll the booking back silently.
+  let ownerEmailSucceeded = false;
   try {
     const cancelUrl = new URL(
       `/cancel?id=${bookingId}&token=${tokenRaw}`,
       cfg.publicUrl,
     ).toString();
-    await sendBookingEmails(cfg, booking, cancelUrl);
+    await sendOwnerBookingEmail(cfg, booking, cancelUrl);
+    ownerEmailSucceeded = true;
+    await sendGuestBookingEmail(cfg, booking, cancelUrl);
   } catch (e) {
     const msg = (e as Error).message;
     console.error("mig: email send failed; rolling back booking:", msg);
@@ -297,6 +312,23 @@ export async function handleBookingSubmit(
           bookingId + " may still be on disk with no email sent",
         rollbackErr,
       );
+    }
+    // mig#19 review round 3: the owner's "New booking" email (and
+    // calendar invite) already went out above — correct it, since the
+    // NTFY push just above is optional and off unless NTFY_* is
+    // configured. No correction when the owner send itself was the
+    // one that failed: in that case nobody got anything to correct.
+    if (ownerEmailSucceeded) {
+      try {
+        await sendBookingCorrectionEmail(cfg, booking);
+      } catch (correctionErr) {
+        console.error(
+          "mig: correction email FAILED after rollback; booking=" +
+            bookingId +
+            "; host still has a stale 'New booking' email and invite",
+          correctionErr,
+        );
+      }
     }
     return errRedirect(
       "We couldn't send your confirmation email, so the booking was not created. Please try again in a moment.",
