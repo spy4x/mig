@@ -161,7 +161,9 @@ Deno.test("mig#19 review round 3: email-failed NTFY body says the booking was no
   const cfg = makeConfig();
   const booking = makeCrossZoneBooking("America/New_York");
   const body = await captureNtfyBody(() =>
-    notifyBookingEmailFailed(cfg, booking, "simulated SMTP failure")
+    notifyBookingEmailFailed(cfg, booking, "simulated SMTP failure", {
+      rolledBack: true,
+    })
   );
 
   // The previous wording ("booking confirmation email failed to
@@ -192,4 +194,43 @@ Deno.test("email-failed NTFY body does not claim removal when the rollback itsel
   assertEquals(lower.includes("free"), false, body);
   assertStringIncludes(lower, "may still be on disk");
   assertStringIncludes(body, booking.id);
+});
+
+Deno.test("email-failed NTFY push pins the rollback-failed title, priority, and tag", async () => {
+  const cfg = makeConfig();
+  const booking = makeCrossZoneBooking("America/New_York");
+  const originalFetch = globalThis.fetch;
+  let headers: Headers | undefined;
+  globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
+    headers = init?.headers instanceof Headers
+      ? init.headers
+      : new Headers(init?.headers);
+    return Promise.resolve(new Response(null, { status: 200 }));
+  }) as typeof fetch;
+  Deno.env.set("NTFY_URL", "https://ntfy.example.com");
+  Deno.env.set("NTFY_TOPIC", "mig-test");
+  Deno.env.set("NTFY_TOKEN", "test-token");
+
+  try {
+    await notifyBookingEmailFailed(cfg, booking, "simulated SMTP failure", {
+      rolledBack: false,
+    });
+    // Pinned so a later edit can't silently drop the rollback-failed
+    // signal back to the same title/priority/tags the success case
+    // uses — a host triaging a stack of pushes by title or priority
+    // alone must be able to tell the two apart without reading the
+    // body.
+    assertEquals(
+      headers?.get("Title"),
+      "mig: NOT booked, remove by hand - Visitor",
+    );
+    assertEquals(headers?.get("Priority"), "5");
+    assertStringIncludes(headers?.get("Tags") ?? "", "rollback-failed");
+  } finally {
+    globalThis.fetch = originalFetch;
+    Deno.env.delete("NTFY_URL");
+    Deno.env.delete("NTFY_TOPIC");
+    Deno.env.delete("NTFY_TOKEN");
+    Deno.env.delete("NTFY_MODE");
+  }
 });

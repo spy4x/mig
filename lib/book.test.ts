@@ -1044,7 +1044,16 @@ Deno.test("handleBookingSubmit: a guest-send failure with a working store pushes
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
-  setTransportForTesting(failingTransport("SMTP send failed (mig test)"));
+  const sentTo: string[] = [];
+  // validFields()'s default guest address — failingAddressTransport
+  // fails only that one, so the owner send (attempted first in
+  // lib/book.ts) actually succeeds and the guest send is the one that
+  // fails, the same shape as a real guest-send failure. failingTransport
+  // fails every send, which would fail the owner's send instead — not
+  // what this test claims to exercise.
+  setTransportForTesting(
+    failingAddressTransport("visitor@example.com", sentTo),
+  );
 
   const originalFetch = globalThis.fetch;
   let pushBody = "";
@@ -1067,6 +1076,15 @@ Deno.test("handleBookingSubmit: a guest-send failure with a working store pushes
       "",
     );
     assertEquals(res.status, 303);
+    // The owner gets two emails — "New booking", then the correction
+    // lib/book.ts sends once it knows the booking was rolled back
+    // (mig#19 review round 3) — both `to` the owner, since the guest
+    // send is the one that failed here.
+    assertEquals(
+      sentTo,
+      [cfg.hostEmail, cfg.hostEmail],
+      `the owner must have gotten "New booking" then the correction: ${sentTo}`,
+    );
     const lower = pushBody.toLowerCase();
     assertStringIncludes(lower, "removed");
     assertStringIncludes(lower, "free");
@@ -1096,7 +1114,13 @@ Deno.test("handleBookingSubmit: a guest-send failure where the rollback write al
   // rollback's own write, triggered by the email-send failure below.
   makePersistFailOnCall(bookings, 2, "simulated disk write failure");
   const date = futureWeekday(3, HOST_TZ);
-  setTransportForTesting(failingTransport("SMTP send failed (mig test)"));
+  const sentTo: string[] = [];
+  // Fails only the guest address, same reasoning as the test above:
+  // the owner send must actually succeed so the guest send is the one
+  // that fails and triggers the rollback this test is about.
+  setTransportForTesting(
+    failingAddressTransport("visitor@example.com", sentTo),
+  );
 
   const originalFetch = globalThis.fetch;
   let pushBody = "";
@@ -1119,6 +1143,14 @@ Deno.test("handleBookingSubmit: a guest-send failure where the rollback write al
       "",
     );
     assertEquals(res.status, 303);
+    // Same "New booking" + correction shape as the test above — the
+    // rollback's own write failing doesn't change whether the owner
+    // send succeeded, only whether the rollback did.
+    assertEquals(
+      sentTo,
+      [cfg.hostEmail, cfg.hostEmail],
+      `the owner must have gotten "New booking" then the correction: ${sentTo}`,
+    );
     const lower = pushBody.toLowerCase();
     assertEquals(
       lower.includes("removed"),
@@ -1161,13 +1193,79 @@ Deno.test("handleBookingSubmit: a guest-send failure where the rollback write al
   }
 });
 
+Deno.test("handleBookingSubmit: a failed owner send where the rollback write also fails pushes a neutral NTFY notice, not one naming the confirmation email", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  makePersistFailOnCall(bookings, 2, "simulated disk write failure");
+  const date = futureWeekday(3, HOST_TZ);
+  const sentTo: string[] = [];
+  // Fails every send to the owner's address — lib/book.ts sends the
+  // owner's "New booking" email first, so this fails on that very
+  // first send and the guest send is never attempted. `sentTo` staying
+  // empty below is what proves it was the owner's own send that
+  // failed, not the guest's confirmation.
+  setTransportForTesting(failingAddressTransport(cfg.hostEmail, sentTo));
+
+  const originalFetch = globalThis.fetch;
+  let pushBody = "";
+  globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
+    pushBody = String(init?.body ?? "");
+    return Promise.resolve(new Response(null, { status: 200 }));
+  }) as typeof fetch;
+  Deno.env.set("NTFY_URL", "https://ntfy.example.com");
+  Deno.env.set("NTFY_TOPIC", "mig-test");
+  Deno.env.set("NTFY_TOKEN", "test-token");
+
+  try {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        fields: validFields(date, "09:00"),
+      }),
+      "",
+    );
+    assertEquals(res.status, 303);
+    assertEquals(
+      sentTo,
+      [],
+      `nothing should have sent — the owner's own send must be the one that failed: ${sentTo}`,
+    );
+    const lower = pushBody.toLowerCase();
+    assertEquals(
+      lower.includes("confirmation email"),
+      false,
+      `push must not blame "the confirmation email" when the owner's own send failed: ${pushBody}`,
+    );
+    assertStringIncludes(lower, "an email failed to send");
+    assertStringIncludes(lower, "may still be on disk");
+  } finally {
+    globalThis.fetch = originalFetch;
+    Deno.env.delete("NTFY_URL");
+    Deno.env.delete("NTFY_TOPIC");
+    Deno.env.delete("NTFY_TOKEN");
+    Deno.env.delete("NTFY_MODE");
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
 Deno.test("handleBookingSubmit: the NTFY push for a failed send happens after the rollback has already run", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
-  setTransportForTesting(failingTransport("SMTP send failed (mig test)"));
+  const sentTo: string[] = [];
+  // Fails only the guest address — the owner send goes out first and
+  // must succeed, so the rollback this test measures the push against
+  // is triggered by a real guest-send failure, not the owner's.
+  setTransportForTesting(
+    failingAddressTransport("visitor@example.com", sentTo),
+  );
 
   const originalFetch = globalThis.fetch;
   let storeSizeAtPushTime = -1;
@@ -1194,6 +1292,12 @@ Deno.test("handleBookingSubmit: the NTFY push for a failed send happens after th
       "",
     );
     assertEquals(res.status, 303);
+    // Same "New booking" + correction shape as the two tests above.
+    assertEquals(
+      sentTo,
+      [cfg.hostEmail, cfg.hostEmail],
+      `the owner must have gotten "New booking" then the correction: ${sentTo}`,
+    );
     assertEquals(
       storeSizeAtPushTime,
       0,
