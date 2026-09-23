@@ -15,9 +15,11 @@
   binary from `deno task compile`, which is a separate, unused-in-prod option.
   The runtime stage runs as `deno` (uid/gid 1993, already created by the base
   image), not root; `/data` (`DATA_PATH`'s parent dir) is created and chowned to
-  `deno` before `USER deno`, so a Docker named volume mounted there inherits
-  that ownership. A host bind mount needs to be writable by uid 1993 itself —
-  see README's Docker quick start.
+  `deno` before `USER deno`, so a _new_, empty Docker named volume mounted there
+  inherits that ownership. A named volume mig already wrote to under an older,
+  root-run image stays owned by root — see CHANGELOG's upgrade note. A host bind
+  mount needs to be writable by uid 1993 itself — see README's Docker quick
+  start.
 - **CI:** Woodpecker `check` step — `deno install --frozen`, `deno task check`
   (fmt --check + lint + type check), `deno task test`, `deno task build` — on
   every push, pull request, tag and manual run; a tag-only `release` step then

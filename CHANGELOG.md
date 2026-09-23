@@ -40,28 +40,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   relative `./data` it has no permission to create inside the container.
   `lib/config.ts` already defaults to the same path, so nothing needs it set
   explicitly for a Docker deployment.
-- The push notification sent after a failed booking email now says whether the
-  booking was actually removed, instead of always claiming the rollback
-  succeeded (#28).
 
 **Upgrade note.** Changing only the image, without also changing your mount,
 loses existing bookings — read the step for your setup before redeploying.
 
-**Step zero, everyone: change the mount.** Wherever your `docker run` command or
-`compose.yml` has `./data:/app/data`, change it to `./data:/data:z`. The image
-stores bookings at `/data/bookings.json`; if you also remove `DATA_PATH` from
-your `.env` (see above) without changing the mount too, storage silently moves
-back inside the container — nothing lands on the host, and it's gone on the next
-re-create.
-
 **If you followed the README's `docker run` command or its Docker Compose
 snippet** (no `DATA_PATH` set): your bookings only ever lived inside the old
 container, at `/data/bookings.json` — the `/app/data` mount was never read from.
-Rescue them before you recreate the container:
+Rescue them first, before you touch the mount or recreate the container:
 
 ```bash
 docker stop mig
 docker cp mig:/data/bookings.json .
+docker rm mig
 sudo mv bookings.json ./data/bookings.json
 sudo chown -R 1993:1993 ./data
 ```
@@ -69,8 +60,19 @@ sudo chown -R 1993:1993 ./data
 `docker cp` can't write straight into `./data` — Docker auto-created that
 directory owned by root when the old container first started, since the old
 instructions never had you create it yourself. Copy to the current directory
-first, then move it in. Once the file is in place, apply the mount change above
-and redeploy.
+first, then move it in. `docker rm mig` clears the stopped container so the next
+`docker run --name mig ...` (or `docker compose up`) doesn't fail with "name
+already in use". Once the file is in place, apply the mount change below, keep
+the same `CANCEL_SECRET` value your old container used so cancel links already
+sent by email keep working, and redeploy.
+
+**Everyone: change the mount.** Wherever your `docker run` command or
+`compose.yml` has `./data:/app/data`, change it to `./data:/data:z` — only the
+container side of the mount moves, from `/app/data` to `/data`; the host path
+(`./data`) stays the same. The image stores bookings at `/data/bookings.json`;
+if you also remove `DATA_PATH` from your `.env` (see above) without changing the
+mount too, storage silently moves back inside the container — nothing lands on
+the host, and it's gone on the next re-create.
 
 **If you followed `compose.example.yml` with `.env.example`'s
 `DATA_PATH=./data/bookings.json`:** your bookings are already on the host, at
@@ -83,12 +85,31 @@ sudo chown -R 1993:1993 ./data
 
 and redeploy.
 
+**If you're on a Docker named volume** (`-v <volume>:/data`) that mig already
+wrote to before this change: it's still owned by root from the old image, so
+`/health` answers fine but every booking fails with "We couldn't save your
+booking" until you chown the volume too:
+
+```bash
+docker run --rm -v <volume>:/data alpine chown -R 1993:1993 /data
+```
+
+A brand-new, empty named volume needs no such step — see `AGENTS.md`.
+
 Two things that apply either way: `:z` relabels the _entire_ directory for
 container access, so point it only at a folder that belongs to mig alone, never
 a home directory, `/srv`, or `/etc`. And `sudo chown 1993:1993` assumes rootful
-Docker; rootless Docker or Podman remap container uids to a different host
-range, so there use `--user`/a compose `user:` line instead of chowning anything
-to 1993 — see the README's Docker quick start for both notes in full.
+Docker; rootless Podman remaps container uids to a different host range, so
+there use `--userns=keep-id --user "$(id -u):$(id -g)"` instead of chowning
+anything to 1993 — see the README's Docker quick start for that command in full.
+
+## [0.3.1] - 2026-09-23
+
+### Fixed
+
+- The push notification sent after a failed booking email now says whether the
+  booking was actually removed, instead of always claiming the rollback
+  succeeded (#28).
 
 ## [0.3.0] - 2026-09-23
 
@@ -144,6 +165,7 @@ single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
 [Unreleased]: https://github.com/spy4x/mig/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/spy4x/mig/compare/v0.3.0...v0.4.0
+[0.4.0]: https://github.com/spy4x/mig/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/spy4x/mig/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/spy4x/mig/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/spy4x/mig/releases/tag/v0.2.0

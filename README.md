@@ -107,16 +107,23 @@ sudo chown 1993:1993 ./data
 ```
 
 `chown`ing to a different uid needs root, hence `sudo`; a plain `chown` as your
-own user fails with "Operation not permitted". This also assumes rootful Docker
-— rootless Docker and Podman remap container uids to a different host range, so
-`chown 1993:1993` is meaningless there; use `--user`/`user:` below instead. If
-you'd rather not use `sudo` (or you're on rootless Docker/Podman), run the
-container as your own user instead — this works because you created `./data`
-yourself above, so you already own it:
+own user fails with "Operation not permitted". If you'd rather not use `sudo`
+(on regular, rootful Docker), run the container as your own user instead — this
+works because you created `./data` yourself above, so you already own it:
 
 ```bash
 mkdir -p ./data
 docker run --user "$(id -u):$(id -g)" ...
+```
+
+This also assumes rootful Docker — rootless Podman remaps container uids to a
+different host range, so `chown 1993:1993` is meaningless there, and plain
+`--user` alone fails with "Permission denied". On rootless Podman, add
+`--userns=keep-id` too:
+
+```bash
+mkdir -p ./data
+podman run --userns=keep-id --user "$(id -u):$(id -g)" ...
 ```
 
 A **new, empty** Docker named volume (`-v mig-data:/data` instead of a host
