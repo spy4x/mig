@@ -146,8 +146,15 @@ commands, so the pipeline can't drift from `deno task check`:
 - `deno task build`
 
 `check` runs on push, pull request, tag and `manual` events, so it can also be
-started by hand from the Woodpecker UI. There is no publish step yet: images on
-Docker Hub are pushed by hand (see #21).
+started by hand from the Woodpecker UI.
+
+`release` runs after `check` on a `v*` tag and publishes `antonshubin/mig` to
+Docker Hub: `v1.2.3` and `latest`, built with `MIG_VERSION=1.2.3`. A pre-release
+tag such as `v1.2.3-rc.1` is published under its own name and never moves
+`latest`. The step uses the agent's Docker daemon through its socket, so the
+repository must stay trusted for volumes in Woodpecker. It logs in with the
+global Woodpecker secrets `DOCKER_USERNAME` and `DOCKER_PASSWORD`, available on
+push, tag and release events.
 
 Woodpecker substitutes `${VAR}` in the whole file before it parses the YAML,
 including steps that will not run. An empty variable can turn a command into

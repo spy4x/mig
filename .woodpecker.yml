@@ -9,3 +9,33 @@ steps:
       - deno task check
       - deno task test
       - deno task build
+
+  # Publishes antonshubin/mig to Docker Hub when a v* tag is pushed. Talks to the
+  # agent's Docker daemon through its socket, so the repository must be trusted
+  # for volumes in Woodpecker. DOCKER_USERNAME and DOCKER_PASSWORD are global
+  # Woodpecker secrets. Every runtime variable is written $$ so Woodpecker leaves
+  # it for the shell (see AGENTS.md, CI).
+  release:
+    image: docker:29
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DOCKER_USERNAME:
+        from_secret: DOCKER_USERNAME
+      DOCKER_PASSWORD:
+        from_secret: DOCKER_PASSWORD
+    commands:
+      - echo "$$DOCKER_PASSWORD" | docker login -u "$$DOCKER_USERNAME" --password-stdin
+      - |
+          set -e
+          IMAGE=antonshubin/mig
+          # A pre-release tag (v1.2.3-rc.1) is published under its own name only;
+          # it never moves latest.
+          case "$${CI_COMMIT_TAG}" in *-*) LATEST= ;; *) LATEST=1 ;; esac
+          docker build --pull --build-arg MIG_VERSION="$${CI_COMMIT_TAG#v}" \
+            -t "$$IMAGE:$${CI_COMMIT_TAG}" $${LATEST:+-t "$$IMAGE:latest"} .
+          docker push "$$IMAGE:$${CI_COMMIT_TAG}"
+          if [ -n "$$LATEST" ]; then docker push "$$IMAGE:latest"; fi
+    when:
+      event: tag
+      ref: refs/tags/v*
