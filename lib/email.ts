@@ -137,6 +137,17 @@ export async function sendGuestBookingEmail(
   await sendEmail(config, guest);
 }
 
+export interface CorrectionEmailOpts {
+  /** Whether the post-send-failure rollback actually removed the
+   *  booking, mirroring EmailFailedOpts.rolledBack in lib/notify.ts.
+   *  Required — no default, so a caller can't forget to check the
+   *  rollback's own outcome and repeat the bug this option exists to
+   *  fix: claiming the booking "was removed and the slot is free
+   *  again" when the rollback's own disk write also failed and the
+   *  booking may still be on disk. */
+  rolledBack: boolean;
+}
+
 // mig#19 review round 3: sent by lib/book.ts only when the owner's
 // "New booking" email went out and the guest's one then failed — by
 // the time this runs, the booking has already been rolled back, so
@@ -144,10 +155,17 @@ export async function sendGuestBookingEmail(
 // for a meeting that no longer exists, and the only other signal (the
 // NTFY push in lib/notify.ts) is optional and off unless NTFY_* is
 // configured.
+//
+// mig#27: the text above assumed the rollback always succeeded. When
+// the rollback's own disk write fails too (lib/book.ts's `rolledBack`
+// goes false), the booking may still be on disk and come back after a
+// restart — `opts.rolledBack` picks the matching wording instead.
 export async function sendBookingCorrectionEmail(
   config: Config,
   booking: Booking,
+  opts: CorrectionEmailOpts,
 ): Promise<void> {
+  const { rolledBack } = opts;
   const ownerWhenShort = formatOwnerClock(
     booking.date,
     booking.time,
@@ -163,9 +181,11 @@ export async function sendBookingCorrectionEmail(
   );
   await sendEmail(config, {
     to: config.hostEmail,
-    subject: `Not booked: ${booking.guestName}, ${ownerWhenShort}`,
-    text: correctionText(config, booking, ownerWhenLong),
-    html: correctionHtml(config, booking, ownerWhenLong),
+    subject: rolledBack
+      ? `Not booked: ${booking.guestName}, ${ownerWhenShort}`
+      : `Not booked, remove by hand: ${booking.guestName}, ${ownerWhenShort}`,
+    text: correctionText(config, booking, ownerWhenLong, rolledBack),
+    html: correctionHtml(config, booking, ownerWhenLong, rolledBack),
     // No .ics attachment: properly retracting the invite already sent
     // needs a METHOD:CANCEL companion (same UID, a higher SEQUENCE)
     // to the METHOD:REQUEST one — generateIcs in lib/ics.ts only ever
@@ -179,19 +199,28 @@ function correctionText(
   config: Config,
   booking: Booking,
   ownerWhen: string,
+  rolledBack: boolean,
 ): string {
   return [
     `Hi ${config.hostName},`,
     "",
-    "The booking below was NOT created after all.",
+    rolledBack
+      ? "The booking below was NOT created after all."
+      : "The booking below was NOT confirmed.",
     "",
     `Guest: ${booking.guestName} <${booking.guestEmail}>`,
     `When:  ${ownerWhen}`,
     "",
-    "The guest's confirmation email failed to send, so the booking " +
-    "was removed and the slot is free again. Please disregard the " +
-    '"New booking" email and calendar invite you received a moment ' +
-    "ago.",
+    rolledBack
+      ? "The guest's confirmation email failed to send, so the booking " +
+        "was removed and the slot is free again. Please disregard the " +
+        '"New booking" email and calendar invite you received a moment ' +
+        "ago."
+      : "The guest's confirmation email failed to send, and removing " +
+        "the booking failed too. It may still be on disk and come " +
+        `back after a restart. Remove it by hand: booking id ${booking.id} ` +
+        'in the data file. Please disregard the "New booking" email ' +
+        "and calendar invite you received a moment ago.",
     "",
     "— Sent by mig",
   ].join("\n");
@@ -201,12 +230,17 @@ function correctionHtml(
   config: Config,
   booking: Booking,
   ownerWhen: string,
+  rolledBack: boolean,
 ): string {
   return htmlWrap(
     config,
     `
     <p>Hi ${esc(config.hostName)},</p>
-    <p>The booking below was <strong>NOT</strong> created after all.</p>
+    ${
+      rolledBack
+        ? "<p>The booking below was <strong>NOT</strong> created after all.</p>"
+        : "<p>The booking below was <strong>NOT</strong> confirmed.</p>"
+    }
     <table style="border-collapse:collapse;margin:16px 0">
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Guest</td>
           <td style="padding:4px 0">${esc(booking.guestName)} &lt;${
@@ -215,10 +249,20 @@ function correctionHtml(
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">When</td>
           <td style="padding:4px 0">${esc(ownerWhen)}</td></tr>
     </table>
-    <p>The guest's confirmation email failed to send, so the booking
+    ${
+      rolledBack
+        ? `<p>The guest's confirmation email failed to send, so the booking
     was removed and the slot is free again. Please disregard the
     &ldquo;New booking&rdquo; email and calendar invite you received a
-    moment ago.</p>
+    moment ago.</p>`
+        : `<p>The guest's confirmation email failed to send, and removing
+    the booking failed too. It may still be on disk and come back
+    after a restart. Remove it by hand: booking id ${
+          esc(booking.id)
+        } in the data file. Please disregard the &ldquo;New
+    booking&rdquo; email and calendar invite you received a moment
+    ago.</p>`
+    }
   `,
   );
 }

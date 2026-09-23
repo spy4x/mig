@@ -1,5 +1,11 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { buildBookingEmails, buildCancellationEmails } from "./email.ts";
+import nodemailer from "nodemailer";
+import {
+  buildBookingEmails,
+  buildCancellationEmails,
+  sendBookingCorrectionEmail,
+  setTransportForTesting,
+} from "./email.ts";
 import type { Booking, Config } from "./types.ts";
 
 function makeConfig(): Config {
@@ -316,4 +322,115 @@ Deno.test("mig#15 review: guest email notes the host-timezone fallback when the 
     emails.guest.html!,
     "Times are shown in the host's timezone.",
   );
+});
+
+// ─── mig#27: sendBookingCorrectionEmail must tell the truth about the rollback ──
+
+interface RecordedMail {
+  to?: string;
+  subject?: string;
+  text?: string;
+  html?: string;
+}
+
+/** Test-only transport: records every email sent to it and resolves
+ *  each one immediately, no network I/O — a custom `send()` transport,
+ *  same "recording transport" spirit as lib/book.test.ts's
+ *  recordingTransport (which is also not jsonTransport-backed). */
+function recordingTransport(sent: RecordedMail[]) {
+  return nodemailer.createTransport({
+    name: "email-test-recording-transport",
+    version: "1.0.0",
+    send(
+      mail: { data: RecordedMail; message: { getEnvelope(): unknown } },
+      callback: (err: Error | null, info?: unknown) => void,
+    ) {
+      sent.push({
+        to: mail.data.to,
+        subject: mail.data.subject,
+        text: mail.data.text,
+        html: mail.data.html,
+      });
+      callback(null, { envelope: mail.message.getEnvelope() });
+    },
+  });
+}
+
+Deno.test("sendBookingCorrectionEmail: rolledBack true keeps the removed/free wording unchanged", async () => {
+  const sent: RecordedMail[] = [];
+  setTransportForTesting(recordingTransport(sent));
+  try {
+    await sendBookingCorrectionEmail(makeConfig(), makeBooking(), {
+      rolledBack: true,
+    });
+    assertEquals(sent.length, 1);
+    assertStringIncludes(sent[0].subject ?? "", "Not booked:");
+    assertStringIncludes(
+      sent[0].text ?? "",
+      "The booking below was NOT created after all.",
+    );
+    assertStringIncludes(
+      sent[0].text ?? "",
+      "was removed and the slot is free again",
+    );
+    assertStringIncludes(
+      sent[0].html ?? "",
+      "was removed and the slot is free again",
+    );
+  } finally {
+    setTransportForTesting(null);
+  }
+});
+
+Deno.test("sendBookingCorrectionEmail: rolledBack false does not claim the booking was removed or the slot is free", async () => {
+  const sent: RecordedMail[] = [];
+  setTransportForTesting(recordingTransport(sent));
+  try {
+    const booking = makeBooking();
+    await sendBookingCorrectionEmail(makeConfig(), booking, {
+      rolledBack: false,
+    });
+    assertEquals(sent.length, 1);
+    assertStringIncludes(sent[0].subject ?? "", "Not booked, remove by hand:");
+    const text = sent[0].text ?? "";
+    const html = sent[0].html ?? "";
+    assertEquals(/removed|free/i.test(text), false, `text: ${text}`);
+    assertEquals(/removed|free/i.test(html), false, `html: ${html}`);
+    // The HTML wraps "NOT" in <strong>...</strong>, so a plain
+    // substring check on "NOT created" would never match either way —
+    // these allow markup (or a single space) between "not" and
+    // "created" so the assertion actually exercises the wording.
+    assertEquals(/not\s*created/i.test(text), false, `text: ${text}`);
+    assertEquals(
+      /not(<[^>]+>|\s)*created/i.test(html),
+      false,
+      `html: ${html}`,
+    );
+    assertStringIncludes(text, booking.id);
+    assertStringIncludes(html, booking.id);
+    assertStringIncludes(text.toLowerCase(), "remove it by hand");
+    assertStringIncludes(text, '"New booking"');
+    assertStringIncludes(text, "after a restart");
+    assertStringIncludes(html, "after a restart");
+    assertStringIncludes(html, "disregard");
+  } finally {
+    setTransportForTesting(null);
+  }
+});
+
+Deno.test("sendBookingCorrectionEmail: rolledBack false HTML-escapes the booking id", async () => {
+  const sent: RecordedMail[] = [];
+  setTransportForTesting(recordingTransport(sent));
+  try {
+    const booking = { ...makeBooking(), id: `id<&">` };
+    await sendBookingCorrectionEmail(makeConfig(), booking, {
+      rolledBack: false,
+    });
+    assertEquals(sent.length, 1);
+    const html = sent[0].html ?? "";
+    assertStringIncludes(html, "id&lt;&amp;&quot;&gt;");
+    assertEquals(html.includes(booking.id), false, `html: ${html}`);
+  } finally {
+    setTransportForTesting(null);
+  }
 });
