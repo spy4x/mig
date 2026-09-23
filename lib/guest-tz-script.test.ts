@@ -31,6 +31,16 @@ Deno.test("shouldRedirectTz: never redirects when the param already matches — 
   );
 });
 
+Deno.test("shouldRedirectTz: never redirects for a modern zone name the browser itself reports", () => {
+  // mig#15 round 2: canonicalizing "Asia/Kolkata" to "Asia/Calcutta"
+  // server-side (round 1's bug) meant a browser that itself detects
+  // and reports the modern name would never see its own value
+  // reflected back in the URL, redirecting on every single load. Now
+  // that canonicalization leaves modern names alone, the URL and the
+  // detected zone actually agree once the first redirect lands.
+  assertEquals(shouldRedirectTz("Asia/Kolkata", "Asia/Kolkata"), false);
+});
+
 Deno.test("embedTzRedirectScript: mirrors shouldRedirectTz's comparison", () => {
   const script = embedTzRedirectScript();
   assert(

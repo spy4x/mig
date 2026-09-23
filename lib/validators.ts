@@ -31,11 +31,12 @@ export const BookingSchema = z.object({
   ),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Bad date format."),
   slot: z.string().regex(/^\d{2}:\d{2}$/, "Bad time format."),
-  // Canonicalized once here (mig#15 review) so every stored booking's
-  // guestTz is already IANA's canonical name and casing — "Japan",
-  // "EST5EDT" and "america/new_york" all become the one real zone
-  // name every downstream formatter expects, instead of needing every
-  // reader to re-resolve a browser-reported alias.
+  // Casing-fixed and legacy-alias-resolved once here (mig#15 review)
+  // so every stored booking's guestTz is spelled the way every
+  // downstream formatter expects — "Japan" -> "Asia/Tokyo",
+  // "america/new_york" -> "America/New_York" — without renaming an
+  // already-valid modern zone like "Asia/Kolkata" to a legacy one
+  // (see lib/tz.ts:canonicalTimeZone for why that matters).
   guestTz: z.string().trim().max(100).refine(isValidTimeZone, "Bad timezone.")
     .transform(canonicalTimeZone)
     .optional(),

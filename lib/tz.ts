@@ -10,25 +10,50 @@ export function isValidTimeZone(value: string): boolean {
   }
 }
 
-// Resolves a *known-valid* zone to IANA's canonical name and casing —
-// "Japan" -> "Asia/Tokyo", "EST5EDT" -> "America/New_York",
-// "america/new_york" -> "America/New_York". Every legacy alias or odd
-// casing a browser's Intl or a hand-typed URL param can produce
-// collapses to one canonical form before zoneCity/zoneOffsetLabel see
-// it, so "11:00, Japan" (no offset — `Japan` has no "/" so it looked
-// like a bare zone) and "00:00, new york, UTC-4" (wrong case) can't
-// happen (mig#15 review). Caller must validate first — this throws on
-// an invalid zone, same as the Intl constructor it wraps.
+// Fixes casing and resolves slash-less legacy aliases on a
+// *known-valid* zone — WITHOUT renaming a valid modern zone to a
+// legacy one. "america/new_york" -> "America/New_York" (casing only),
+// "Japan" -> "Asia/Tokyo", "EST5EDT" -> "America/New_York" (slash-less
+// aliases, resolved the only way JS exposes: Intl's own
+// resolvedOptions()) — but "Asia/Kolkata", "Europe/Kyiv",
+// "Asia/Ho_Chi_Minh" and "Asia/Kathmandu" all pass through unchanged.
 //
-// Only ever applied to zones read from *untrusted input* (a visitor's
-// browser, a `tz` query param, a submitted `guestTz`) — never to
-// `HOST_TZ`, which is deploy-time configuration the owner chose
-// deliberately (Asia/Ho_Chi_Minh canonicalizes to Asia/Saigon, a
-// different display name for the same zone; rewriting the host's own
-// config out from under them would be a surprise, not a fix).
+// mig#15 round 2: routing every zone through resolvedOptions()
+// (round-1's approach) rewrites those four modern names to their
+// legacy backward-compat links under Deno's ICU (Calcutta, Kiev,
+// Saigon, Katmandu) — a Ukrainian visitor saw "Kiev" everywhere, and
+// worse, it made the /embed tz-redirect unstable: a browser that
+// itself reports the modern name (many do) would detect
+// "Asia/Kolkata", get redirected to a URL the server then rewrote to
+// "Asia/Calcutta" for display, and the *next* page load would detect
+// "Asia/Kolkata" again and redirect once more — two loads per click,
+// forever. `Intl.supportedValuesOf("timeZone")` is a curated list that
+// (for reasons out of our control) already prefers several legacy
+// names over their modern replacements, so it can't be used to
+// "prefer modern" either — it can only fix *casing* for whichever
+// spelling it does contain, which is exactly what this uses it for.
+//
+// Caller must validate first — this throws on an invalid zone, same
+// as the Intl constructor it wraps. Only ever applied to zones read
+// from *untrusted input* (a visitor's browser, a `tz` query param, a
+// submitted `guestTz`) — never to `HOST_TZ`, which is deploy-time
+// configuration the owner chose deliberately.
 export function canonicalTimeZone(tz: string): string {
-  return new Intl.DateTimeFormat("en", { timeZone: tz }).resolvedOptions()
-    .timeZone;
+  const supported = Intl.supportedValuesOf("timeZone");
+  if (supported.includes(tz)) return tz; // exact match — never rewritten
+  if (!tz.includes("/")) {
+    // Slash-less alias ("Japan", "EST5EDT", "GMT") — there's no
+    // "modern name" to preserve for these; resolvedOptions() is the
+    // only way to resolve one at all.
+    return new Intl.DateTimeFormat("en", { timeZone: tz }).resolvedOptions()
+      .timeZone;
+  }
+  // Wrong casing of a name the curated list does contain (e.g.
+  // "america/new_york") — fix the casing, nothing else. No match
+  // (e.g. "Asia/Kolkata", absent from the list in any casing) leaves
+  // `tz` exactly as given.
+  const lower = tz.toLowerCase();
+  return supported.find((s) => s.toLowerCase() === lower) ?? tz;
 }
 
 // Validates + canonicalizes an untrusted zone string in one step.

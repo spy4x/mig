@@ -90,6 +90,48 @@ async function getEmbedData(
   }
 }
 
+Deno.test("mig#15 round 2: after a conflict, the slot list shows the taken slot disabled", async () => {
+  // Companion to lib/book.test.ts's conflict-drops-slot test: once the
+  // booking exists, the picker route itself (not the write path) must
+  // show that slot disabled so the visitor can't pick it again.
+  const cfg = fakeConfig();
+  const path = `/tmp/mig-embed-index-test-${crypto.randomUUID()}.json`;
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  try {
+    await bookings.mutate((draft) => {
+      draft.push({
+        id: "01EXISTING",
+        createdAt: new Date().toISOString(),
+        date: TEST_DATE,
+        time: "09:00",
+        hostTz: HOST_TZ,
+        guestName: "Someone Else",
+        guestEmail: "else@example.com",
+        cancelTokenHash: "h",
+        status: "active",
+      });
+    });
+    const req = new Request(`http://localhost/embed?date=${TEST_DATE}`);
+    const ctx = {
+      req,
+      state: {
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      },
+    } as unknown as Context<State>;
+    const res = await handler.GET!(ctx);
+    const data = (res as unknown as { data: EmbedData }).data;
+    const taken = data.slots.find((s: SlotCell) => s.time === "09:00");
+    const free = data.slots.find((s: SlotCell) => s.time === "09:30");
+    assertEquals(taken?.available, false);
+    assertEquals(free?.available, true);
+  } finally {
+    await rm(path);
+  }
+});
+
 Deno.test("mig#15: /embed with a valid tz renders the slot list in the visitor's zone", async () => {
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&tz=America%2FNew_York`,
@@ -105,6 +147,19 @@ Deno.test("mig#15: /embed with a valid tz renders the slot list in the visitor's
     data.selectedDateLabel?.includes("October 2026"),
     `expected an October 2026 date label, got "${data.selectedDateLabel}"`,
   );
+});
+
+Deno.test("mig#15 round 2: slotDateLabel comes from the slot's own instant, not noon of the host day", async () => {
+  // The 09:00 Ho Chi Minh slot on 2026-10-06 (Tuesday) is 22:00 the
+  // *previous* evening in New York — Monday 5 October. Noon of the
+  // same host day converts to 01:00 New York, still Tuesday 6 October
+  // — so building this from noon (the bug the reviewer's Chromium
+  // repro found: "Thursday" above a confirm button reading "Wed 23
+  // Sept") would make this assert "Tuesday, 6 October 2026" instead.
+  const data = await getEmbedData(
+    `http://localhost/embed?date=${TEST_DATE}&slot=09:00&tz=America%2FNew_York`,
+  );
+  assertEquals(data.slotDateLabel, "Monday, 5 October 2026");
 });
 
 Deno.test("mig#15: picked-day label converts into the visitor's zone, not the host's", async () => {
@@ -159,6 +214,30 @@ Deno.test("mig#15: /embed with an invalid tz falls back to the host's zone", asy
   assertEquals(data.tz, null);
   const first = data.slots.find((s: SlotCell) => s.time === "09:00");
   assertEquals(first!.displayTime, "09:00, Ho Chi Minh, UTC+7");
+});
+
+Deno.test("mig#15 round 2: /embed keeps modern zone names exactly as sent (never a legacy rename)", async () => {
+  // Deno's ICU (and any other browser/runtime) rewrites these four
+  // modern names to legacy backward-compat links via
+  // resolvedOptions() — round 1's canonicalTimeZone did exactly that,
+  // so a Ukrainian visitor saw "Kiev" everywhere. None of these may be
+  // renamed.
+  const cases: Array<[string, string]> = [
+    ["Asia/Kolkata", "Kolkata"],
+    ["Europe/Kyiv", "Kyiv"],
+    ["Asia/Ho_Chi_Minh", "Ho Chi Minh"],
+  ];
+  for (const [tz, city] of cases) {
+    const data = await getEmbedData(
+      `http://localhost/embed?date=${TEST_DATE}&tz=${encodeURIComponent(tz)}`,
+    );
+    assertEquals(data.tz, tz, `expected tz to stay "${tz}"`);
+    const first = data.slots.find((s: SlotCell) => s.time === "09:00");
+    assert(
+      first?.displayTime?.includes(city),
+      `expected the 09:00 slot's displayTime to include "${city}", got "${first?.displayTime}"`,
+    );
+  }
 });
 
 Deno.test("mig#15: /embed canonicalizes a legacy zone alias in the tz param", async () => {

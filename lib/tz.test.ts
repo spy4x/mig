@@ -156,11 +156,27 @@ Deno.test("formatDateLong + formatTimeOfDay convert host-local wall clock into t
 // segment isn't a city, and is confusingly sign-inverted from its
 // actual offset).
 
-Deno.test("canonicalTimeZone: resolves legacy aliases and casing to IANA's canonical name", () => {
+Deno.test("canonicalTimeZone: fixes casing and slash-less aliases, never renames a valid modern zone", () => {
+  assertEquals(canonicalTimeZone("japan"), "Asia/Tokyo");
   assertEquals(canonicalTimeZone("Japan"), "Asia/Tokyo");
   assertEquals(canonicalTimeZone("EST5EDT"), "America/New_York");
   assertEquals(canonicalTimeZone("america/new_york"), "America/New_York");
-  assertEquals(canonicalTimeZone("US/Eastern"), "America/New_York");
+  // mig#15 round 2: routing every zone through Intl's resolvedOptions()
+  // (round 1's approach) rewrote these four modern names to their
+  // legacy backward-compat links under Deno's ICU — a real, visible
+  // regression (a Ukrainian visitor saw "Kiev" everywhere) and an
+  // unstable /embed redirect (a browser that itself reports the
+  // modern name would never stop bouncing between the two spellings).
+  // They must now survive canonicalization completely unchanged.
+  assertEquals(canonicalTimeZone("Asia/Kolkata"), "Asia/Kolkata");
+  assertEquals(canonicalTimeZone("Europe/Kyiv"), "Europe/Kyiv");
+  assertEquals(canonicalTimeZone("Asia/Ho_Chi_Minh"), "Asia/Ho_Chi_Minh");
+  assertEquals(canonicalTimeZone("Asia/Kathmandu"), "Asia/Kathmandu");
+  // A zone with a "/" that Intl.supportedValuesOf's curated list
+  // doesn't contain in any casing (case-insensitive match fails) is
+  // left exactly as given — the rule is "fix casing where a match
+  // exists", not "resolve every alias with a slash".
+  assertEquals(canonicalTimeZone("US/Eastern"), "US/Eastern");
 });
 
 Deno.test("canonicalValidTimeZoneOrNull: null for missing or invalid, canonical otherwise", () => {
@@ -189,9 +205,10 @@ Deno.test("formatClockAt: Etc/* zones show the offset only, never their own conf
   // everyday one) — "10:00, GMT+5, UTC-5" would show two different,
   // contradictory signs for the same zone.
   assertEquals(formatClockAt(instant, "Etc/GMT+5"), "21:00, UTC-5");
-  // Etc/UTC canonicalizes to bare "UTC" (already covered above), so
-  // this only matters for the non-UTC Etc/* names.
-  assertEquals(canonicalTimeZone("Etc/UTC"), "UTC");
+  // "Etc/*" zones have a "/", so canonicalization (round 2) leaves
+  // them exactly as given rather than resolving them — formatClockAt's
+  // own Etc/* branch (above) is what keeps the output sane either way.
+  assertEquals(canonicalTimeZone("Etc/UTC"), "Etc/UTC");
 });
 
 Deno.test("formatShortDateAt + formatClockShortAt: short dated forms used in subjects and NTFY", () => {
