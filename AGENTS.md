@@ -133,12 +133,17 @@ deno task compile      # deno compile → single binary
 
 ## CI
 
-Woodpecker pipeline (`.woodpecker.yml`) on `denoland/deno:alpine`:
+Woodpecker pipeline (`.woodpecker.yml`) on `denoland/deno:debian` (matching the
+Dockerfile's build stage — the alpine variant's musl libc can't load
+`@tailwindcss/oxide`'s native binding, so `deno task build` fails under it).
+`nodeModulesDir` is `"manual"` in `deno.json`, so `deno install` must run before
+any task that touches TypeScript or builds: the `check` step runs it right after
+`deno --version`, and the `release` step runs it before its own
+`deno task build`. Both steps call the manifest's tasks instead of repeating
+their commands, so the pipeline can't drift from `deno task check`:
 
-- `deno fmt --check`
-- `deno lint`
-- `deno check **/*.ts **/*.tsx`
-- `deno test -A`
+- `deno task check` (fmt --check + lint + type check)
+- `deno task test`
 - `deno task build`
 
 ## Hard rules
