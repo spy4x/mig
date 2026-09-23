@@ -67,7 +67,7 @@ src/
 │   ├── availability.ts      — weekly pattern + blocked-dates parser
 │   ├── bookings.ts          — JSON store + AsyncMutex
 │   ├── tokens.ts            — ULID + HMAC sign/verify
-│   ├── email.ts             — SMTP via denomailer
+│   ├── email.ts             — SMTP via nodemailer
 │   ├── ics.ts               — ICS VCALENDAR generator
 │   ├── ratelimit.ts         — in-memory per-IP sliding window
 │   ├── tz.ts                — IANA tz helpers
@@ -91,8 +91,11 @@ src/
 - **Errors as data** — return `{ ok: true, value } | { ok: false, error }` for
   expected failure modes (validation, conflict). `throw` only for programmer
   errors and truly exceptional cases.
-- **No third-party deps without justification.** Fresh, Preact, Tailwind,
-  denomailer, zod are the budget. Anything else needs a comment.
+- **No third-party deps without justification.** `deno.json`'s imports are the
+  budget: Fresh (`fresh`, `@fresh/plugin-vite`), Preact (`preact`,
+  `preact-render-to-string`, `@preact/signals`), Tailwind (`tailwindcss`,
+  `@tailwindcss/vite`), `vite`, `nodemailer`, `zod`, `@std/assert`, `@std/ulid`.
+  Anything else needs a comment.
 - **Concurrency:** every mutation goes through `bookings.mutate()` which
   acquires the in-process mutex. Never read-then-write the JSON directly.
 
