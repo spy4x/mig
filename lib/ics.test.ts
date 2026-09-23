@@ -133,13 +133,13 @@ function unfold(ics: string): string {
   return ics.replace(/\r\n[ \t]/g, "");
 }
 
-// mig#18 round 3: the description used to build its own "time, city,
-// offset" string instead of the shared formatter, so a bare zone like
-// "UTC" doubled up ("...at 02:00, UTC, UTC+0") instead of matching
-// what the guest email actually says. These two tests pin the
-// description to `formatClockLongAt` — the same call `guestText`/
-// `guestHtml` in lib/email.ts make — for a bare zone and an `Etc/*`
-// offset zone, the two cases the hand-built string got wrong.
+// The invite description used to build its own "time, city, offset"
+// string instead of the shared formatter, so a bare zone like "UTC"
+// doubled up ("...at 02:00, UTC, UTC+0") instead of matching what the
+// guest email actually says. These two tests pin the description to
+// `formatClockLongAt` — the same call `guestText`/`guestHtml` in
+// lib/email.ts make — for a bare zone and an `Etc/*` offset zone, the
+// two cases the hand-built string got wrong.
 Deno.test("generateIcs — UTC description matches the guest email's time string", async () => {
   const cfg = makeConfig();
   const b: Booking = {
