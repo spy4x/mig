@@ -78,7 +78,7 @@ admin UI.
 ```bash
 docker run -d --name mig \
   -p 8080:8080 \
-  -v ./data:/data \
+  -v ./data:/data:z \
   -e HOST_NAME="Jane Doe" \
   -e HOST_EMAIL="jane@example.com" \
   -e HOST_TZ="Europe/Berlin" \
@@ -122,6 +122,12 @@ path) needs neither step — Docker creates it owned by `deno` already, since
 change is still owned by root; see the CHANGELOG's 0.4.0 upgrade note for the
 fix.
 
+The `:z` on the bind mount above relabels `./data` for SELinux (Fedora, RHEL and
+derivatives) so the container is allowed to read and write it at all — without
+it, a host with SELinux enforcing rejects the access with the same "Permission
+denied" the uid mismatch above produces, even once the uid/gid ownership is
+correct. It's a no-op, and safe to leave in, on a host that doesn't run SELinux.
+
 ### Docker Compose
 
 ```yaml
@@ -133,7 +139,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/data
+      - ./data:/data:z
     environment:
       HOST_NAME: "Jane Doe"
       HOST_EMAIL: "jane@example.com"

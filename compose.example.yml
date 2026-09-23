@@ -18,9 +18,12 @@ services:
     # writable by that uid: `sudo chown 1993:1993 ./data` (see the note
     # above), or add a `user: "1000:1000"` line above with your own
     # uid:gid instead (only works if ./data already exists and you own
-    # it, i.e. you ran the mkdir above yourself).
+    # it, i.e. you ran the mkdir above yourself). The trailing `:z`
+    # relabels ./data for SELinux (Fedora, RHEL and derivatives) so the
+    # container can access it at all; harmless on a host without
+    # SELinux.
     volumes:
-      - ./data:/data
+      - ./data:/data:z
     env_file:
       - .env
     healthcheck:
