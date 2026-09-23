@@ -179,6 +179,41 @@ Deno.test("canonicalTimeZone: fixes casing and slash-less aliases, never renames
   assertEquals(canonicalTimeZone("US/Eastern"), "US/Eastern");
 });
 
+// mig#18: the README claimed "a valid name with the wrong casing has
+// its casing fixed" unconditionally, which was false for any zone
+// Intl.supportedValuesOf omits entirely — "Etc/GMT+5" kept its input
+// casing, and "etc/gmt+5" then rendered "gmt+5" as if it were a city
+// (formatClockAt's "Etc/" check was case-sensitive). This pins the
+// corrected rule: casing is fixed against the curated list first,
+// then against resolvedOptions() but only when that's the *same* name
+// differently cased — never when it would rename to a legacy alias.
+Deno.test("canonicalTimeZone: fixes Etc/* casing via resolvedOptions when it's a same-name match", () => {
+  assertEquals(canonicalTimeZone("etc/gmt+5"), "Etc/GMT+5");
+  assertEquals(canonicalTimeZone("ETC/GMT+5"), "Etc/GMT+5");
+  assertEquals(canonicalTimeZone("Etc/gmt+5"), "Etc/GMT+5");
+});
+
+Deno.test("canonicalTimeZone: a name resolvedOptions() would rename to a different (legacy) name stays as sent, uncorrected", () => {
+  // "Asia/Ho_Chi_Minh" isn't in Intl.supportedValuesOf's curated list
+  // at all on Deno's ICU, and resolvedOptions() resolves it to the
+  // legacy "Asia/Saigon" — a different name, not just different
+  // casing — so the guard must reject that answer and keep the input.
+  assertEquals(canonicalTimeZone("asia/ho_chi_minh"), "asia/ho_chi_minh");
+  assertEquals(canonicalTimeZone("Asia/Kolkata"), "Asia/Kolkata");
+  assertEquals(canonicalTimeZone("Europe/Kyiv"), "Europe/Kyiv");
+});
+
+Deno.test("formatClockAt: an Etc/* zone shows the offset only, never a city, regardless of its casing", () => {
+  const instant = zonedDateTime("2026-10-06", "09:00", "Asia/Ho_Chi_Minh");
+  // Uncanonicalized, lower-cased input — formatClockAt must not rely
+  // on the caller having fixed the casing first.
+  assertEquals(formatClockAt(instant, "etc/gmt+5"), "21:00, UTC-5");
+  assertEquals(
+    formatClockAt(instant, canonicalTimeZone("etc/gmt+5")),
+    "21:00, UTC-5",
+  );
+});
+
 Deno.test("canonicalValidTimeZoneOrNull: null for missing or invalid, canonical otherwise", () => {
   assertEquals(canonicalValidTimeZoneOrNull(undefined), null);
   assertEquals(canonicalValidTimeZoneOrNull(null), null);

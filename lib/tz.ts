@@ -15,8 +15,10 @@ export function isValidTimeZone(value: string): boolean {
 // legacy one. "america/new_york" -> "America/New_York" (casing only),
 // "Japan" -> "Asia/Tokyo", "EST5EDT" -> "America/New_York" (slash-less
 // aliases, resolved the only way JS exposes: Intl's own
-// resolvedOptions()) — but "Asia/Kolkata", "Europe/Kyiv",
-// "Asia/Ho_Chi_Minh" and "Asia/Kathmandu" all pass through unchanged.
+// resolvedOptions()), "etc/gmt+5" -> "Etc/GMT+5" (casing only, see
+// below) — but "Asia/Kolkata", "Europe/Kyiv", "Asia/Ho_Chi_Minh" and
+// "Asia/Kathmandu" all pass through unchanged, in whatever casing they
+// arrived in.
 //
 // mig#15 round 2: routing every zone through resolvedOptions()
 // (round-1's approach) rewrites those four modern names to their
@@ -31,7 +33,18 @@ export function isValidTimeZone(value: string): boolean {
 // (for reasons out of our control) already prefers several legacy
 // names over their modern replacements, so it can't be used to
 // "prefer modern" either — it can only fix *casing* for whichever
-// spelling it does contain, which is exactly what this uses it for.
+// spelling it does contain.
+//
+// mig#18: that curated list omits some zones entirely — no casing at
+// all, not even the legacy one — most `Etc/*` names (`Etc/GMT+5`) and,
+// on Deno's ICU, `Asia/Ho_Chi_Minh` itself. For those, resolvedOptions()
+// is the only source of a canonical spelling, but it's the same
+// function that renames Kolkata to Calcutta — so it's only trusted
+// here when its answer is the *same* name in different casing
+// (`etc/gmt+5` -> `Etc/GMT+5`, safe: nothing changed but case). When it
+// answers with a genuinely different name (`asia/ho_chi_minh` ->
+// `Asia/Saigon`, a real rename), that answer is discarded and `tz` is
+// returned exactly as given — uncorrected casing, but never renamed.
 //
 // Caller must validate first — this throws on an invalid zone, same
 // as the Intl constructor it wraps. Only ever applied to zones read
@@ -49,11 +62,18 @@ export function canonicalTimeZone(tz: string): string {
       .timeZone;
   }
   // Wrong casing of a name the curated list does contain (e.g.
-  // "america/new_york") — fix the casing, nothing else. No match
-  // (e.g. "Asia/Kolkata", absent from the list in any casing) leaves
-  // `tz` exactly as given.
+  // "america/new_york") — fix the casing, nothing else.
   const lower = tz.toLowerCase();
-  return supported.find((s) => s.toLowerCase() === lower) ?? tz;
+  const curated = supported.find((s) => s.toLowerCase() === lower);
+  if (curated) return curated;
+  // Not in the curated list under any casing at all (e.g.
+  // "Etc/GMT+5", "Asia/Ho_Chi_Minh"). resolvedOptions() is trusted
+  // only when it resolves to the very same name, just differently
+  // cased — never when it resolves to a different name (a legacy
+  // rename, the round-2 bug).
+  const resolved = new Intl.DateTimeFormat("en", { timeZone: tz })
+    .resolvedOptions().timeZone;
+  return resolved.toLowerCase() === lower ? resolved : tz;
 }
 
 // Validates + canonicalizes an untrusted zone string in one step.
@@ -141,11 +161,25 @@ export function formatDateLong(
 // own sign-inverted offset would just look wrong. Every other zone
 // (including "Europe/London" at UTC+0 in winter) always gets an
 // offset, so "UTC+0" only ever shows up next to a real city name.
+//
+// mig#18: the "Etc/" check is case-insensitive. `canonicalTimeZone`
+// fixes "etc/gmt+5"'s casing before it gets here in the normal flow,
+// but this is the one place a wrongly-cased Etc zone would otherwise
+// show its raw segment ("gmt+5") as if it were a city — a
+// case-sensitive check here would depend on every caller having
+// canonicalized first, which the doc comment above doesn't actually
+// promise.
 export function formatClockAt(instant: Date, tz: string): string {
   const hhmm = hhmmInTz(instant, tz);
   if (!tz.includes("/")) return `${hhmm}, ${zoneCity(tz)}`;
-  if (tz.startsWith("Etc/")) return `${hhmm}, ${zoneOffsetLabel(tz, instant)}`;
+  if (isEtcZone(tz)) return `${hhmm}, ${zoneOffsetLabel(tz, instant)}`;
   return `${hhmm}, ${zoneCity(tz)}, ${zoneOffsetLabel(tz, instant)}`;
+}
+
+// Case-insensitive "Etc/" prefix check — see formatClockAt's doc
+// comment for why this can't assume its input is already canonical.
+function isEtcZone(tz: string): boolean {
+  return tz.slice(0, 4).toLowerCase() === "etc/";
 }
 
 // "Wed 23 Sep" — short weekday + day + month, no year. Used to label
@@ -174,7 +208,7 @@ export function formatClockShortAt(instant: Date, tz: string): string {
 // clock, used in email bodies.
 export function formatClockLongAt(instant: Date, tz: string): string {
   return `${formatInstantLong(instant, tz)}, ${
-    tz.startsWith("Etc/") ? zoneOffsetLabel(tz, instant) : (
+    isEtcZone(tz) ? zoneOffsetLabel(tz, instant) : (
       tz.includes("/")
         ? `${zoneCity(tz)}, ${zoneOffsetLabel(tz, instant)}`
         : zoneCity(tz)
