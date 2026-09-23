@@ -251,6 +251,30 @@ function makePersistFailOnce(store: BookingsStore, message: string): void {
   };
 }
 
+/** Test-only: like `makePersistFailOnce`, but fails only the `callToFail`th
+ *  `persist()` call (1-indexed, counting from calls made after this is
+ *  installed) and delegates every other call to the real implementation.
+ *  Used to let Phase 1's initial save succeed while the rollback's own
+ *  disk write — the next `persist()` call after an email-send failure —
+ *  fails. Call this *after* `store.init()`, same reason as
+ *  `makePersistFailOnce`. */
+function makePersistFailOnCall(
+  store: BookingsStore,
+  callToFail: number,
+  message: string,
+): void {
+  const anyStore = store as unknown as { persist: () => Promise<void> };
+  const realPersist: () => Promise<void> = anyStore.persist.bind(store);
+  let calls = 0;
+  anyStore.persist = async () => {
+    calls++;
+    if (calls === callToFail) {
+      throw new Error(message);
+    }
+    await realPersist();
+  };
+}
+
 // ─── Success ─────────────────────────────────────────────────────────
 
 Deno.test('handleBookingSubmit: success under "" redirects to /confirmed', async () => {
@@ -1001,6 +1025,180 @@ Deno.test("mig#19: a failed send pushes an NTFY notice that says the booking was
     // skimming a phone notification could read the old wording as "an
     // email is late" rather than "there is no booking".
     assertStringIncludes(pushBody.toLowerCase(), "not created");
+  } finally {
+    globalThis.fetch = originalFetch;
+    Deno.env.delete("NTFY_URL");
+    Deno.env.delete("NTFY_TOPIC");
+    Deno.env.delete("NTFY_TOKEN");
+    Deno.env.delete("NTFY_MODE");
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+// ─── the NTFY push must reflect the rollback's own outcome ─────────────
+
+Deno.test("handleBookingSubmit: a guest-send failure with a working store pushes an NTFY notice saying the booking was removed and the slot is free", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  setTransportForTesting(failingTransport("SMTP send failed (mig test)"));
+
+  const originalFetch = globalThis.fetch;
+  let pushBody = "";
+  globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
+    pushBody = String(init?.body ?? "");
+    return Promise.resolve(new Response(null, { status: 200 }));
+  }) as typeof fetch;
+  Deno.env.set("NTFY_URL", "https://ntfy.example.com");
+  Deno.env.set("NTFY_TOPIC", "mig-test");
+  Deno.env.set("NTFY_TOKEN", "test-token");
+
+  try {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        fields: validFields(date, "09:00"),
+      }),
+      "",
+    );
+    assertEquals(res.status, 303);
+    const lower = pushBody.toLowerCase();
+    assertStringIncludes(lower, "removed");
+    assertStringIncludes(lower, "free");
+    assertEquals(
+      bookings.list().filter((b) => b.date === date && b.time === "09:00")
+        .length,
+      0,
+      "the rolled-back booking must not remain in the store",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    Deno.env.delete("NTFY_URL");
+    Deno.env.delete("NTFY_TOPIC");
+    Deno.env.delete("NTFY_TOKEN");
+    Deno.env.delete("NTFY_MODE");
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+Deno.test("handleBookingSubmit: a guest-send failure where the rollback write also fails pushes an NTFY notice that does not claim the booking was removed", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  // Call 1 is Phase 1's initial save (must succeed); call 2 is the
+  // rollback's own write, triggered by the email-send failure below.
+  makePersistFailOnCall(bookings, 2, "simulated disk write failure");
+  const date = futureWeekday(3, HOST_TZ);
+  setTransportForTesting(failingTransport("SMTP send failed (mig test)"));
+
+  const originalFetch = globalThis.fetch;
+  let pushBody = "";
+  globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
+    pushBody = String(init?.body ?? "");
+    return Promise.resolve(new Response(null, { status: 200 }));
+  }) as typeof fetch;
+  Deno.env.set("NTFY_URL", "https://ntfy.example.com");
+  Deno.env.set("NTFY_TOPIC", "mig-test");
+  Deno.env.set("NTFY_TOKEN", "test-token");
+
+  try {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        fields: validFields(date, "09:00"),
+      }),
+      "",
+    );
+    assertEquals(res.status, 303);
+    const lower = pushBody.toLowerCase();
+    assertEquals(
+      lower.includes("removed"),
+      false,
+      `push must not claim removal when the rollback write failed: ${pushBody}`,
+    );
+    assertEquals(
+      lower.includes("free"),
+      false,
+      `push must not claim the slot is free when the rollback write failed: ${pushBody}`,
+    );
+    assertStringIncludes(lower, "may still be on disk");
+    // The in-memory copy is gone regardless — BookingsStore.mutate()
+    // assigns before it awaits persist() (lib/bookings.ts) — but the
+    // on-disk file still has it, since the rollback's own write threw.
+    assertEquals(
+      bookings.list().filter((b) => b.date === date && b.time === "09:00")
+        .length,
+      0,
+      "the in-memory copy is removed even though the rollback write failed",
+    );
+    const onDisk = JSON.parse(await Deno.readTextFile(path));
+    assertEquals(
+      onDisk.some((b: { date: string; time: string }) =>
+        b.date === date && b.time === "09:00"
+      ),
+      true,
+      `on-disk file must still hold the booking the rollback failed to remove: ${
+        JSON.stringify(onDisk)
+      }`,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    Deno.env.delete("NTFY_URL");
+    Deno.env.delete("NTFY_TOPIC");
+    Deno.env.delete("NTFY_TOKEN");
+    Deno.env.delete("NTFY_MODE");
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+Deno.test("handleBookingSubmit: the NTFY push for a failed send happens after the rollback has already run", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  setTransportForTesting(failingTransport("SMTP send failed (mig test)"));
+
+  const originalFetch = globalThis.fetch;
+  let storeSizeAtPushTime = -1;
+  globalThis.fetch = ((_input: unknown, _init?: RequestInit) => {
+    // If the push fired before the rollback ran, the booking would
+    // still be in the store at this exact moment.
+    storeSizeAtPushTime =
+      bookings.list().filter((b) => b.date === date && b.time === "09:00")
+        .length;
+    return Promise.resolve(new Response(null, { status: 200 }));
+  }) as typeof fetch;
+  Deno.env.set("NTFY_URL", "https://ntfy.example.com");
+  Deno.env.set("NTFY_TOPIC", "mig-test");
+  Deno.env.set("NTFY_TOKEN", "test-token");
+
+  try {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        fields: validFields(date, "09:00"),
+      }),
+      "",
+    );
+    assertEquals(res.status, 303);
+    assertEquals(
+      storeSizeAtPushTime,
+      0,
+      "the booking must already be gone from the store when the push fires",
+    );
   } finally {
     globalThis.fetch = originalFetch;
     Deno.env.delete("NTFY_URL");

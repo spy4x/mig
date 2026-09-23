@@ -172,3 +172,24 @@ Deno.test("mig#19 review round 3: email-failed NTFY body says the booking was no
   assertStringIncludes(lower, "not created");
   assertStringIncludes(lower, "removed");
 });
+
+Deno.test("email-failed NTFY body does not claim removal when the rollback itself failed", async () => {
+  const cfg = makeConfig();
+  const booking = makeCrossZoneBooking("America/New_York");
+  const body = await captureNtfyBody(() =>
+    notifyBookingEmailFailed(cfg, booking, "simulated SMTP failure", {
+      rolledBack: false,
+    })
+  );
+
+  // A rollback that failed to write leaves the booking possibly still
+  // on disk (BookingsStore.mutate() assigns in-memory before it
+  // awaits persist(), so only the disk copy is in doubt) — the push
+  // must not tell the host it was removed or that the slot is free,
+  // and must say where to remove it by hand.
+  const lower = body.toLowerCase();
+  assertEquals(lower.includes("removed"), false, body);
+  assertEquals(lower.includes("free"), false, body);
+  assertStringIncludes(lower, "may still be on disk");
+  assertStringIncludes(body, booking.id);
+});
