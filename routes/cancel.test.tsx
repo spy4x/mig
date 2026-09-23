@@ -132,7 +132,7 @@ Deno.test("mig#15: cancel page falls back to the labelled host clock when no vis
 // `TZ=UTC` (or any other zone) makes no difference, which is the
 // actual regression test.
 
-Deno.test("mig#15 round 2: already-cancelled shows the visitor's dated, labelled clock — not the server's own zone", () => {
+Deno.test("already-cancelled shows the visitor's dated, labelled clock", () => {
   const html = renderToString(
     <CancelPage
       {...fakePageProps({
@@ -155,7 +155,7 @@ Deno.test("mig#15 round 2: already-cancelled shows the visitor's dated, labelled
   assertFalse(html.includes("host&#39;s timezone"));
 });
 
-Deno.test("mig#15 round 2: already-cancelled falls back to the host's dated, labelled clock plus the note", () => {
+Deno.test("already-cancelled falls back to the host's dated, labelled clock plus the note", () => {
   const html = renderToString(
     <CancelPage
       {...fakePageProps({

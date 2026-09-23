@@ -349,7 +349,7 @@ Deno.test("mig#15: the time card's Change link carries tz (step 2, slot picked)"
   );
 });
 
-Deno.test("mig#15 round 2: /embed's own confirm label converts into the visitor's zone, not the host's", () => {
+Deno.test("/embed's own confirm label converts into the visitor's zone, not the host's", () => {
   // Regression guard for routes/embed/index.tsx's confirmLabel: it's
   // computed inside the page component itself (not passed in via
   // EmbedData), so this has to render the real component with a real
@@ -382,7 +382,7 @@ Deno.test("mig#15 round 2: /embed's own confirm label converts into the visitor'
   );
 });
 
-Deno.test("mig#15 round 2: the time card shows the slot's own converted date when the route supplies slotDateLabel", () => {
+Deno.test("the time card shows the slot's own converted date when the route supplies slotDateLabel", () => {
   // Companion to the confirm-label test above, scoped the same way:
   // extracts the time card's own date text (after the "·" separator)
   // rather than checking the whole page. This exercises Picker's
