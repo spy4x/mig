@@ -1,9 +1,14 @@
 import { assertEquals } from "@std/assert";
 import {
+  canonicalTimeZone,
+  canonicalValidTimeZoneOrNull,
   formatClockAt,
+  formatClockShortAt,
   formatDateLong,
   formatInstantLong,
   formatInstantShort,
+  formatOwnerClock,
+  formatShortDateAt,
   formatTimeOfDay,
   validTimeZoneOr,
   zoneCity,
@@ -61,8 +66,10 @@ Deno.test("zoneCity: last path segment, underscores replaced by spaces", () => {
   assertEquals(zoneCity("America/New_York"), "New York");
   assertEquals(zoneCity("Asia/Ho_Chi_Minh"), "Ho Chi Minh");
   assertEquals(zoneCity("Asia/Kolkata"), "Kolkata");
-  // No "/" — the whole name is used as-is (decision: no lookup table,
-  // no special-casing of "Etc/..." — see mig#15's PR body).
+  // No "/" — the whole name is used as-is (decision: no lookup table —
+  // see mig#15's PR body). formatClockAt special-cases "Etc/*" itself
+  // (offset-only, no city) rather than zoneCity, since "Etc/GMT+5"
+  // still has a real (if not city-shaped) segment after the slash.
   assertEquals(zoneCity("UTC"), "UTC");
 });
 
@@ -138,5 +145,103 @@ Deno.test("formatDateLong + formatTimeOfDay convert host-local wall clock into t
   assertEquals(
     formatTimeOfDay(date, time, hostTz, hostTz),
     "09:00, Ho Chi Minh, UTC+7",
+  );
+});
+
+// ─── mig#15 review: canonicalization ──────────────────────────────────
+// Every one of these is a bug the reviewer actually saw before this
+// fix: "11:00, Japan" (no offset — "Japan" has no "/" so it looked
+// like a bare zone), "00:00, new york, UTC-4" (wrong case survived
+// into the rendered city name), "00:00, GMT+5, UTC-5" (Etc/GMT+5's own
+// segment isn't a city, and is confusingly sign-inverted from its
+// actual offset).
+
+Deno.test("canonicalTimeZone: resolves legacy aliases and casing to IANA's canonical name", () => {
+  assertEquals(canonicalTimeZone("Japan"), "Asia/Tokyo");
+  assertEquals(canonicalTimeZone("EST5EDT"), "America/New_York");
+  assertEquals(canonicalTimeZone("america/new_york"), "America/New_York");
+  assertEquals(canonicalTimeZone("US/Eastern"), "America/New_York");
+});
+
+Deno.test("canonicalValidTimeZoneOrNull: null for missing or invalid, canonical otherwise", () => {
+  assertEquals(canonicalValidTimeZoneOrNull(undefined), null);
+  assertEquals(canonicalValidTimeZoneOrNull(null), null);
+  assertEquals(canonicalValidTimeZoneOrNull(""), null);
+  assertEquals(canonicalValidTimeZoneOrNull("Not/A_Timezone"), null);
+  assertEquals(canonicalValidTimeZoneOrNull("Japan"), "Asia/Tokyo");
+});
+
+Deno.test("formatClockAt: a legacy alias only gets its offset once canonicalized", () => {
+  const instant = zonedDateTime("2026-10-06", "09:00", "Asia/Ho_Chi_Minh");
+  // "Japan" itself has no "/", so formatClockAt alone would (wrongly)
+  // treat it as a bare, offset-less zone — canonicalizing first is
+  // what makes the offset appear.
+  assertEquals(formatClockAt(instant, "Japan"), "11:00, Japan");
+  assertEquals(
+    formatClockAt(instant, canonicalTimeZone("Japan")),
+    "11:00, Tokyo, UTC+9",
+  );
+});
+
+Deno.test("formatClockAt: Etc/* zones show the offset only, never their own confusing segment as a city", () => {
+  const instant = zonedDateTime("2026-10-06", "09:00", "Asia/Ho_Chi_Minh");
+  // Etc/GMT+5 means UTC-5 (POSIX sign convention is inverted from the
+  // everyday one) — "10:00, GMT+5, UTC-5" would show two different,
+  // contradictory signs for the same zone.
+  assertEquals(formatClockAt(instant, "Etc/GMT+5"), "21:00, UTC-5");
+  // Etc/UTC canonicalizes to bare "UTC" (already covered above), so
+  // this only matters for the non-UTC Etc/* names.
+  assertEquals(canonicalTimeZone("Etc/UTC"), "UTC");
+});
+
+Deno.test("formatShortDateAt + formatClockShortAt: short dated forms used in subjects and NTFY", () => {
+  const instant = zonedDateTime("2026-10-06", "09:00", "Asia/Ho_Chi_Minh");
+  assertEquals(formatShortDateAt(instant, "Asia/Ho_Chi_Minh"), "Tue 6 Oct");
+  assertEquals(formatShortDateAt(instant, "America/New_York"), "Mon 5 Oct");
+  assertEquals(
+    formatClockShortAt(instant, "Asia/Ho_Chi_Minh"),
+    "Tue 6 Oct 09:00, Ho Chi Minh, UTC+7",
+  );
+});
+
+Deno.test("formatOwnerClock: adds the visitor's date only when it differs from the host's", () => {
+  // Cross-midnight pair (dates differ) — the exact example from the
+  // issue and the reviewer's follow-up.
+  assertEquals(
+    formatOwnerClock(
+      "2026-10-06",
+      "09:00",
+      "Asia/Ho_Chi_Minh",
+      "America/New_York",
+    ),
+    "Tue 6 Oct 09:00, Ho Chi Minh, UTC+7 (visitor: Mon 5 Oct 22:00, New York, UTC-4)",
+  );
+  // Same calendar day both sides — the visitor's own date would be
+  // redundant, so only their time+zone shows.
+  assertEquals(
+    formatOwnerClock(
+      "2026-10-06",
+      "16:00",
+      "Asia/Ho_Chi_Minh",
+      "America/New_York",
+    ),
+    "Tue 6 Oct 16:00, Ho Chi Minh, UTC+7 (visitor: 05:00, New York, UTC-4)",
+  );
+  // No visitor zone known — host clock alone, never a guess.
+  assertEquals(
+    formatOwnerClock("2026-10-06", "09:00", "Asia/Ho_Chi_Minh", undefined),
+    "Tue 6 Oct 09:00, Ho Chi Minh, UTC+7",
+  );
+  // Long form for email bodies.
+  assertEquals(
+    formatOwnerClock(
+      "2026-10-06",
+      "09:00",
+      "Asia/Ho_Chi_Minh",
+      "America/New_York",
+      true,
+    ),
+    "Tuesday, 6 October 2026 at 09:00, Ho Chi Minh, UTC+7 " +
+      "(visitor: Monday, 5 October 2026 at 22:00, New York, UTC-4)",
   );
 });

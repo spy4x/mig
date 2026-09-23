@@ -10,11 +10,42 @@ export function isValidTimeZone(value: string): boolean {
   }
 }
 
+// Resolves a *known-valid* zone to IANA's canonical name and casing —
+// "Japan" -> "Asia/Tokyo", "EST5EDT" -> "America/New_York",
+// "america/new_york" -> "America/New_York". Every legacy alias or odd
+// casing a browser's Intl or a hand-typed URL param can produce
+// collapses to one canonical form before zoneCity/zoneOffsetLabel see
+// it, so "11:00, Japan" (no offset — `Japan` has no "/" so it looked
+// like a bare zone) and "00:00, new york, UTC-4" (wrong case) can't
+// happen (mig#15 review). Caller must validate first — this throws on
+// an invalid zone, same as the Intl constructor it wraps.
+//
+// Only ever applied to zones read from *untrusted input* (a visitor's
+// browser, a `tz` query param, a submitted `guestTz`) — never to
+// `HOST_TZ`, which is deploy-time configuration the owner chose
+// deliberately (Asia/Ho_Chi_Minh canonicalizes to Asia/Saigon, a
+// different display name for the same zone; rewriting the host's own
+// config out from under them would be a surprise, not a fix).
+export function canonicalTimeZone(tz: string): string {
+  return new Intl.DateTimeFormat("en", { timeZone: tz }).resolvedOptions()
+    .timeZone;
+}
+
+// Validates + canonicalizes an untrusted zone string in one step.
+// Returns the canonical IANA name, or `null` if `value` is missing or
+// invalid — never throws.
+export function canonicalValidTimeZoneOrNull(
+  value: string | undefined | null,
+): string | null {
+  if (!value || !isValidTimeZone(value)) return null;
+  return canonicalTimeZone(value);
+}
+
 export function validTimeZoneOr(
   value: string | undefined,
   fallback: string,
 ): string {
-  return value && isValidTimeZone(value) ? value : fallback;
+  return canonicalValidTimeZoneOrNull(value) ?? fallback;
 }
 
 // Format an ISO date (YYYY-MM-DD) and time (HH:MM) interpreted in `tz`
@@ -74,17 +105,88 @@ export function formatDateLong(
 // The single "HH:MM, City, UTC±N" clock string every page, email and
 // notification uses for a time shown to a person — e.g.
 // "11:00, New York, UTC-4". `instant` is the UTC instant to show;
-// `tz` is the zone to show it in.
+// `tz` should already be canonical (see canonicalTimeZone) — this
+// does no validation of its own.
 //
 // Zones with no city segment (a bare "UTC", no "/") render as
 // "HH:MM, UTC" — appending an offset too would be redundant since the
-// zone name already says "no offset". Every other zone (including
-// "Europe/London" at UTC+0 in winter) always gets an offset, so
-// "UTC+0" only ever shows up next to a real city name.
+// zone name already says "no offset". `Etc/*` zones (e.g. "Etc/GMT+5",
+// which — confusingly, per POSIX — means UTC-5) render offset-only,
+// "HH:MM, UTC-5": "GMT+5" isn't a place, and showing it next to its
+// own sign-inverted offset would just look wrong. Every other zone
+// (including "Europe/London" at UTC+0 in winter) always gets an
+// offset, so "UTC+0" only ever shows up next to a real city name.
 export function formatClockAt(instant: Date, tz: string): string {
   const hhmm = hhmmInTz(instant, tz);
   if (!tz.includes("/")) return `${hhmm}, ${zoneCity(tz)}`;
+  if (tz.startsWith("Etc/")) return `${hhmm}, ${zoneOffsetLabel(tz, instant)}`;
   return `${hhmm}, ${zoneCity(tz)}, ${zoneOffsetLabel(tz, instant)}`;
+}
+
+// "Wed 23 Sep" — short weekday + day + month, no year. Used to label
+// an individual slot whose visitor-local date differs from the picked
+// host day (mig#15 review), and as the date part of formatClockShortAt.
+export function formatShortDateAt(instant: Date, tz: string): string {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  // "Wed, 23 Sep" -> "Wed 23 Sep" — strip the comma after the weekday,
+  // same trick as formatInstantShort.
+  return fmt.format(instant).replace(/^([^,]+),/, "$1");
+}
+
+// "Thu 24 Sep 09:00, Ho Chi Minh, UTC+7" — short dated clock, used in
+// subject lines and NTFY pushes where the long form (formatInstantLong
+// + city/offset) would be too long.
+export function formatClockShortAt(instant: Date, tz: string): string {
+  return `${formatShortDateAt(instant, tz)} ${formatClockAt(instant, tz)}`;
+}
+
+// "Friday, 28 August 2026 at 04:00, New York, UTC-4" — long dated
+// clock, used in email bodies.
+export function formatClockLongAt(instant: Date, tz: string): string {
+  return `${formatInstantLong(instant, tz)}, ${
+    tz.startsWith("Etc/") ? zoneOffsetLabel(tz, instant) : (
+      tz.includes("/")
+        ? `${zoneCity(tz)}, ${zoneOffsetLabel(tz, instant)}`
+        : zoneCity(tz)
+    )
+  }`;
+}
+
+// Owner-facing combined clock (mig#15 review): the host's own dated
+// clock, plus the visitor's clock alongside it whenever a valid
+// visitor zone is known — with the visitor's own date too, but only
+// when it differs from the host's (same day is implied otherwise, so
+// "22:00, New York, UTC-4" reads as "still today" while "Wed 23 Sep
+// 22:00, New York, UTC-4" reads as "the day before"). Falls back to
+// the host clock alone when no visitor zone was captured — never a
+// guessed one. `long` picks formatClockLongAt (email bodies) over
+// formatClockShortAt (subjects, NTFY).
+export function formatOwnerClock(
+  date: string,
+  time: string,
+  hostTz: string,
+  guestTz: string | undefined,
+  long = false,
+): string {
+  const instant = zonedDateTime(date, time, hostTz);
+  const host = long
+    ? formatClockLongAt(instant, hostTz)
+    : formatClockShortAt(instant, hostTz);
+  const guestTzCanonical = canonicalValidTimeZoneOrNull(guestTz);
+  if (!guestTzCanonical) return host;
+  const sameDay = isoDateInTz(instant, hostTz) ===
+    isoDateInTz(instant, guestTzCanonical);
+  const guest = sameDay
+    ? formatClockAt(instant, guestTzCanonical)
+    : long
+    ? formatClockLongAt(instant, guestTzCanonical)
+    : formatClockShortAt(instant, guestTzCanonical);
+  return `${host} (visitor: ${guest})`;
 }
 
 // Time-of-day + city + offset for the host-local wall-clock
