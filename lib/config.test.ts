@@ -39,17 +39,21 @@ async function runConfig(
 
 /** Boots config.ts in a child process and prints one field of the
  *  resulting `Config` to stdout — for pinning a *value* (a default, a
- *  coercion result), not just "did it exit 0". */
+ *  coercion result), not just "did it exit 0". JSON-encoded so the
+ *  caller gets the exact string (including any leading/trailing
+ *  whitespace the value itself carries) — a plain `.trim()` on the
+ *  captured stdout would silently strip that too and hide a missing
+ *  trim in `config.ts` itself. */
 async function runConfigField(
   env: Record<string, string>,
   field: string,
-): Promise<string> {
+): Promise<unknown> {
   const command = new Deno.Command(Deno.execPath(), {
     args: [
       "eval",
       "--allow-env",
       "--allow-read",
-      `const { config } = await import(\`file://\${Deno.cwd()}/lib/config.ts\`); console.log(config.${field})`,
+      `const { config } = await import(\`file://\${Deno.cwd()}/lib/config.ts\`); console.log(JSON.stringify(config.${field}))`,
     ],
     cwd: Deno.cwd(),
     env,
@@ -58,7 +62,7 @@ async function runConfigField(
     stderr: "inherit",
   });
   const { stdout } = await command.output();
-  return new TextDecoder().decode(stdout).trim();
+  return JSON.parse(new TextDecoder().decode(stdout));
 }
 
 Deno.test("config: boots with a fully valid env", async () => {
@@ -139,7 +143,7 @@ Deno.test("config: MIN_NOTICE_HOURS defaults to 6 when unset", async () => {
   const env = { ...VALID_ENV };
   delete env.MIN_NOTICE_HOURS;
   const value = await runConfigField(env, "minNoticeHours");
-  assertEquals(value, "6");
+  assertEquals(value, 6);
 });
 
 // mig#3 review round 1: arktype's default messages echo the actual bad
@@ -159,4 +163,41 @@ Deno.test("config: a malformed MEETING_URL is named but its value is not echoed 
     false,
     `stderr echoed the bad value:\n${stderr}`,
   );
+});
+
+// mig#3 review round 2: arktype has a *second* value-echoing shape — when
+// two or more rules fail on the same field at once (SLOT_DURATION_MIN
+// "500.5" is both non-integer and over 480), the message reads
+// "SLOT_DURATION_MIN (500.5) must be...\n  ◦ an integer\n  ◦ at most 480"
+// instead of the single-rule "... (was 500.5)" suffix — a different
+// pattern the first strip in lib/config.ts didn't catch.
+Deno.test("config: a value failing two rules at once is named but not echoed to stderr", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    SLOT_DURATION_MIN: "500.5",
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "SLOT_DURATION_MIN");
+  assertEquals(
+    stderr.includes("500.5"),
+    false,
+    `stderr echoed the bad value:\n${stderr}`,
+  );
+});
+
+Deno.test("config: SLOT_DURATION_MIN accepts 480, rejects 481", async () => {
+  const at480 = await runConfig({ ...VALID_ENV, SLOT_DURATION_MIN: "480" });
+  assertEquals(at480.code, 0, at480.stderr);
+
+  const at481 = await runConfig({ ...VALID_ENV, SLOT_DURATION_MIN: "481" });
+  assertEquals(at481.code, 1);
+  assertStringIncludes(at481.stderr, "SLOT_DURATION_MIN");
+});
+
+Deno.test("config: MIG_VERSION is trimmed", async () => {
+  const value = await runConfigField(
+    { ...VALID_ENV, MIG_VERSION: "  1.2.3  " },
+    "version",
+  );
+  assertEquals(value, "1.2.3");
 });

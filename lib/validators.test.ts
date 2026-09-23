@@ -105,6 +105,35 @@ Deno.test("booking validator rejects a missing required field", () => {
   }
 });
 
+// mig#3 review round 2: `form.get()` in lib/book.ts returns `null` for a
+// field that's simply absent from the submission — not `undefined` — so
+// that's the shape BookingSchema actually receives in production, distinct
+// from the `undefined` case above (a key genuinely missing from the
+// object). Pinned against origin/main's Zod output for the same input.
+Deno.test("booking validator: a null field (form.get()'s shape for a missing field) reports the Zod-parity message", () => {
+  const result = BookingSchema.safeParse({ ...validBooking, name: null });
+
+  assertEquals(result.success, false);
+  if (!result.success) {
+    assertEquals(result.error.issues[0]?.path, ["name"]);
+    assertEquals(
+      result.error.issues[0]?.message,
+      "Expected string, received null",
+    );
+  }
+});
+
+Deno.test("booking validator: a payload with no website key at all is rejected (honeypot presence check)", () => {
+  const { website: _website, ...withoutWebsite } = validBooking;
+  const result = BookingSchema.safeParse(withoutWebsite);
+
+  assertEquals(result.success, false);
+  if (!result.success) {
+    assertEquals(result.error.issues[0]?.path, ["website"]);
+    assertEquals(result.error.issues[0]?.message, "Required");
+  }
+});
+
 // mig#3 review round 1: pins for the hand-written field-order
 // orchestration in validators.ts — each one is a behaviour the old Zod
 // object schema had that a naive rewrite could silently drop.
@@ -121,7 +150,7 @@ Deno.test("booking validator: name and email both invalid — name's message win
   }
 });
 
-Deno.test("booking validator: name at exactly 100 chars is accepted, 101 is rejected", () => {
+Deno.test("booking validator: name at exactly 100 chars is accepted, 101 is rejected with the Zod-parity message", () => {
   const at100 = BookingSchema.safeParse({
     ...validBooking,
     name: "B".repeat(100),
@@ -133,6 +162,12 @@ Deno.test("booking validator: name at exactly 100 chars is accepted, 101 is reje
     name: "B".repeat(101),
   });
   assertEquals(at101.success, false);
+  if (!at101.success) {
+    assertEquals(
+      at101.error.issues[0]?.message,
+      "String must contain at most 100 character(s)",
+    );
+  }
 });
 
 Deno.test("booking validator: notes at exactly 500 chars is accepted, 501 is rejected", () => {
@@ -184,6 +219,21 @@ Deno.test("booking validator: guestTz canonicalizes a legacy alias (Japan -> Asi
   assertEquals(result.success, true);
   if (result.success) {
     assertEquals(result.data.guestTz, "Asia/Tokyo");
+  }
+});
+
+Deno.test("booking validator: guestTz over 100 chars is rejected with the Zod-parity message", () => {
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    guestTz: "A".repeat(101),
+  });
+
+  assertEquals(result.success, false);
+  if (!result.success) {
+    assertEquals(
+      result.error.issues[0]?.message,
+      "String must contain at most 100 character(s)",
+    );
   }
 });
 

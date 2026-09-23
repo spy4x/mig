@@ -135,15 +135,21 @@ function parseConfig(): Config {
 
   const validated = ConfigSchema(candidate);
   if (validated instanceof type.errors) {
-    // arktype's default messages end with `(was <the actual value>)` —
-    // fine for a length count ("was 5") but not for a type/pattern
-    // mismatch, where <the actual value> is the raw env string itself
-    // (e.g. a malformed MEETING_URL carrying a query-string token).
-    // Startup errors go to the container's logs, so name the variable
-    // and the reason, never the value.
+    // arktype echoes the actual value in two message shapes — fine for
+    // a length count ("was 5") but not for a type/pattern mismatch,
+    // where the echoed text is the raw env string itself (e.g. a
+    // malformed MEETING_URL carrying a query-string token). Startup
+    // errors go to the container's logs, so name the variable and the
+    // reason, never the value, in either shape:
+    //   - a single failing rule: "... must be a number (was NaN)"
+    //   - two+ rules failing on one field (e.g. SLOT_DURATION_MIN=500.5
+    //     is both non-integer and out of range): "VAR (500.5) must
+    //     be...\n  ◦ an integer\n  ◦ at most 480"
     const issues = [...validated]
       .map((issue) => {
-        const message = issue.message.replace(/ \(was .*\)$/, "");
+        const message = issue.message
+          .replace(/ \([^)]*\)(?= must be)/, "")
+          .replace(/ \(was .*\)$/, "");
         return `  ${issue.path.join(".")}: ${message}`;
       })
       .join("\n");
