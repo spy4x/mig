@@ -54,8 +54,13 @@ admin UI.
   add the meeting to their calendar in one click.
 - **Cancellation by link.** Both owner and guest get a cancellable link in their
   email. SHA-256 HMAC of a random token; stateless.
-- **Timezone-aware.** Host's TZ from env. Guest's TZ auto-detected in the
-  browser and rendered in emails alongside host time.
+- **Two clocks, everywhere.** The visitor always sees times in their own zone —
+  date, city and UTC offset, e.g. `11:00, New York, UTC-4` — on every page of
+  the booking flow and in every email. The owner sees the same for their own
+  zone, plus the visitor's clock alongside it in the owner email and the NTFY
+  push, so they always know both the time and where the visitor is. Guest zone
+  is auto-detected in the browser; without JavaScript, times fall back to the
+  host's zone, labelled as such.
 - **Iframe-ready.** `/embed` strips chrome for use inside another page, and
   every step of the booking flow — date, time, confirm, the confirmation page —
   stays under `/embed`. See [Embedding](#embedding).
@@ -205,10 +210,13 @@ previous config may still be setting it globally. The rest of the site (`/`,
 `/confirmed`, `/cancel`) can keep denying framing entirely.
 
 `/embed` detects the visitor's timezone with a small inline script (no tracking,
-nothing sent anywhere — it just fills a hidden form field before submit), the
-same way the theme toggle avoids a flash of the wrong theme. Without JavaScript
-that field stays empty and the booking still goes through; the confirmation
-email then shows times in the host's timezone instead of the visitor's.
+nothing sent anywhere) as soon as the page loads, and carries it forward as a
+`?tz=` query param on every link in the flow — so the slot list itself renders
+in the visitor's zone, not just the confirmation email. A query param was chosen
+over a cookie so `/embed` stays stateless and works even where an iframe's
+third-party cookies are blocked. Without JavaScript that param is never set and
+the booking still goes through; every page then shows the host's time instead,
+labelled "Times are shown in the host's timezone."
 
 ## Architecture
 
