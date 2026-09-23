@@ -6,7 +6,7 @@ import { DateCard } from "../components/DateCard.tsx";
 import { TimeCard } from "../components/TimeCard.tsx";
 import { BookingForm } from "../components/BookingForm.tsx";
 import { SummaryBar } from "../components/SummaryBar.tsx";
-import { isoDateInTz, zonedDateTime } from "../lib/tz.ts";
+import { formatClockAt, isoDateInTz, zonedDateTime } from "../lib/tz.ts";
 
 /*
   BookingFlow — client-driven booking picker.
@@ -100,38 +100,33 @@ function formatDateShortInTz(
   return fmt.format(dt).replace(/^([^,]+),/, "$1");
 }
 
-// HH:MM in the visitor's TZ, formatted from a host-local (date, time).
-// Returns null if the formatting fails (rare; the Intl call is
-// permissive).
-function formatTimeInTz(
+// "HH:MM, City, UTC±N" in the visitor's TZ, formatted from a
+// host-local (date, time) — mig#15: every time shown to a person
+// carries its city and offset, not a bare HH:MM. Returns null if the
+// formatting fails (rare; the Intl call is permissive).
+function formatClockInTz(
   date: string,
   time: string,
   hostTz: string,
   displayTz: string,
 ): string | null {
   try {
-    const dt = zonedDateTime(date, time, hostTz);
-    return new Intl.DateTimeFormat("en-GB", {
-      timeZone: displayTz,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(dt);
+    return formatClockAt(zonedDateTime(date, time, hostTz), displayTz);
   } catch {
     return null;
   }
 }
 
-// Same as formatConfirmLabelInTz but takes the already-computed
-// visitor-TZ time string so the button shows visitor time, not
-// host time. Used when displayTz !== hostTz (the common case after
-// hydration).
-function formatConfirmLabelWithTime(
+// Takes the already-computed visitor-TZ clock string ("11:00, New
+// York, UTC-4" — mig#15) so the button shows the visitor's labelled
+// time, not a bare host time. Used when displayTz !== hostTz (the
+// common case after hydration).
+function formatConfirmLabelWithClock(
   date: string,
   time: string,
   hostTz: string,
   displayTz: string,
-  visitorTime: string,
+  visitorClock: string,
 ): string {
   const dt = zonedDateTime(date, time, hostTz);
   const weekday = new Intl.DateTimeFormat("en-GB", {
@@ -146,7 +141,7 @@ function formatConfirmLabelWithTime(
     timeZone: displayTz,
     month: "short",
   }).format(dt);
-  return `Confirm — ${weekday}, ${day} ${month}, ${visitorTime}`;
+  return `Confirm — ${weekday}, ${day} ${month}, ${visitorClock}`;
 }
 
 // ─── URL helpers ─────────────────────────────────────────────────────
@@ -317,16 +312,16 @@ export default function BookingFlow(props: BookingFlowProps) {
     ? formatDateShortInTz(date.value, "12:00", hostTz, displayTz)
     : null;
 
-  // Slot time in visitor TZ. The slot grid is rendered in host TZ
-  // (HH:MM strings are host-local by definition), but once the user
-  // picks one, we display it in the visitor's TZ on the confirm
-  // button + TimeCard to match the visitor's local clock.
+  // Slot clock in visitor TZ ("11:00, New York, UTC-4" — mig#15). The
+  // slot grid is rendered in host TZ (HH:MM strings are host-local by
+  // definition), but once the user picks one, we display the labelled
+  // visitor clock on the confirm button + TimeCard.
   const slotLabelVisitorTz: string | null = date.value && slot.value
-    ? formatTimeInTz(date.value, slot.value, hostTz, displayTz)
+    ? formatClockInTz(date.value, slot.value, hostTz, displayTz)
     : null;
 
   const confirmLabel: string | null = date.value && slot.value
-    ? formatConfirmLabelWithTime(
+    ? formatConfirmLabelWithClock(
       date.value,
       slot.value,
       hostTz,
@@ -335,16 +330,17 @@ export default function BookingFlow(props: BookingFlowProps) {
     )
     : null;
 
-  // Re-format every slot's HH:MM string in the visitor's TZ for
-  // display. SSR + `/embed` + pre-hydration leave `displayTime`
-  // unset, so TimeSlots falls back to the host-local `time` (the
-  // authoritative value the server books against — never swapped).
-  // After hydration Preact diffs the text node and updates in place;
-  // the surrounding DOM structure stays identical.
+  // Re-format every slot's HH:MM string into the full visitor-TZ
+  // clock string for display (mig#15). SSR + `/embed` + pre-hydration
+  // leave `displayTime` unset, so TimeSlots falls back to the
+  // host-local `time` (the authoritative value the server books
+  // against — never swapped). After hydration Preact diffs the text
+  // node and updates in place; the surrounding DOM structure stays
+  // identical.
   const slotsForDisplay = (mounted.value && date.value)
     ? slots.value.map((s) => ({
       ...s,
-      displayTime: formatTimeInTz(
+      displayTime: formatClockInTz(
         date.value!,
         s.time,
         hostTz,
