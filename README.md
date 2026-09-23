@@ -217,16 +217,25 @@ query param on every link in the flow — so the slot list itself renders in the
 visitor's zone, not just the confirmation email. The script re-checks the zone
 on every load and redirects again only if it no longer matches the browser's own
 zone (a link shared with someone else's `?tz=` already in it gets fixed on their
-first visit). A zone that's already a valid IANA name is kept exactly as sent; a
-valid name with the wrong casing has its casing fixed; a name with no slash
-(`Japan`, `EST5EDT`) is resolved to its full zone. None of that rewrites a valid
-zone to a different (e.g. legacy) spelling, so a browser that keeps reporting
-the same zone settles after one redirect. A query param was chosen over a cookie
-so `/embed` stays stateless and works even where an iframe's third-party cookies
-are blocked. Without JavaScript that param is never set and the booking still
-goes through; the slot list, confirm step, confirmation page and cancel page (on
-both `/embed` and the standalone site) then show the host's time instead,
-labelled "Times are shown in the host's timezone."
+first visit). A zone already spelled the way the browser's own curated IANA list
+has it is kept exactly as sent. Wrong casing is fixed two ways: first against
+that curated list (`america/new_york` → `America/New_York`), then, for a name
+the list omits entirely — most `Etc/*` zones, and a few modern names some
+engines expose only through their legacy alias, such as `Asia/Ho_Chi_Minh` —
+against the browser's own zone resolution, but only when that resolution is the
+very same name in different casing (`etc/gmt+5` → `Etc/GMT+5`); when it would
+resolve to a different, legacy name instead (`asia/ho_chi_minh` would resolve to
+`Asia/Saigon`), the casing is left exactly as sent rather than renamed. An
+`Etc/*` zone always renders as an offset, never a city, whatever its case. A
+name with no slash (`Japan`, `EST5EDT`) is resolved to its full zone. None of
+this ever rewrites a valid zone to a different (e.g. legacy) spelling, so a
+browser that keeps reporting the same zone settles after one redirect. A query
+param was chosen over a cookie so `/embed` stays stateless and works even where
+an iframe's third-party cookies are blocked. Without JavaScript that param is
+never set and the booking still goes through; the slot list, confirm step,
+confirmation page and cancel page (on both `/embed` and the standalone site)
+then show the host's time instead, labelled "Times are shown in the host's
+timezone."
 
 ## Architecture
 
