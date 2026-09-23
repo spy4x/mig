@@ -9,15 +9,16 @@ data/
 .env.*
 Dockerfile
 .dockerignore
-# Don't ship a host-managed node_modules into the build image. The
-# build stage never creates one — nodeModulesDir is "manual" in
-# deno.json, so deno resolves npm imports from its own cache, not a
-# node_modules layout. If one leaks in anyway (e.g. from a local `npm
-# install`), vite can end up bundling preact via two different module
-# paths — Preact's renderer's `vnode.type === S` check then fails
-# because vnodes use one Fragment reference and the renderer checks
-# against the other. Symptom: every HTML page route renders an empty
-# <body> (77-byte response with the head/body fallback shell).
+# Don't ship a host-managed node_modules into the build image.
+# nodeModulesDir is "manual" in deno.json, so `deno install --frozen`
+# builds its own /src/node_modules (with a .deno/ store inside) in the
+# build stage, and vite builds from that. If a host node_modules leaks
+# into the build context on top of it, the two trees merge and vite
+# can end up bundling preact via two different module paths — Preact's
+# renderer's `vnode.type === S` check then fails because vnodes use
+# one Fragment reference and the renderer checks against the other.
+# Symptom: every HTML page route renders an empty <body> (77-byte
+# response with the head/body fallback shell).
 node_modules
 # Don't ship stale build output into a fresh build. Same merge
 # failure mode as node_modules above.

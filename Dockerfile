@@ -32,8 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy only what's needed at runtime. The Vite-bundled _fresh/ is
-# self-contained for HTTP serving; deno's npm cache (build stage only)
-# is needed just for the Tailwind/Vite processing at build time.
+# self-contained for HTTP serving; the node_modules `deno install`
+# builds in the build stage is needed only for the Tailwind/Vite
+# processing at build time, not at runtime.
 COPY --from=build /src/_fresh ./_fresh
 COPY --from=build /src/static ./static
 
@@ -48,6 +49,5 @@ ENV MIG_VERSION=${MIG_VERSION}
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --spider -q http://localhost:${PORT}/health || exit 1
 
-# Run via deno serve with the prebuilt bundle. Falls back to deno run
-# main.ts if the bundle path is missing (developer mode).
+# Run via deno serve with the prebuilt bundle.
 CMD deno serve -A --port=${PORT} _fresh/server.js
