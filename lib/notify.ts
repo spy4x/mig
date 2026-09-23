@@ -195,23 +195,46 @@ export function notifyBookingCancelled(
   });
 }
 
+export interface EmailFailedOpts {
+  /** Whether the post-send-failure rollback actually removed the
+   *  booking. Defaults to true, the common case, so the one existing
+   *  call site (and any future one that doesn't care) needs no
+   *  change. False means the rollback's own disk write also failed —
+   *  BookingsStore.mutate() (lib/bookings.ts) assigns its in-memory
+   *  array before it awaits the write, so the in-memory removal still
+   *  held, but the booking may still be on disk and would come back
+   *  after a restart. The push must not claim it was removed or that
+   *  the slot is free in that case. */
+  rolledBack?: boolean;
+}
+
 // mig#19 review round 3: the previous wording ("booking confirmation
 // email failed to send") only described the failure, not its
 // outcome — a host skimming a phone push could easily read it as "an
 // email is late" rather than "there is no booking". lib/book.ts
 // rolls the booking back on any send failure here, so the push must
-// say that plainly: not created, and already removed.
+// say what actually happened: removed and the slot is free again when
+// the rollback succeeded, or — when the rollback's own write also
+// failed — that the booking may still be on disk and needs removing
+// by hand.
 export function notifyBookingEmailFailed(
   config: Config,
   booking: Booking | null,
   error: string,
+  opts: EmailFailedOpts = {},
 ): Promise<void> {
   if (!isEventEnabled("error")) return Promise.resolve();
+  const rolledBack = opts.rolledBack ?? true;
   const lines = [
     booking
-      ? `mig: a booking for ${booking.guestName} was NOT created — the ` +
-        `confirmation email failed, so it was removed and the slot is ` +
-        `free again`
+      ? (rolledBack
+        ? `mig: a booking for ${booking.guestName} was NOT created — the ` +
+          `confirmation email failed, so it was removed and the slot is ` +
+          `free again`
+        : `mig: a booking for ${booking.guestName} was NOT confirmed — ` +
+          `the confirmation email failed, and removing it failed too. It ` +
+          `may still be on disk and come back after a restart. Remove ` +
+          `it by hand: id ${booking.id} in the data file.`)
       : "mig: a booking was NOT created (no record — the send failed " +
         "before anything was saved)",
     "",
@@ -230,10 +253,14 @@ export function notifyBookingEmailFailed(
   }
   return notify(config, {
     title: booking
-      ? `mig: NOT booked - ${booking.guestName}`
+      ? (rolledBack
+        ? `mig: NOT booked - ${booking.guestName}`
+        : `mig: NOT booked, remove by hand - ${booking.guestName}`)
       : "mig: booking NOT created",
     message: lines.join("\n"),
-    priority: 4,
-    tags: ["mig", "email-failed", "warning"],
+    priority: rolledBack ? 4 : 5,
+    tags: rolledBack
+      ? ["mig", "email-failed", "warning"]
+      : ["mig", "email-failed", "rollback-failed", "warning"],
   });
 }
