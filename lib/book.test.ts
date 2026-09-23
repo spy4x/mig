@@ -7,7 +7,7 @@
 // about, just on the write path instead of the read path. Every test
 // below asserts the `Location` header's pathname, not just "success".
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import nodemailer from "nodemailer";
 import type { Context } from "fresh";
 import type { State } from "./utils.ts";
@@ -275,6 +275,24 @@ function makePersistFailOnCall(
   };
 }
 
+/** Captures every `console.error` call made while `fn` runs, then
+ *  restores the real one — even if `fn` throws. */
+async function captureConsoleError(
+  fn: () => Promise<void>,
+): Promise<unknown[][]> {
+  const original = console.error;
+  const calls: unknown[][] = [];
+  console.error = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  try {
+    await fn();
+  } finally {
+    console.error = original;
+  }
+  return calls;
+}
+
 // ─── Success ─────────────────────────────────────────────────────────
 
 Deno.test('handleBookingSubmit: success under "" redirects to /confirmed', async () => {
@@ -391,7 +409,7 @@ Deno.test("mig#15 review: a validation failure keeps slot and tz on the redirect
   await rm(path);
 });
 
-Deno.test("mig#15 round 2: an availability failure drops slot but keeps date and tz on the redirect", async () => {
+Deno.test("an availability failure drops slot but keeps date and tz on the redirect", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });
@@ -420,7 +438,7 @@ Deno.test("mig#15 round 2: an availability failure drops slot but keeps date and
   await rm(path);
 });
 
-Deno.test("mig#15 round 2: a slot-taken conflict drops slot from the redirect (keeps date and tz)", async () => {
+Deno.test("a slot-taken conflict drops slot from the redirect (keeps date and tz)", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });
@@ -798,6 +816,71 @@ Deno.test("mig#19: a failed send after a save rolls the booking back and says so
   }
 });
 
+// review follow-up: the redirect message used to say "we couldn't send
+// your confirmation email", which names the visitor's own email even
+// when it's the *owner's* send that failed and the guest's never ran.
+// Both failure modes must read identically — the visitor has no way
+// to know which recipient's send actually failed.
+Deno.test("a failed owner send and a failed guest send redirect with the same neutral message", async () => {
+  const cfg = fakeConfig();
+  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 10 });
+  const neutralMessage =
+    "Something went wrong, so the booking was not created. Please try again in a moment.";
+
+  const ownerFailsPath = tmpDataPath();
+  const ownerFailsStore = new BookingsStore({ filePath: ownerFailsPath });
+  await ownerFailsStore.init();
+  const guestFailsPath = tmpDataPath();
+  const guestFailsStore = new BookingsStore({ filePath: guestFailsPath });
+  await guestFailsStore.init();
+
+  try {
+    setTransportForTesting(
+      failingTransport("simulated SMTP failure (owner send)"),
+    );
+    const ownerFailsDate = futureWeekday(3, HOST_TZ);
+    const ownerFailsRes = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings: ownerFailsStore,
+        rateLimiter,
+        fields: validFields(ownerFailsDate, "09:00"),
+      }),
+      "",
+    );
+    assertEquals(
+      new URL(ownerFailsRes.headers.get("location")!).searchParams.get(
+        "err",
+      ),
+      neutralMessage,
+    );
+
+    setTransportForTesting(
+      failingAddressTransport("visitor@example.com", []),
+    );
+    const guestFailsDate = futureWeekday(4, HOST_TZ);
+    const guestFailsRes = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings: guestFailsStore,
+        rateLimiter,
+        fields: validFields(guestFailsDate, "09:00"),
+      }),
+      "",
+    );
+    assertEquals(
+      new URL(guestFailsRes.headers.get("location")!).searchParams.get(
+        "err",
+      ),
+      neutralMessage,
+    );
+  } finally {
+    setTransportForTesting(defaultTransport());
+    await rm(ownerFailsPath);
+    await rm(guestFailsPath);
+  }
+});
+
 // ─── mig#19 review round 1: a failed initial save must roll itself back ──
 
 Deno.test("mig#19: a persist failure on the initial save leaves nothing behind and lets a retry through", async () => {
@@ -870,6 +953,92 @@ Deno.test("mig#19: a persist failure on the initial save leaves nothing behind a
       1,
       "the retry must have saved exactly one booking",
     );
+  } finally {
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+// ─── review follow-up: the rollback-failure log must say whether the owner email went out ──
+
+Deno.test("mig#book: rollback-failure log says the owner email was sent when the guest send is what failed", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  // Phase 1's own save (persist call #1) succeeds for real; only the
+  // rollback write that follows the email failure (call #2) fails.
+  makePersistFailOnCall(
+    bookings,
+    2,
+    "simulated disk write failure (rollback)",
+  );
+  const date = futureWeekday(3, HOST_TZ);
+  // Owner (jane@example.com) sends fine; the guest send is what fails
+  // — so ownerEmailSucceeded is true by the time the rollback runs.
+  setTransportForTesting(failingAddressTransport("visitor@example.com", []));
+
+  try {
+    const logs = await captureConsoleError(async () => {
+      const ctx = stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        fields: validFields(date, "09:00"),
+      });
+      await handleBookingSubmit(ctx, "");
+    });
+    const rollbackLog = logs.find((args) =>
+      typeof args[0] === "string" &&
+      args[0].includes("rollback FAILED after email send failed")
+    );
+    assert(
+      rollbackLog,
+      `expected a rollback-failure log, got: ${JSON.stringify(logs)}`,
+    );
+    assertStringIncludes(String(rollbackLog![0]), "owner email was sent");
+  } finally {
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+Deno.test("mig#book: rollback-failure log says the owner email was not sent when the owner send itself failed", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  makePersistFailOnCall(
+    bookings,
+    2,
+    "simulated disk write failure (rollback)",
+  );
+  const date = futureWeekday(3, HOST_TZ);
+  // Every send fails, starting with the owner's own — so
+  // ownerEmailSucceeded is still false when the rollback runs.
+  setTransportForTesting(
+    failingTransport("simulated SMTP failure (mig#book test)"),
+  );
+
+  try {
+    const logs = await captureConsoleError(async () => {
+      const ctx = stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        fields: validFields(date, "09:00"),
+      });
+      await handleBookingSubmit(ctx, "");
+    });
+    const rollbackLog = logs.find((args) =>
+      typeof args[0] === "string" &&
+      args[0].includes("rollback FAILED after email send failed")
+    );
+    assert(
+      rollbackLog,
+      `expected a rollback-failure log, got: ${JSON.stringify(logs)}`,
+    );
+    assertStringIncludes(String(rollbackLog![0]), "owner email was not sent");
   } finally {
     setTransportForTesting(defaultTransport());
     await rm(path);
