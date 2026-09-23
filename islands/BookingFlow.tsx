@@ -6,7 +6,7 @@ import { DateCard } from "../components/DateCard.tsx";
 import { TimeCard } from "../components/TimeCard.tsx";
 import { BookingForm } from "../components/BookingForm.tsx";
 import { SummaryBar } from "../components/SummaryBar.tsx";
-import { pickerPushAddress } from "../lib/picker-links.ts";
+import { pickerLinks } from "../lib/picker-links.ts";
 import {
   formatClockAt,
   formatDateLong,
@@ -250,16 +250,16 @@ export default function BookingFlow(props: BookingFlowProps) {
     slot?: string | null;
     month?: string;
   }): void {
-    // mig#18: carries the visitor's zone the same way pickerHref does
-    // for the no-JS links below, so a reload, a copied URL, or the
-    // back/forward sync above keeps showing the visitor's own clocks
-    // instead of falling back to the host's. `linkTz` is declared
-    // further down (closed over here; pushUrl is only ever called
-    // from a handler, after the initial render has already set it).
-    // The address itself is built by lib/picker-links.ts's
-    // pickerPushAddress — see its doc comment for why that's a
-    // separate, unit-tested function rather than inline here.
-    const url = pickerPushAddress(next, linkTz);
+    // mig#18 review follow-up: `links` (declared further down, closed
+    // over here — pushUrl is only ever called from a handler, after
+    // the initial render has already set it) binds the same `tz`
+    // this island's children render into their `<a href>`s (`links.tz`
+    // below) to the address pushed here (`links.pushAddress`), via
+    // lib/picker-links.ts's pickerLinks — one shared value instead of
+    // two separate call sites a regression could drop `tz` from
+    // independently. See pickerLinks's doc comment for what this
+    // still can't catch.
+    const url = links.pushAddress(next);
     if (globalThis.location.pathname + globalThis.location.search !== url) {
       globalThis.history.pushState({}, "", url);
     }
@@ -335,6 +335,12 @@ export default function BookingFlow(props: BookingFlowProps) {
   const linkTz: string | null = (mounted.value && guestTz.value)
     ? guestTz.value
     : props.tz;
+
+  // Shared by every `<a href>` below (`links.tz`) and by `pushUrl`
+  // (`links.pushAddress`) — see lib/picker-links.ts's pickerLinks doc
+  // comment for why binding `linkTz` once here, instead of passing it
+  // separately to each, is the point.
+  const links = pickerLinks(linkTz);
 
   const dateLabel: string | null = date.value
     ? formatDateLong(date.value, "12:00", hostTz, displayTz)
@@ -451,7 +457,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                 date={date.value!}
                 dateLabel={dateLabel ?? date.value!}
                 onClear={interactive ? clearDate : undefined}
-                tz={linkTz}
+                tz={links.tz}
               />
             )
             : (
@@ -464,7 +470,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                 hostTz={hostTz}
                 onSelectDate={interactive ? onSelectDate : undefined}
                 onSelectMonth={interactive ? onSelectMonth : undefined}
-                tz={linkTz}
+                tz={links.tz}
               />
             )}
         </div>
@@ -490,7 +496,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                   dateLabel={slotDateLabel ?? dateLabel ?? date.value!}
                   displaySlot={slotLabelVisitorTz ?? undefined}
                   onClear={interactive ? clearSlot : undefined}
-                  tz={linkTz}
+                  tz={links.tz}
                 />
               )
               : loading.value
@@ -507,7 +513,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                   slots={slotsForDisplay}
                   selectedSlot={null}
                   onSelectSlot={interactive ? onSelectSlot : undefined}
-                  tz={linkTz}
+                  tz={links.tz}
                 />
               )
               : (

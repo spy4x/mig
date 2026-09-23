@@ -164,12 +164,25 @@ Deno.test("mig#18: standalone / keeps tz on every slot link", async () => {
   const html = await renderIndex(
     `http://localhost/?date=${TEST_DATE}&tz=America/New_York`,
   );
-  const slotLink = html.match(/href="([^"]*slot=[^"]*)"/);
-  assert(slotLink, "expected a slot link in the rendered HTML");
+  // review follow-up: a single `html.match` (no `g` flag) only ever
+  // checks the *first* slot link — a mutation that dropped `tz` from
+  // every link except the first (e.g. threading it through correctly
+  // for one hard-coded slot and forgetting the rest) would have
+  // stayed green. `matchAll` with `g` collects every slot link's
+  // `href` so all of them are checked, not just one.
+  const slotLinks = [...html.matchAll(/href="([^"]*slot=[^"]*)"/g)].map((
+    m,
+  ) => m[1]);
   assert(
-    slotLink![1].includes("tz=America%2FNew_York"),
-    `expected the slot link to carry tz=, got "${slotLink![1]}"`,
+    slotLinks.length > 1,
+    `expected multiple slot links in the rendered HTML, got ${slotLinks.length}`,
   );
+  for (const href of slotLinks) {
+    assert(
+      href.includes("tz=America%2FNew_York"),
+      `expected every slot link to carry tz=, got "${href}"`,
+    );
+  }
 });
 
 Deno.test("mig#18: the host-timezone <noscript> note is hidden when the tz query param sets a different zone", async () => {
