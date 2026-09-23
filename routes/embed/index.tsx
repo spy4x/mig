@@ -150,11 +150,12 @@ export const handler = define.handlers({
     });
 
     // Date label for the picked day. Converted into the display zone
-    // the same way the standalone island does (BookingFlow's
-    // formatDateLongInTz — noon of the host-local date, formatted in
-    // displayTz): the calendar grid itself stays host-anchored
-    // (mig#15 allows this for the month grid), but the single picked
-    // day's own label reads correctly in the visitor's zone.
+    // the same way the standalone island does (both now call
+    // lib/tz.ts's formatDateLong with "12:00" — noon of the
+    // host-local date, formatted in displayTz): the calendar grid
+    // itself stays host-anchored (mig#15 allows this for the month
+    // grid), but the single picked day's own label reads correctly in
+    // the visitor's zone.
     let selectedDateLabel: string | null = null;
     if (date) {
       const dt = zonedDateTime(date, "12:00", cfg.hostTz);

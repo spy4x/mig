@@ -8,11 +8,11 @@ import { BookingForm } from "../components/BookingForm.tsx";
 import { SummaryBar } from "../components/SummaryBar.tsx";
 import {
   formatClockAt,
+  formatDateLong,
   formatShortDateAt,
   isoDateInTz,
   zonedDateTime,
 } from "../lib/tz.ts";
-import { slotDateLabel as computeSlotDateLabel } from "../lib/slot-date-label.ts";
 
 /*
   BookingFlow — client-driven booking picker.
@@ -68,27 +68,25 @@ interface BookingFlowProps {
   hostName: string;
   hostTz: string;
   error: string | null;
+  /** The visitor's IANA zone, once known from the server-side `tz`
+   *  query param (mig#18) — canonicalized the same way /embed does
+   *  (routes/index.tsx). `null` when missing or invalid. This is the
+   *  island's *initial* display zone, used for every clock and date
+   *  it renders before mount; after mount, the browser's own detected
+   *  zone (`guestTz` below) takes over, same as before mig#18. Without
+   *  this, the pre-mount render (including the no-JS fallback and the
+   *  first paint before hydration) always used to fall back to
+   *  `hostTz`, even when the visitor arrived with `?tz=` already set —
+   *  the standalone time card's date, unlike everything else on the
+   *  page, went untested for this, so a change that broke it (e.g.
+   *  building the date from noon instead of the slot's own instant)
+   *  left every existing test green (mig#18 round 4 review). */
+  tz: string | null;
 }
 
 // ─── Client-side time helpers ────────────────────────────────────────
 // Use lib/tz.ts directly — it's dependency-free (no zod) and already
 // bundled into the client via Calendar's imports.
-
-function formatDateLongInTz(
-  date: string,
-  time: string,
-  hostTz: string,
-  displayTz: string,
-): string {
-  const dt = zonedDateTime(date, time, hostTz);
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: displayTz,
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(dt);
-}
 
 // Compact "Thu, 28 Aug" used in the mobile SummaryBar. Mirrors
 // TimeCard's display so the two stay in lockstep.
@@ -255,6 +253,13 @@ export default function BookingFlow(props: BookingFlowProps) {
     if (next.date) params.set("date", next.date);
     if (next.slot) params.set("slot", next.slot);
     if (next.month) params.set("month", next.month);
+    // mig#18: carries the visitor's zone the same way pickerHref does
+    // for the no-JS links below, so a reload, a copied URL, or the
+    // back/forward sync above keeps showing the visitor's own clocks
+    // instead of falling back to the host's. `linkTz` is declared
+    // further down (closed over here; pushUrl is only ever called
+    // from a handler, after the initial render has already set it).
+    if (linkTz) params.set("tz", linkTz);
     const qs = params.toString();
     const url = qs ? `/?${qs}` : "/";
     if (globalThis.location.pathname + globalThis.location.search !== url) {
@@ -310,10 +315,31 @@ export default function BookingFlow(props: BookingFlowProps) {
 
   // ─── Derived labels (visitor TZ after hydration) ────────────────
 
-  const displayTz = (mounted.value && guestTz.value) ? guestTz.value : hostTz;
+  // The zone every clock and date on this island renders in before
+  // mount (mig#18) — the server-validated `tz` query param
+  // (routes/index.tsx, same validation as /embed) when the visitor
+  // arrived with one, host zone otherwise. Before mig#18 this was
+  // always `hostTz`, so a visitor sharing a `?tz=` link (or a no-JS
+  // client) saw the host's time even though the server itself knew
+  // better.
+  const initialDisplayTz = props.tz ?? hostTz;
+  const displayTz = (mounted.value && guestTz.value)
+    ? guestTz.value
+    : initialDisplayTz;
+
+  // The zone reflected in every `<a href>` this island's children
+  // render for the no-JS / pre-hydration fallback, and in the URL
+  // `pushUrl` writes once interactive (mig#18). `null` omits the
+  // `?tz=` param entirely — e.g. a visitor with no query param and no
+  // detected zone yet never carries a redundant one around, matching
+  // /embed. Once the browser's own zone is detected, links switch to
+  // carrying that instead of the query param they arrived with.
+  const linkTz: string | null = (mounted.value && guestTz.value)
+    ? guestTz.value
+    : props.tz;
 
   const dateLabel: string | null = date.value
-    ? formatDateLongInTz(date.value, "12:00", hostTz, displayTz)
+    ? formatDateLong(date.value, "12:00", hostTz, displayTz)
     : null;
 
   const dateLabelShort: string | null = date.value
@@ -325,7 +351,7 @@ export default function BookingFlow(props: BookingFlowProps) {
   // `dateLabel` above (noon-based) still feeds DateCard, which shows
   // the *picked calendar day*, not a specific time.
   const slotDateLabel: string | null = date.value && slot.value
-    ? computeSlotDateLabel(date.value, slot.value, hostTz, displayTz)
+    ? formatDateLong(date.value, slot.value, hostTz, displayTz)
     : null;
 
   // Slot clock in visitor TZ ("11:00, New York, UTC-4" — mig#15). The
@@ -427,6 +453,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                 date={date.value!}
                 dateLabel={dateLabel ?? date.value!}
                 onClear={interactive ? clearDate : undefined}
+                tz={linkTz}
               />
             )
             : (
@@ -439,6 +466,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                 hostTz={hostTz}
                 onSelectDate={interactive ? onSelectDate : undefined}
                 onSelectMonth={interactive ? onSelectMonth : undefined}
+                tz={linkTz}
               />
             )}
         </div>
@@ -464,6 +492,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                   dateLabel={slotDateLabel ?? dateLabel ?? date.value!}
                   displaySlot={slotLabelVisitorTz ?? undefined}
                   onClear={interactive ? clearSlot : undefined}
+                  tz={linkTz}
                 />
               )
               : loading.value
@@ -480,6 +509,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                   slots={slotsForDisplay}
                   selectedSlot={null}
                   onSelectSlot={interactive ? onSelectSlot : undefined}
+                  tz={linkTz}
                 />
               )
               : (
