@@ -95,7 +95,12 @@ Deno.test("mig#15: booking-succeeded NTFY body shows the host's clock and the vi
 
   assertStringIncludes(body, "Ho Chi Minh, UTC+7");
   assertStringIncludes(body, "New York, UTC-4");
-  assertStringIncludes(body, "visitor: 22:00, New York, UTC-4");
+  // mig#15 review: the host clock and the visitor's carry their own
+  // dates too (main had dropped the date entirely: `${date} ${time}`
+  // with no zone at all) — the visitor's date differs from the
+  // host's here, so it must show alongside the visitor's clock.
+  assertStringIncludes(body, "Tue 6 Oct 09:00, Ho Chi Minh, UTC+7");
+  assertStringIncludes(body, "visitor: Mon 5 Oct 22:00, New York, UTC-4");
 });
 
 Deno.test("mig#15: cancellation NTFY body shows the host's clock and the visitor's alongside it", async () => {
@@ -107,6 +112,30 @@ Deno.test("mig#15: cancellation NTFY body shows the host's clock and the visitor
 
   assertStringIncludes(body, "Ho Chi Minh, UTC+7");
   assertStringIncludes(body, "New York, UTC-4");
+});
+
+Deno.test("mig#15: NTFY never shows a raw ISO timestamp for Booked/At", async () => {
+  const cfg = makeConfig();
+  const booking = makeCrossZoneBooking("America/New_York");
+
+  const bookedBody = await captureNtfyBody(() =>
+    notifyBookingSucceeded(cfg, booking)
+  );
+  assertEquals(
+    /\d{4}-\d{2}-\d{2}T/.test(bookedBody),
+    false,
+    "Booked: line must not be a raw ISO timestamp",
+  );
+  assertStringIncludes(bookedBody, "Booked: Thu 1 Oct");
+
+  const cancelBody = await captureNtfyBody(() =>
+    notifyBookingCancelled(cfg, booking, "guest", "changed my mind")
+  );
+  assertEquals(
+    /\d{4}-\d{2}-\d{2}T/.test(cancelBody),
+    false,
+    "At: line must not be a raw ISO timestamp",
+  );
 });
 
 Deno.test("mig#15: NTFY body never claims a visitor timezone that was never captured", async () => {

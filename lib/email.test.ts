@@ -168,3 +168,100 @@ Deno.test("mig#15: owner email shows both the host's and the visitor's labelled 
     assertStringIncludes(body, "New York, UTC-4");
   }
 });
+
+Deno.test("mig#15 review: owner booking subject shows the visitor's clock and date, not just the host's", () => {
+  // The reviewer's exact regression: the owner subject only ever
+  // carried the host's own clock. Since the two dates differ here
+  // (host Tuesday, visitor Monday evening), the visitor portion must
+  // carry its own date too, not just a bare time.
+  const emails = buildBookingEmails(
+    makeHoChiMinhConfig(),
+    makeCrossZoneBooking(),
+    "https://mig.example.com/cancel",
+  );
+  assertStringIncludes(emails.owner.subject, "Ho Chi Minh, UTC+7");
+  assertStringIncludes(
+    emails.owner.subject,
+    "visitor: Mon 5 Oct 22:00, New York, UTC-4",
+  );
+});
+
+Deno.test("mig#15 review: owner cancellation subject and body show the visitor's clock", () => {
+  const emails = buildCancellationEmails(
+    makeHoChiMinhConfig(),
+    makeCrossZoneBooking(),
+    "guest",
+    "changed my mind",
+  );
+  assertStringIncludes(emails.owner.subject, "Ho Chi Minh, UTC+7");
+  assertStringIncludes(
+    emails.owner.subject,
+    "visitor: Mon 5 Oct 22:00, New York, UTC-4",
+  );
+  assertStringIncludes(emails.owner.text, "Ho Chi Minh, UTC+7");
+  assertStringIncludes(
+    emails.owner.text,
+    "visitor: Mon 5 Oct 22:00, New York, UTC-4",
+  );
+});
+
+Deno.test("mig#15 review: the owner cancellation subject never drops the host city (mutation guard)", () => {
+  // Regression guard: a naive fix could rebuild the subject from just
+  // guestWhen/ownerWhen strings and lose the host's own city+offset
+  // if the concatenation order were ever changed carelessly.
+  const emails = buildCancellationEmails(
+    makeConfig(),
+    makeBooking("America/New_York"),
+    "owner",
+    undefined,
+  );
+  assertStringIncludes(emails.owner.subject, "Berlin, UTC+2");
+});
+
+Deno.test("mig#15 review: no raw ISO timestamps in cancellation or booking emails", () => {
+  const isoPattern = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+  const booking = buildBookingEmails(
+    makeHoChiMinhConfig(),
+    makeCrossZoneBooking(),
+    "https://mig.example.com/cancel",
+  );
+  assertEquals(isoPattern.test(booking.owner.text), false, "Booked at");
+  assertStringIncludes(booking.owner.text, "Booked at: Thu 1 Oct");
+
+  const cancel = buildCancellationEmails(
+    makeHoChiMinhConfig(),
+    makeCrossZoneBooking(),
+    "guest",
+    "test",
+  );
+  assertEquals(
+    isoPattern.test(cancel.guest.text),
+    false,
+    "guest Cancelled at",
+  );
+  assertEquals(
+    isoPattern.test(cancel.owner.text),
+    false,
+    "owner Cancelled at",
+  );
+  // Guest reads their own zone, owner reads the host's — never a raw
+  // timestamp with no zone attached.
+  assertStringIncludes(cancel.guest.text, "New York, UTC-4");
+  assertStringIncludes(cancel.owner.text, "Ho Chi Minh, UTC+7");
+});
+
+Deno.test("mig#15 review: guest email notes the host-timezone fallback when the guest zone is unknown", () => {
+  const emails = buildBookingEmails(
+    makeHoChiMinhConfig(),
+    { ...makeCrossZoneBooking(), guestTz: undefined },
+    "https://mig.example.com/cancel",
+  );
+  assertStringIncludes(
+    emails.guest.text,
+    "Times are shown in the host's timezone.",
+  );
+  assertStringIncludes(
+    emails.guest.html!,
+    "Times are shown in the host's timezone.",
+  );
+});

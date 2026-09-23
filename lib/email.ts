@@ -6,15 +6,18 @@ import type { Config } from "./types.ts";
 import type { Booking } from "./types.ts";
 import { generateIcs } from "./ics.ts";
 import {
-  formatClockAt,
-  formatInstantLong,
-  formatInstantShort,
+  formatClockLongAt,
+  formatClockShortAt,
+  formatOwnerClock,
   isValidTimeZone,
   validTimeZoneOr,
-  zoneCity,
   zonedDateTime,
-  zoneOffsetLabel,
 } from "./tz.ts";
+
+// The one line shown instead of an unlabelled host time whenever a
+// recipient's own zone isn't known (mig#15 review) — no other new
+// copy anywhere, per the spec.
+const HOST_TZ_NOTE = "Times are shown in the host's timezone.";
 
 export interface SendEmailOpts {
   to: string;
@@ -114,15 +117,19 @@ export function buildBookingEmails(
   const guestTz = guestTimeZone(booking);
   const guestIcs = generateIcs(booking, config, cancelUrl, guestTz);
   const ownerIcs = generateIcs(booking, config, cancelUrl, booking.hostTz);
-  const guestWhen = whenShort(booking, guestTz);
-  const ownerWhen = whenShort(booking, booking.hostTz);
+  const instant = bookingInstant(booking);
+  const guestWhen = formatClockShortAt(instant, guestTz);
+  const ownerWhen = formatOwnerClock(
+    booking.date,
+    booking.time,
+    booking.hostTz,
+    booking.guestTz,
+  );
 
   return {
     guest: {
       to: booking.guestEmail,
-      subject: `Booking confirmed: ${guestWhen}, ${zoneCity(guestTz)}, ${
-        zoneOffsetLabel(guestTz, bookingInstant(booking))
-      }`,
+      subject: `Booking confirmed: ${guestWhen}`,
       text: guestText(config, booking, cancelUrl),
       html: guestHtml(config, booking, cancelUrl),
       attachments: [
@@ -135,9 +142,7 @@ export function buildBookingEmails(
     },
     owner: {
       to: config.hostEmail,
-      subject: `New booking: ${booking.guestName} on ${ownerWhen}, ${
-        zoneCity(booking.hostTz)
-      }, ${zoneOffsetLabel(booking.hostTz, bookingInstant(booking))}`,
+      subject: `New booking: ${booking.guestName} on ${ownerWhen}`,
       text: ownerText(config, booking, cancelUrl),
       html: ownerHtml(config, booking, cancelUrl),
       attachments: [
@@ -169,15 +174,16 @@ export function buildCancellationEmails(
   reason: string | undefined,
 ): RecipientEmails {
   const guestTz = guestTimeZone(booking);
+  const knownGuestTz = isKnownTimeZone(booking.guestTz);
   const instant = bookingInstant(booking);
-  const guestWhen = whenShort(booking, guestTz);
-  const ownerWhen = whenShort(booking, booking.hostTz);
-  const guestZoneLabel = `${zoneCity(guestTz)}, ${
-    zoneOffsetLabel(guestTz, instant)
-  }`;
-  const ownerZoneLabel = `${zoneCity(booking.hostTz)}, ${
-    zoneOffsetLabel(booking.hostTz, instant)
-  }`;
+  const cancelledAt = new Date();
+  const guestWhen = formatClockShortAt(instant, guestTz);
+  const ownerWhen = formatOwnerClock(
+    booking.date,
+    booking.time,
+    booking.hostTz,
+    booking.guestTz,
+  );
   const reasonText = reason?.trim() || "(no reason given)";
 
   // Each recipient gets a "Cancelled by:" line in their own frame of
@@ -186,11 +192,11 @@ export function buildCancellationEmails(
   // the old "Cancelled by: the guest" line that left the host
   // wondering which guest it was.
   const guestBody =
-    `The meeting scheduled for ${guestWhen}, ${guestZoneLabel} ` +
-    `with ${config.hostName} has been cancelled.`;
+    `The meeting scheduled for ${guestWhen} with ${config.hostName} ` +
+    `has been cancelled.`;
   const hostBody =
-    `The meeting scheduled for ${ownerWhen}, ${ownerZoneLabel} ` +
-    `with ${booking.guestName} has been cancelled.`;
+    `The meeting scheduled for ${ownerWhen} with ${booking.guestName} ` +
+    `has been cancelled.`;
   const guestCancellerLabel = cancelledBy === "guest"
     ? "you"
     : `${config.hostName}`;
@@ -201,35 +207,40 @@ export function buildCancellationEmails(
   return {
     guest: {
       to: booking.guestEmail,
-      subject: `Your booking on ${guestWhen}, ${guestZoneLabel} was cancelled`,
+      subject: `Your booking on ${guestWhen} was cancelled`,
       text: cancellationText({
         greeting: `Hi ${booking.guestName},`,
         body: guestBody,
         cancellerLabel: guestCancellerLabel,
         reason: reasonText,
+        cancelledAtLabel: formatClockShortAt(cancelledAt, guestTz),
+        tzNote: knownGuestTz ? undefined : HOST_TZ_NOTE,
       }),
       html: cancellationHtml(config, {
         greeting: `Hi ${booking.guestName},`,
         body: guestBody,
         cancellerLabel: guestCancellerLabel,
         reason: reasonText,
+        cancelledAtLabel: formatClockShortAt(cancelledAt, guestTz),
+        tzNote: knownGuestTz ? undefined : HOST_TZ_NOTE,
       }),
     },
     owner: {
       to: config.hostEmail,
-      subject:
-        `Booking cancelled: ${booking.guestName}, ${ownerWhen}, ${ownerZoneLabel}`,
+      subject: `Booking cancelled: ${booking.guestName}, ${ownerWhen}`,
       text: cancellationText({
         greeting: `Hi ${config.hostName},`,
         body: hostBody,
         cancellerLabel: hostCancellerLabel,
         reason: reasonText,
+        cancelledAtLabel: formatClockShortAt(cancelledAt, booking.hostTz),
       }),
       html: cancellationHtml(config, {
         greeting: `Hi ${config.hostName},`,
         body: hostBody,
         cancellerLabel: hostCancellerLabel,
         reason: reasonText,
+        cancelledAtLabel: formatClockShortAt(cancelledAt, booking.hostTz),
       }),
     },
   };
@@ -242,12 +253,17 @@ function guestText(
   booking: Booking,
   cancelUrl: string,
 ): string {
-  return [
+  const lines = [
     `Hi ${booking.guestName},`,
     "",
     `Your meeting with ${config.hostName} is booked.`,
     "",
-    `When:  ${whenLong(booking, guestTimeZone(booking))}`,
+    `When:  ${
+      formatClockLongAt(bookingInstant(booking), guestTimeZone(booking))
+    }`,
+  ];
+  if (!isKnownTimeZone(booking.guestTz)) lines.push(HOST_TZ_NOTE);
+  lines.push(
     `Where: ${config.meetingUrl}`,
     "",
     "Add to calendar: open the attached .ics file.",
@@ -256,7 +272,8 @@ function guestText(
     cancelUrl,
     "",
     "— Sent by mig",
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
 function guestHtml(
@@ -264,6 +281,11 @@ function guestHtml(
   booking: Booking,
   cancelUrl: string,
 ): string {
+  const tzNoteHtml = isKnownTimeZone(booking.guestTz)
+    ? ""
+    : `<p style="color:#94a3b8;font-size:13px;margin-top:-8px">${
+      esc(HOST_TZ_NOTE)
+    }</p>`;
   return htmlWrap(
     config,
     `
@@ -272,13 +294,14 @@ function guestHtml(
     <table style="border-collapse:collapse;margin:16px 0">
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">When</td>
           <td style="padding:4px 0">${
-      esc(whenLong(booking, guestTimeZone(booking)))
+      esc(formatClockLongAt(bookingInstant(booking), guestTimeZone(booking)))
     }</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Where</td>
           <td style="padding:4px 0"><a href="${
       esc(config.meetingUrl)
     }" style="color:#f97316">${esc(config.meetingUrl)}</a></td></tr>
     </table>
+    ${tzNoteHtml}
     <p>Add to calendar: open the attached <code>.ics</code> file.</p>
     <p>Need to cancel? <a href="${
       esc(cancelUrl)
@@ -296,13 +319,23 @@ function ownerText(
     `New booking received.`,
     "",
     `Guest:    ${booking.guestName} <${booking.guestEmail}>`,
-    `When:     ${ownerWhenLong(booking)}`,
+    `When:     ${
+      formatOwnerClock(
+        booking.date,
+        booking.time,
+        booking.hostTz,
+        booking.guestTz,
+        true,
+      )
+    }`,
   ];
   if (booking.notes?.trim()) {
     lines.push(`Notes:    ${booking.notes.trim()}`);
   }
   lines.push(
-    `Booked at: ${booking.createdAt}`,
+    `Booked at: ${
+      formatClockShortAt(new Date(booking.createdAt), booking.hostTz)
+    }`,
     "",
     `Cancel: ${cancelUrl}`,
     "",
@@ -332,10 +365,22 @@ function ownerHtml(
       esc(booking.guestEmail)
     }&gt;</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">When</td>
-          <td style="padding:4px 0">${esc(ownerWhenLong(booking))}</td></tr>
+          <td style="padding:4px 0">${
+      esc(
+        formatOwnerClock(
+          booking.date,
+          booking.time,
+          booking.hostTz,
+          booking.guestTz,
+          true,
+        ),
+      )
+    }</td></tr>
       ${notesHtml}
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Booked at</td>
-          <td style="padding:4px 0">${esc(booking.createdAt)}</td></tr>
+          <td style="padding:4px 0">${
+      esc(formatClockShortAt(new Date(booking.createdAt), booking.hostTz))
+    }</td></tr>
     </table>
     <p><a href="${
       esc(cancelUrl)
@@ -349,18 +394,24 @@ function cancellationText(opts: {
   body: string;
   cancellerLabel: string;
   reason: string;
+  cancelledAtLabel: string;
+  tzNote?: string;
 }): string {
-  return [
+  const lines = [
     opts.greeting,
     "",
     opts.body,
+  ];
+  if (opts.tzNote) lines.push(opts.tzNote);
+  lines.push(
     "",
     `Cancelled by: ${opts.cancellerLabel}`,
     `Reason: ${opts.reason}`,
-    `Cancelled at: ${new Date().toISOString()}`,
+    `Cancelled at: ${opts.cancelledAtLabel}`,
     "",
     "— Sent by mig",
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
 function cancellationHtml(
@@ -370,20 +421,26 @@ function cancellationHtml(
     body: string;
     cancellerLabel: string;
     reason: string;
+    cancelledAtLabel: string;
+    tzNote?: string;
   },
 ): string {
+  const tzNoteHtml = opts.tzNote
+    ? `<p style="color:#94a3b8;font-size:13px">${esc(opts.tzNote)}</p>`
+    : "";
   return htmlWrap(
     config,
     `
     <p>${esc(opts.greeting.replace(/,$/, ""))},</p>
     <p>${esc(opts.body)}</p>
+    ${tzNoteHtml}
     <table style="border-collapse:collapse;margin:16px 0">
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Cancelled by</td>
           <td style="padding:4px 0">${esc(opts.cancellerLabel)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Reason</td>
           <td style="padding:4px 0">${esc(opts.reason)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Cancelled at</td>
-          <td style="padding:4px 0">${esc(new Date().toISOString())}</td></tr>
+          <td style="padding:4px 0">${esc(opts.cancelledAtLabel)}</td></tr>
     </table>
   `,
   );
@@ -393,32 +450,12 @@ function bookingInstant(booking: Booking): Date {
   return zonedDateTime(booking.date, booking.time, booking.hostTz);
 }
 
+function isKnownTimeZone(tz: string | undefined): boolean {
+  return !!tz && isValidTimeZone(tz);
+}
+
 function guestTimeZone(booking: Booking): string {
   return validTimeZoneOr(booking.guestTz, booking.hostTz);
-}
-
-function whenShort(booking: Booking, displayTz: string): string {
-  return formatInstantShort(bookingInstant(booking), displayTz);
-}
-
-function whenLong(booking: Booking, displayTz: string): string {
-  const instant = bookingInstant(booking);
-  return `${formatInstantLong(instant, displayTz)}, ${zoneCity(displayTz)}, ${
-    zoneOffsetLabel(displayTz, instant)
-  }`;
-}
-
-// Owner-facing "When:" line: the host's own clock, plus the visitor's
-// clock alongside it whenever a valid visitor zone was captured — "so
-// the owner always sees the visitor's time and zone beside it" (mig#15).
-// Falls back to the host clock alone when no visitor zone is known
-// (never a guess at the visitor's zone).
-function ownerWhenLong(booking: Booking): string {
-  const instant = bookingInstant(booking);
-  const host = whenLong(booking, booking.hostTz);
-  const guestTzRaw = booking.guestTz;
-  if (!guestTzRaw || !isValidTimeZone(guestTzRaw)) return host;
-  return `${host} (visitor: ${formatClockAt(instant, guestTzRaw)})`;
 }
 
 function htmlWrap(config: Config, body: string): string {
