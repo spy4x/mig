@@ -240,6 +240,58 @@ Deno.test("generateIcs — visitorTz folds the visitor's clock into the descript
   );
 });
 
+// mig#24 review follow-up: an earlier version of the `when` line
+// passed `displayTz` as formatOwnerClock's `hostTz` argument, which
+// doubles as the zone `booking.date`/`booking.time` (host-local
+// wall-clock values) are *interpreted* in — not a generic "which zone
+// to show". Called with a `displayTz` other than `booking.hostTz`,
+// that built a description from a wall clock reinterpreted in the
+// wrong zone entirely: a different instant than DTSTART, not just a
+// different zone label on the same instant. This pins the fix: the
+// description always matches DTSTART's real instant, regardless of
+// `displayTz`.
+Deno.test("generateIcs — visitorTz anchors the host clock to the real host zone, even when displayTz differs", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZBK8M",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "Europe/Berlin",
+    guestTz: "America/New_York",
+    guestName: "Client",
+    guestEmail: "client@example.com",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  // displayTz ("Asia/Tokyo") deliberately differs from b.hostTz
+  // ("Europe/Berlin"); no real caller does this today (lib/email.ts
+  // always passes booking.hostTz), but generateIcs must not depend on
+  // that to stay correct.
+  const ics = unfold(
+    generateIcs(
+      b,
+      cfg,
+      `https://example.com/c?t=${raw}`,
+      "Asia/Tokyo",
+      b.guestTz,
+    ),
+  );
+  // DTSTART: Berlin 10:00 CEST = 08:00Z — unaffected by displayTz.
+  assertEquals(ics.includes("DTSTART:20260828T080000Z"), true);
+  // The description's host clock must describe that same instant, in
+  // the real host zone — identical to the "visitorTz folds..." test
+  // above despite the different displayTz argument.
+  assertEquals(
+    ics.includes(
+      "Friday\\, 28 August 2026 at 10:00\\, Berlin\\, UTC+2 (visitor: 04:00\\, New York\\, UTC-4)",
+    ),
+    true,
+  );
+  assertEquals(ics.includes("Tokyo"), false);
+});
+
 Deno.test("generateIcs — visitorTz omits the visitor clock when no valid zone was captured", async () => {
   const cfg = makeConfig();
   const b: Booking = {

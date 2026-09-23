@@ -86,6 +86,27 @@ function fold(line: string): string {
   );
 }
 
+/** Build one VCALENDAR/VEVENT invite for `booking`. DTSTART/DTEND are
+ *  always UTC, computed from `booking.date`/`booking.time` interpreted
+ *  in `booking.hostTz` (the real storage zone — see the `Booking`
+ *  type) — neither depends on `displayTz` or `visitorTz` below, so
+ *  every recipient's calendar client shows the same instant.
+ *
+ *  `displayTz` (default `booking.hostTz`) is the zone the
+ *  DESCRIPTION's own "When:" line is rendered in when `visitorTz` is
+ *  omitted — the guest's own zone for the guest's invite
+ *  (`generateIcs(booking, config, cancelUrl, guestTz)`, lib/email.ts),
+ *  the host's for a plain host-only invite.
+ *
+ *  `visitorTz`, passed only for the owner's own invite
+ *  (`ownerIcs`, lib/email.ts), switches the "When:" line to the
+ *  combined "host clock (visitor: visitor clock)" string
+ *  `formatOwnerClock` (lib/tz.ts) already builds for the owner email
+ *  body — always anchored to `booking.hostTz` for the host side (see
+ *  the comment above `when` below for why `displayTz` itself must
+ *  never be substituted there) and `visitorTz` for the visitor side,
+ *  both for the real DTSTART instant. `displayTz` is unused in this
+ *  branch. */
 export function generateIcs(
   booking: Booking,
   config: Config,
@@ -118,13 +139,33 @@ export function generateIcs(
   //
   // review follow-up: `visitorTz`, passed only for the owner's own
   // invite (lib/email.ts's ownerIcs), folds the visitor's clock in
-  // alongside `displayTz`'s (the host's) via the same formatOwnerClock
-  // the owner email body already uses — so the two can't drift, and
-  // this file never grows its own second "host + visitor" formatter.
-  // The guest's invite never passes it, so its DESCRIPTION stays
-  // exactly `formatClockLongAt(start, displayTz)`, unchanged.
+  // alongside the host's own via the same formatOwnerClock the owner
+  // email body already uses — so the two can't drift, and this file
+  // never grows its own second "host + visitor" formatter. The
+  // guest's invite never passes it, so its DESCRIPTION stays exactly
+  // `formatClockLongAt(start, displayTz)`, unchanged.
+  //
+  // formatOwnerClock's `hostTz` parameter (lib/tz.ts) is not a
+  // generic "which zone to show" — it doubles as the zone `date` and
+  // `time` (host-local wall-clock values per the `Booking` type) are
+  // *interpreted* in, so it must always be `booking.hostTz`, the real
+  // storage zone, never `displayTz`. An earlier version of this line
+  // passed `displayTz` here instead: whenever a caller's `displayTz`
+  // happened to differ from `booking.hostTz`, formatOwnerClock built
+  // its own instant from the wrong wall-clock interpretation entirely
+  // — not just a mislabelled zone, but a different moment in time
+  // than `start` (and DTSTART) below. Every real caller (lib/email.ts)
+  // always passes `booking.hostTz` as `displayTz` for the owner's
+  // invite, so this never showed up in practice; passing
+  // `booking.hostTz` directly here instead removes the possibility.
   const when = visitorTz !== undefined
-    ? formatOwnerClock(booking.date, booking.time, displayTz, visitorTz, true)
+    ? formatOwnerClock(
+      booking.date,
+      booking.time,
+      booking.hostTz,
+      visitorTz,
+      true,
+    )
     : formatClockLongAt(start, displayTz);
 
   const descLines: string[] = [
