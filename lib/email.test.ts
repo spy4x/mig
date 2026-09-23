@@ -356,7 +356,14 @@ function recordingTransport(sent: RecordedMail[]) {
   });
 }
 
-Deno.test("sendBookingCorrectionEmail: rolledBack true keeps the removed/free wording unchanged", async () => {
+// mig#31: the round-3 reviewer of #30 changed several sentences in this
+// email and every test stayed green — assertStringIncludes on fragments
+// missed the drift. This test, and its rolledBack:false sibling below,
+// each pin their rendered subject, text and HTML in full, against fixed
+// inputs (makeBooking() has no guestTz, so formatOwnerClock never
+// appends a "(visitor: ...)" suffix — one less moving part in the
+// fixture).
+Deno.test("sendBookingCorrectionEmail: rolledBack true pins the whole removed/free email", async () => {
   const sent: RecordedMail[] = [];
   setTransportForTesting(recordingTransport(sent));
   try {
@@ -364,25 +371,58 @@ Deno.test("sendBookingCorrectionEmail: rolledBack true keeps the removed/free wo
       rolledBack: true,
     });
     assertEquals(sent.length, 1);
-    assertStringIncludes(sent[0].subject ?? "", "Not booked:");
-    assertStringIncludes(
-      sent[0].text ?? "",
-      "The booking below was NOT created after all.",
+    assertEquals(
+      sent[0].subject,
+      "Not booked: Visitor, Fri 28 Aug 10:00, Berlin, UTC+2",
     );
-    assertStringIncludes(
-      sent[0].text ?? "",
-      "was removed and the slot is free again",
+    assertEquals(
+      sent[0].text,
+      `Hi Host,
+
+The booking below was NOT created after all.
+
+Guest: Visitor <visitor@example.com>
+When:  Friday, 28 August 2026 at 10:00, Berlin, UTC+2
+
+The guest's confirmation email failed to send, so the booking was removed and the slot is free again. Please disregard the "New booking" email and calendar invite you received a moment ago.
+
+— Sent by mig`,
     );
-    assertStringIncludes(
-      sent[0].html ?? "",
-      "was removed and the slot is free again",
+    assertEquals(
+      sent[0].html,
+      `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background:#0f172a;color:#e2e8f0;
+             font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
+             font-size:16px;line-height:1.6">
+<div style="max-width:480px;margin:0 auto">
+  <div style="margin-bottom:16px">
+    <a href="https://github.com/spy4x/mig" style="color:#f97316;font-weight:600;text-decoration:none">mig</a>
+  </div>
+  
+    <p>Hi Host,</p>
+    <p>The booking below was <strong>NOT</strong> created after all.</p>
+    <table style="border-collapse:collapse;margin:16px 0">
+      <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Guest</td>
+          <td style="padding:4px 0">Visitor &lt;visitor@example.com&gt;</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">When</td>
+          <td style="padding:4px 0">Friday, 28 August 2026 at 10:00, Berlin, UTC+2</td></tr>
+    </table>
+    <p>The guest's confirmation email failed to send, so the booking
+    was removed and the slot is free again. Please disregard the
+    &ldquo;New booking&rdquo; email and calendar invite you received a
+    moment ago.</p>
+  
+  <p style="color:#64748b;font-size:14px;margin-top:24px">— Sent by <a href="https://github.com/spy4x/mig" style="color:#64748b;text-decoration:underline">mig</a></p>
+</div>
+</body></html>`,
     );
   } finally {
     setTransportForTesting(null);
   }
 });
 
-Deno.test("sendBookingCorrectionEmail: rolledBack false does not claim the booking was removed or the slot is free", async () => {
+Deno.test("sendBookingCorrectionEmail: rolledBack false pins the whole not-removed email", async () => {
   const sent: RecordedMail[] = [];
   setTransportForTesting(recordingTransport(sent));
   try {
@@ -391,28 +431,80 @@ Deno.test("sendBookingCorrectionEmail: rolledBack false does not claim the booki
       rolledBack: false,
     });
     assertEquals(sent.length, 1);
-    assertStringIncludes(sent[0].subject ?? "", "Not booked, remove by hand:");
     const text = sent[0].text ?? "";
     const html = sent[0].html ?? "";
+    assertEquals(
+      sent[0].subject,
+      "Not booked, remove by hand: Visitor, Fri 28 Aug 10:00, Berlin, UTC+2",
+    );
+    assertEquals(
+      text,
+      `Hi Host,
+
+The booking below was NOT confirmed.
+
+Guest: Visitor <visitor@example.com>
+When:  Friday, 28 August 2026 at 10:00, Berlin, UTC+2
+
+The guest's confirmation email failed to send, and removing the booking failed too. It may still be on disk and come back after a restart. Remove it by hand: booking id 01HXYZBK8M in the data file. Please disregard the "New booking" email and calendar invite you received a moment ago.
+
+— Sent by mig`,
+    );
+    assertEquals(
+      html,
+      `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:24px;background:#0f172a;color:#e2e8f0;
+             font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
+             font-size:16px;line-height:1.6">
+<div style="max-width:480px;margin:0 auto">
+  <div style="margin-bottom:16px">
+    <a href="https://github.com/spy4x/mig" style="color:#f97316;font-weight:600;text-decoration:none">mig</a>
+  </div>
+  
+    <p>Hi Host,</p>
+    <p>The booking below was <strong>NOT</strong> confirmed.</p>
+    <table style="border-collapse:collapse;margin:16px 0">
+      <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Guest</td>
+          <td style="padding:4px 0">Visitor &lt;visitor@example.com&gt;</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">When</td>
+          <td style="padding:4px 0">Friday, 28 August 2026 at 10:00, Berlin, UTC+2</td></tr>
+    </table>
+    <p>The guest's confirmation email failed to send, and removing
+    the booking failed too. It may still be on disk and come back
+    after a restart. Remove it by hand: booking id 01HXYZBK8M in the data file. Please disregard the &ldquo;New
+    booking&rdquo; email and calendar invite you received a moment
+    ago.</p>
+  
+  <p style="color:#64748b;font-size:14px;margin-top:24px">— Sent by <a href="https://github.com/spy4x/mig" style="color:#64748b;text-decoration:underline">mig</a></p>
+</div>
+</body></html>`,
+    );
     assertEquals(/removed|free/i.test(text), false, `text: ${text}`);
     assertEquals(/removed|free/i.test(html), false, `html: ${html}`);
     // The HTML wraps "NOT" in <strong>...</strong>, so a plain
     // substring check on "NOT created" would never match either way —
-    // these allow markup (or a single space) between "not" and
-    // "created" so the assertion actually exercises the wording.
+    // the text regex allows only whitespace between "not" and
+    // "created" (there is none in the text template), while the HTML
+    // one also allows tags, so both actually exercise the wording
+    // instead of the markup around it.
     assertEquals(/not\s*created/i.test(text), false, `text: ${text}`);
     assertEquals(
       /not(<[^>]+>|\s)*created/i.test(html),
       false,
       `html: ${html}`,
     );
-    assertStringIncludes(text, booking.id);
-    assertStringIncludes(html, booking.id);
+    // mig#31: the host's only cue, when NTFY is off, to disregard the
+    // earlier "New booking" email and clean up the stray booking by
+    // hand — the assertEquals calls above already pin these exact
+    // phrases as part of the whole email, but each gets its own
+    // explicit, case-insensitive check too, in both text and HTML, so
+    // dropping any one of them turns this test red on its own even if
+    // a future edit also changes surrounding wording.
+    assertStringIncludes(text.toLowerCase(), "disregard");
+    assertStringIncludes(html.toLowerCase(), "disregard");
     assertStringIncludes(text.toLowerCase(), "remove it by hand");
-    assertStringIncludes(text, '"New booking"');
-    assertStringIncludes(text, "after a restart");
-    assertStringIncludes(html, "after a restart");
-    assertStringIncludes(html, "disregard");
+    assertStringIncludes(html.toLowerCase(), "remove it by hand");
   } finally {
     setTransportForTesting(null);
   }
