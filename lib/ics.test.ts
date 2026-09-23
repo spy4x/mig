@@ -201,6 +201,75 @@ Deno.test("generateIcs — Etc/GMT+5 description shows the offset only", async (
   assertEquals(ics.includes("GMT+5"), false);
 });
 
+// mig#24 review follow-up: generateIcs's 5th param, `visitorTz`, folds
+// the visitor's clock into the owner's own invite via formatOwnerClock
+// — the same helper the owner email body uses — so the description
+// stops being host-clock-only for the one recipient whose email
+// already shows both. Only lib/email.ts's ownerIcs call passes it; the
+// guest's own ics call never does, and the tests above (called without
+// it) already pin that DESCRIPTION stays `formatClockLongAt` alone.
+Deno.test("generateIcs — visitorTz folds the visitor's clock into the description", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZBK8M",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "Europe/Berlin",
+    guestTz: "America/New_York",
+    guestName: "Client",
+    guestEmail: "client@example.com",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = unfold(
+    generateIcs(
+      b,
+      cfg,
+      `https://example.com/c?t=${raw}`,
+      b.hostTz,
+      b.guestTz,
+    ),
+  );
+  assertEquals(
+    ics.includes(
+      "Friday\\, 28 August 2026 at 10:00\\, Berlin\\, UTC+2 (visitor: 04:00\\, New York\\, UTC-4)",
+    ),
+    true,
+  );
+});
+
+Deno.test("generateIcs — visitorTz omits the visitor clock when no valid zone was captured", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZBK8M",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "Europe/Berlin",
+    guestName: "Client",
+    guestEmail: "client@example.com",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = unfold(
+    generateIcs(
+      b,
+      cfg,
+      `https://example.com/c?t=${raw}`,
+      b.hostTz,
+      "Not/A_Timezone",
+    ),
+  );
+  assertEquals(
+    ics.includes("Friday\\, 28 August 2026 at 10:00\\, Berlin\\, UTC+2"),
+    true,
+  );
+  assertEquals(ics.includes("visitor:"), false);
+});
+
 Deno.test("generateIcs — description includes guest notes when present", async () => {
   const cfg = makeConfig();
   const b: Booking = {

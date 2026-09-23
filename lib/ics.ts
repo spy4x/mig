@@ -5,6 +5,7 @@ import type { Booking, Config } from "./types.ts";
 import {
   formatClockLongAt,
   formatInstantLong,
+  formatOwnerClock,
   validTimeZoneOr,
   zonedDateTime,
 } from "./tz.ts";
@@ -90,6 +91,7 @@ export function generateIcs(
   config: Config,
   cancelUrl: string,
   displayTz = booking.hostTz,
+  visitorTz?: string,
 ): string {
   const start = zonedDateTime(booking.date, booking.time, booking.hostTz);
   displayTz = validTimeZoneOr(displayTz, booking.hostTz);
@@ -113,7 +115,17 @@ export function generateIcs(
   //   3. Notes: guest's notes, if any
   //   4. Cancel URL — wrapped in a single trailing line so the URL
   //      and its label travel together
-  const when = formatClockLongAt(start, displayTz);
+  //
+  // review follow-up: `visitorTz`, passed only for the owner's own
+  // invite (lib/email.ts's ownerIcs), folds the visitor's clock in
+  // alongside `displayTz`'s (the host's) via the same formatOwnerClock
+  // the owner email body already uses — so the two can't drift, and
+  // this file never grows its own second "host + visitor" formatter.
+  // The guest's invite never passes it, so its DESCRIPTION stays
+  // exactly `formatClockLongAt(start, displayTz)`, unchanged.
+  const when = visitorTz !== undefined
+    ? formatOwnerClock(booking.date, booking.time, displayTz, visitorTz, true)
+    : formatClockLongAt(start, displayTz);
 
   const descLines: string[] = [
     `Meeting with ${config.hostName}`,

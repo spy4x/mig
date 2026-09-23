@@ -230,7 +230,17 @@ export function buildBookingEmails(
 ): RecipientEmails {
   const guestTz = guestTimeZone(booking);
   const guestIcs = generateIcs(booking, config, cancelUrl, guestTz);
-  const ownerIcs = generateIcs(booking, config, cancelUrl, booking.hostTz);
+  // review follow-up: the owner's invite now carries the visitor's
+  // clock too, the same way the owner email body already does — see
+  // generateIcs's doc comment. The guest's own ics above passes no
+  // `visitorTz`, so its DESCRIPTION is unaffected.
+  const ownerIcs = generateIcs(
+    booking,
+    config,
+    cancelUrl,
+    booking.hostTz,
+    booking.guestTz,
+  );
   const instant = bookingInstant(booking);
   const guestWhen = formatClockShortAt(instant, guestTz);
   const ownerWhen = formatOwnerClock(
