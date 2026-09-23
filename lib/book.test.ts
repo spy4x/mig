@@ -1017,7 +1017,7 @@ Deno.test("rollback-failure log says the owner email was not sent when the owner
   // Every send fails, starting with the owner's own — so
   // ownerEmailSucceeded is still false when the rollback runs.
   setTransportForTesting(
-    failingTransport("simulated SMTP failure (mig#book test)"),
+    failingTransport("simulated SMTP failure (owner send)"),
   );
 
   try {

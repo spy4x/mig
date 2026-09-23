@@ -170,19 +170,14 @@ Deno.test("mig#18: the standalone time card shows the slot's date and clock in t
 // links actually carry it. This renders the real route + island, the
 // same technique as the tests above, and is scoped to a slot link's
 // own `href` rather than a whole-page `includes` — the tz query param
-// also shows up (correctly) elsewhere on the page (the calendar nav,
-// the date card), so a whole-page check wouldn't catch the link this
-// tz actually needs to survive on: the one a no-JS visitor clicks to
-// advance the flow.
+// also shows up (correctly) elsewhere on the page (the date card),
+// so a whole-page check wouldn't catch the link this tz actually
+// needs to survive on: the one a no-JS visitor clicks to advance the
+// flow.
 Deno.test("mig#18: standalone / keeps tz on every slot link", async () => {
-  // review follow-up: the literal TEST_DATE (2026-10-06) other tests
-  // in this file use deliberately, for its cross-zone date-boundary
-  // crossing, is a fixed calendar date — once the suite runs on or
-  // after that date, minNoticeHours/the horizon check reject it as
-  // "in the past", the page renders no slots at all, and the loop
-  // below would pass vacuously (zero slot links, zero iterations).
-  // This test doesn't need that specific date, only *a* bookable
-  // weekday, so it computes one relative to whenever the suite
+  // review follow-up: a past date renders its slots disabled and
+  // without links, so the loop below would never run — this test
+  // computes a bookable weekday relative to whenever the suite
   // actually runs, the same way lib/book.test.ts's futureWeekday does.
   const date = futureWeekday(3, HOST_TZ);
   const html = await renderIndex(

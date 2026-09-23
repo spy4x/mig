@@ -258,8 +258,8 @@ export default function BookingFlow(props: BookingFlowProps) {
     // pickerLinks. No test calls pushUrl itself (a server render
     // never does — its handlers only exist after client-side
     // hydration), so an edit here that drops `tz` — building the
-    // address by hand, or passing `null` to `pushAddress` — stays
-    // green; see pickerPushAddress's doc comment in
+    // address by hand, or binding `links` from `pickerLinks(null)` —
+    // stays green; see pickerPushAddress's doc comment in
     // lib/picker-links.ts for the full picture of what is and isn't
     // caught.
     const url = links.pushAddress(next);

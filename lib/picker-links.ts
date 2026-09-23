@@ -45,9 +45,10 @@ export function pickerHref(
  *  is unit-testable without driving a real `history.pushState`.
  *
  *  No test runs `pushUrl` itself: a server render never calls it (its
- *  handlers only exist after client-side hydration), and this file's
- *  own tests call `pushAddress`/`pickerPushAddress` directly, not
- *  through `pushUrl`. So an edit inside `pushUrl` that drops `tz` —
+ *  handlers only exist after client-side hydration), and
+ *  `picker-links.test.ts` calls `pushAddress`/`pickerPushAddress`
+ *  directly, not through `pushUrl`. So an edit inside `pushUrl` that
+ *  drops `tz` —
  *  whether it builds its own `URLSearchParams` by hand, calls
  *  `pickerLinks(null).pushAddress(next)`, or calls
  *  `pickerPushAddress(next, null)` directly — stays green. The one
@@ -74,12 +75,13 @@ export function pickerPushAddress(
  *  `links.pushAddress(next)` inside `pushUrl` — one shared value
  *  instead of threading `linkTz` to five separate call sites by hand.
  *
- *  What a test can and can't see through this binding: the
- *  `<a href>`s and `pickerPushAddress`/`pushAddress` themselves are
- *  unit- and server-render-tested (`routes/index.test.tsx`,
- *  `lib/picker-links.test.ts`). `pushUrl` itself is not — see
- *  `pickerPushAddress`'s doc comment above for exactly what that
- *  leaves uncaught. */
+ *  What a test can and can't see through this binding:
+ *  `pickerPushAddress`/`pushAddress` are unit-tested
+ *  (`lib/picker-links.test.ts`), and `routes/index.test.tsx` server-
+ *  render-tests the slot-list `<a href>`s only — the date card,
+ *  calendar and time card links are not covered. `pushUrl` itself is
+ *  not tested at all — see `pickerPushAddress`'s doc comment above
+ *  for exactly what that leaves uncaught. */
 export function pickerLinks(tz: string | null): {
   tz: string | null;
   pushAddress(

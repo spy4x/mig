@@ -16,7 +16,8 @@
 // location.search afterward; this repo has no such test today. What
 // *is* caught: an edit to the `pickerLinks(linkTz)` binding itself in
 // BookingFlow.tsx, because the same binding also feeds the `tz` on
-// every `<a href>` routes/index.test.tsx checks.
+// the slot-list `<a href>`s routes/index.test.tsx checks — the date
+// card, calendar and time card links are not covered there.
 
 import { assertEquals } from "@std/assert";
 import {
