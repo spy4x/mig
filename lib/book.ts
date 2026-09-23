@@ -55,15 +55,23 @@ export async function handleBookingSubmit(
 
   const form = await ctx.req.formData();
   // Raw, unvalidated — used only to carry state back on a failed
-  // redirect (mig#15 review). A validation/availability/persist
-  // failure used to drop `slot` and the visitor's `tz` and send them
-  // back to the bare picker root; the route re-validates all three on
-  // the way back in, so passing the raw values through here never
-  // bypasses that.
-  const redirectState = {
+  // redirect (mig#15 review). `date` and `tz` always ride along: the
+  // route re-validates both on the way back in, so passing the raw
+  // values through here never bypasses that. `slot` only comes along
+  // for a failure that leaves the slot itself still meaningful to
+  // retry (bad form input, or the confirmation email failing to send
+  // — the slot is still free either way); every other failure means
+  // the slot itself is gone or was never valid, so keeping it would
+  // land the visitor back on the confirm step for a slot they can't
+  // actually book, and resubmitting would send another false
+  // confirmation (mig#15 round 2 — see each call site below).
+  const redirectDateTz = {
     date: String(form.get("date") || "") || undefined,
-    slot: String(form.get("slot") || "") || undefined,
     tz: String(form.get("guestTz") || "") || undefined,
+  };
+  const redirectState = {
+    ...redirectDateTz,
+    slot: String(form.get("slot") || "") || undefined,
   };
   const parsed = BookingSchema.safeParse({
     name: form.get("name"),
@@ -96,10 +104,14 @@ export async function handleBookingSubmit(
   }
 
   // Sanity: slot must be within availability, not booked, not in the past.
+  // This and every other availability/conflict/persist failure below
+  // drops `slot` — it's no longer a valid pick, so keeping it would
+  // land the visitor back on the confirm step for a slot they can't
+  // book (mig#15 round 2).
   const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000);
   const slotInstant = zonedDateTime(input.date, input.slot, cfg.hostTz);
   if (slotInstant < minStart) {
-    return errRedirect("That time is no longer available.", redirectState);
+    return errRedirect("That time is no longer available.", redirectDateTz);
   }
 
   // Check slot is in availability
@@ -120,7 +132,7 @@ export async function handleBookingSubmit(
   if (!inAvail) {
     return errRedirect(
       "That time is outside availability hours.",
-      redirectState,
+      redirectDateTz,
     );
   }
 
@@ -128,7 +140,7 @@ export async function handleBookingSubmit(
   if (cfg.blockedDates.has(input.date)) {
     return errRedirect(
       "That date is not available for booking.",
-      redirectState,
+      redirectDateTz,
     );
   }
 
@@ -205,7 +217,7 @@ export async function handleBookingSubmit(
       );
       return errRedirect(
         "That time was just booked by someone else. The confirmation email you received is no longer valid — please pick another time.",
-        redirectState,
+        redirectDateTz,
       );
     }
   } catch (e) {
@@ -218,7 +230,7 @@ export async function handleBookingSubmit(
     );
     return errRedirect(
       "Your confirmation was sent, but we couldn't save the booking on our end. Please contact the host directly to confirm.",
-      redirectState,
+      redirectDateTz,
     );
   }
 

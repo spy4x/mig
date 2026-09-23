@@ -244,7 +244,7 @@ Deno.test("mig#15 review: a validation failure keeps slot and tz on the redirect
   await rm(path);
 });
 
-Deno.test("mig#15 review: an availability failure also keeps slot and tz on the redirect", async () => {
+Deno.test("mig#15 round 2: an availability failure drops slot but keeps date and tz on the redirect", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });
@@ -265,7 +265,51 @@ Deno.test("mig#15 review: an availability failure also keeps slot and tz on the 
   assertEquals(res.status, 303);
   const url = new URL(res.headers.get("location")!);
   assertEquals(url.searchParams.get("date"), date);
-  assertEquals(url.searchParams.get("slot"), "08:00");
+  // mig#15 round 2: 08:00 was never a bookable slot at all — keeping
+  // it on the redirect would land the visitor on the confirm step for
+  // a slot that was never valid to begin with.
+  assertEquals(url.searchParams.get("slot"), null);
+  assertEquals(url.searchParams.get("tz"), "America/New_York");
+  await rm(path);
+});
+
+Deno.test("mig#15 round 2: a slot-taken conflict drops slot from the redirect (keeps date and tz)", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  // Pre-populate the exact slot this submission will target, so
+  // Phase 2's conflict check (the email already sent by Phase 1) is
+  // the one that fires — not the schema or availability checks.
+  await bookings.mutate((draft) => {
+    draft.push({
+      id: "01EXISTING",
+      createdAt: new Date().toISOString(),
+      date,
+      time: "09:00",
+      hostTz: HOST_TZ,
+      guestName: "Someone Else",
+      guestEmail: "else@example.com",
+      cancelTokenHash: "h",
+      status: "active",
+    });
+  });
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    fields: validFields(date, "09:00", { guestTz: "America/New_York" }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  // A gone slot must not come back on the redirect — landing on the
+  // confirm step for it would let the visitor resubmit and trigger a
+  // second, false confirmation email pair (mig#15 round 2).
+  assertEquals(url.searchParams.get("slot"), null);
+  assertEquals(url.searchParams.get("date"), date);
   assertEquals(url.searchParams.get("tz"), "America/New_York");
   await rm(path);
 });
