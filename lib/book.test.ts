@@ -7,14 +7,14 @@
 // about, just on the write path instead of the read path. Every test
 // below asserts the `Location` header's pathname, not just "success".
 
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import nodemailer from "nodemailer";
 import type { Context } from "fresh";
 import type { State } from "./utils.ts";
 import type { Config } from "./types.ts";
 import { BookingsStore } from "./bookings.ts";
 import { RateLimiter } from "./ratelimit.ts";
-import { parseWeeklyAvailability } from "./availability.ts";
+import { getSlotsForDate, parseWeeklyAvailability } from "./availability.ts";
 import { addDays, dayOfWeek, isoDateInTz } from "./tz.ts";
 import { setTransportForTesting } from "./email.ts";
 import { handleBookingSubmit } from "./book.ts";
@@ -126,7 +126,51 @@ function locationPath(res: Response): string {
 // SMTP host in fakeConfig().smtp — see lib/bookings.test.ts and
 // lib/email.test.ts for the same "temp file / no real I/O" spirit,
 // applied here to the network boundary lib/email.ts owns.
-setTransportForTesting(nodemailer.createTransport({ jsonTransport: true }));
+function defaultTransport() {
+  return nodemailer.createTransport({ jsonTransport: true });
+}
+setTransportForTesting(defaultTransport());
+
+// A minimal shape of the object nodemailer's `Mailer.sendMail` passes
+// to a transport plugin's `send(mail, callback)` — see
+// json-transport/index.js in the nodemailer package for the same
+// `mail.data.to` / `mail.message.getEnvelope()` access pattern this
+// mirrors.
+interface TestMail {
+  data: { to?: string };
+  message: { getEnvelope(): unknown };
+}
+type TestSendCallback = (err: Error | null, info?: unknown) => void;
+
+/** Test-only transport (mig#19): records every `to` address it is
+ *  asked to send to, and doesn't resolve a send until `gate`
+ *  resolves. Used to hold a winning request's email send open across
+ *  an `await`, so a concurrently-running second request can genuinely
+ *  be in flight at the same time — without any wall-clock sleep to
+ *  fake it. */
+function gatedTransport(gate: Promise<void>, sentTo: string[]) {
+  return nodemailer.createTransport({
+    name: "gated-test-transport",
+    version: "1.0.0",
+    async send(mail: TestMail, callback: TestSendCallback) {
+      sentTo.push(String(mail.data.to));
+      await gate;
+      callback(null, { envelope: mail.message.getEnvelope() });
+    },
+  });
+}
+
+/** Test-only transport (mig#19): every send fails immediately, the
+ *  same way a real SMTP error reaches `lib/email.ts`'s `sendEmail`. */
+function failingTransport(message: string) {
+  return nodemailer.createTransport({
+    name: "failing-test-transport",
+    version: "1.0.0",
+    send(_mail: TestMail, callback: TestSendCallback) {
+      callback(new Error(message));
+    },
+  });
+}
 
 // ─── Success ─────────────────────────────────────────────────────────
 
@@ -466,4 +510,161 @@ Deno.test("a validation-failure redirect caps an oversized slot, like date and t
   const url = new URL(loc);
   assertEquals(url.searchParams.get("slot")?.length, 100);
   await rm(path);
+});
+
+// ─── mig#19: a lost race must send no email for a booking never saved ──
+
+Deno.test("mig#19: the loser of a slot race sends no email and stores no booking", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 10 });
+
+  const sentTo: string[] = [];
+  let releaseGate!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    releaseGate = resolve;
+  });
+  setTransportForTesting(gatedTransport(gate, sentTo));
+
+  try {
+    const fieldsAlice = validFields(date, "09:00", {
+      name: "Alice",
+      email: "alice@example.com",
+      guestTz: "America/New_York",
+    });
+    const fieldsBob = validFields(date, "09:00", {
+      name: "Bob",
+      email: "bob@example.com",
+      guestTz: "America/New_York",
+    });
+
+    // Both submissions are kicked off here, neither awaited before the
+    // other starts, so both are genuinely in flight — this is what
+    // makes handleBookingSubmit(alice) and handleBookingSubmit(bob)
+    // race for the same slot instead of running one after the other.
+    // Only once both have started do we release the gate that lets
+    // the winner's (held-open) email send finish — a promise-based
+    // seam instead of a wall-clock sleep, so there's no timing to get
+    // lucky or unlucky on.
+    const alicePromise = handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: fieldsAlice,
+      }),
+      "",
+    );
+    const bobPromise = handleBookingSubmit(
+      stubContext({ config: cfg, bookings, rateLimiter, fields: fieldsBob }),
+      "",
+    );
+    releaseGate();
+
+    const [aliceRes, bobRes] = await Promise.all([alicePromise, bobPromise]);
+    const named = [{ who: "alice", res: aliceRes }, {
+      who: "bob",
+      res: bobRes,
+    }];
+    const winner = named.find((r) =>
+      locationPath(r.res).startsWith("/confirmed?")
+    );
+    const loser = named.find((r) => r !== winner);
+    if (!winner || !loser) {
+      throw new Error(
+        "expected exactly one winner and one loser; got " +
+          `alice=${locationPath(aliceRes)} bob=${locationPath(bobRes)}`,
+      );
+    }
+
+    // The loser lands back on the slot list: no `slot`, `date` and
+    // `tz` kept, same as every other conflict redirect.
+    assertEquals(loser.res.status, 303);
+    const loserUrl = new URL(loser.res.headers.get("location")!);
+    assertEquals(loserUrl.pathname, "/");
+    assertEquals(loserUrl.searchParams.get("slot"), null);
+    assertEquals(loserUrl.searchParams.get("date"), date);
+    assertEquals(loserUrl.searchParams.get("tz"), "America/New_York");
+
+    // Exactly one booking stored for the slot.
+    const stored = bookings.list().filter((b) =>
+      b.date === date && b.time === "09:00" && b.status === "active"
+    );
+    assertEquals(
+      stored.length,
+      1,
+      `stored bookings: ${JSON.stringify(stored)}`,
+    );
+
+    // Exactly one guest email and exactly one owner email sent, total
+    // — the loser's request never reaches Phase 2 at all, so nothing
+    // for it was ever handed to the transport.
+    const ownerEmails = sentTo.filter((to) => to === cfg.hostEmail);
+    const guestEmails = sentTo.filter((to) => to !== cfg.hostEmail);
+    assertEquals(ownerEmails.length, 1, `sent: ${sentTo}`);
+    assertEquals(guestEmails.length, 1, `sent: ${sentTo}`);
+    assertEquals(sentTo.length, 2, `sent: ${sentTo}`);
+
+    // The slot list for that date shows the slot as unavailable — the
+    // same booked-time computation routes/index.tsx inlines to render
+    // the picker (booked = the active bookings' times for the date).
+    const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000);
+    const daySlots = getSlotsForDate(
+      date,
+      cfg.weeklyAvailability,
+      cfg.slotDurationMin,
+      bookings.forDate(date),
+      cfg.hostTz,
+      minStart,
+    );
+    assertEquals(daySlots.find((s) => s.time === "09:00")?.available, false);
+  } finally {
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+// ─── mig#19: a failed send after a save must roll the save back ────────
+
+Deno.test("mig#19: a failed send after a save rolls the booking back and says so", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  setTransportForTesting(failingTransport("SMTP send failed (mig#19 test)"));
+
+  try {
+    const ctx = stubContext({
+      config: cfg,
+      bookings,
+      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      fields: validFields(date, "09:00"),
+    });
+
+    const res = await handleBookingSubmit(ctx, "");
+    assertEquals(res.status, 303);
+    const url = new URL(res.headers.get("location")!);
+    assertStringIncludes(
+      url.searchParams.get("err") ?? "",
+      "the booking was not created",
+    );
+    // The slot is free again: the save from Phase 1 was undone, not
+    // left behind with no confirmation and no working cancel link.
+    assertEquals(
+      bookings.list().filter((b) => b.date === date && b.time === "09:00")
+        .length,
+      0,
+      "the rolled-back booking must not remain in the store",
+    );
+    // `slot` rides along on this redirect — the slot is free again,
+    // so retrying it is meaningful (unlike a real conflict).
+    assertEquals(url.searchParams.get("slot"), "09:00");
+  } finally {
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
 });

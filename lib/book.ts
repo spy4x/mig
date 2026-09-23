@@ -174,14 +174,18 @@ export async function handleBookingSubmit(
     );
   }
 
-  // Transactional booking flow: email first, then persist. If the
-  // email send fails, the booking is NOT created — we don't want a
-  // booking record without a corresponding email because the cancel
-  // link in the email is the only out-of-band cancellation path
-  // the guest has. If the persist fails after the email went out,
-  // we have a partial state (the guest has the email but the row
-  // isn't on disk) — log loudly and surface a real error to the
-  // user so they can contact the host directly.
+  // Transactional booking flow: save first, then send (mig#19). A
+  // saved booking with no email can still be undone — Phase 2's
+  // rollback below deletes it, and the guest is none the wiser. An
+  // email that went out for a booking that was never saved cannot be
+  // undone: there is no "unsend" for a "Booking confirmed" message
+  // that already carries a calendar invite, and the visitor is left
+  // holding a confirmation for a meeting the host never agreed to.
+  // The conflict check — the only place two concurrent requests for
+  // the same slot actually collide — therefore has to run before any
+  // mail goes out, not after. The previous order (email, then
+  // persist) got this backwards: the loser of the race still had its
+  // email sent before the conflict was ever detected.
   const { raw: tokenRaw, hash: tokenHash } = await newCancelToken(
     cfg.cancelSecret,
   );
@@ -200,30 +204,9 @@ export async function handleBookingSubmit(
     status: "active" as const,
   };
 
-  // Phase 1: send the email first.
-  try {
-    const cancelUrl = new URL(
-      `/cancel?id=${bookingId}&token=${tokenRaw}`,
-      cfg.publicUrl,
-    ).toString();
-    await sendBookingEmails(cfg, booking, cancelUrl);
-  } catch (e) {
-    const msg = (e as Error).message;
-    console.error("mig: email send failed; booking NOT created:", msg);
-    // Optional NTFY push so the host gets a heads-up outside the
-    // email channel. Fire-and-forget — we don't await the NTFY
-    // response before redirecting the user, so a slow NTFY won't
-    // add latency to the page.
-    await notifyBookingEmailFailed(cfg, booking, msg);
-    return errRedirect(
-      "We couldn't send your confirmation email, so the booking was not created. Please try again in a moment.",
-      redirectState,
-    );
-  }
-
-  // Phase 2: persist under the mutex. Re-check the conflict because
-  // a concurrent request could have taken the slot in the few
-  // milliseconds between Phase 1 and Phase 2.
+  // Phase 1: persist under the mutex, conflict check inside the same
+  // mutation. Whichever concurrent request reaches this first wins
+  // the slot; the loser finds out here, before it has sent anything.
   try {
     const result = await ctx.state.bookings.mutate((draft) => {
       const conflict = draft.find(
@@ -239,28 +222,60 @@ export async function handleBookingSubmit(
       return { ok: true as const };
     });
     if (!result.ok) {
-      // Someone else booked the slot between our email send and our
-      // persist. The email we already sent is now stale. Fail
-      // loudly so the host can reach out and reschedule.
-      console.error(
-        "mig: slot taken after email sent; booking=" + bookingId,
-      );
+      // Someone else's request took the slot first. No email was
+      // ever sent for this one, so there's nothing to warn the guest
+      // about beyond the slot being gone.
       return errRedirect(
-        "That time was just booked by someone else. The confirmation email you received is no longer valid — please pick another time.",
+        "That time was just booked by someone else. Please pick another time.",
         redirectDateTz,
       );
     }
   } catch (e) {
-    // Persist failed after the email already went out. The guest
-    // has a confirmation but no cancel link will work. Log loudly
-    // so the host can manually add the booking or reach out.
-    console.error(
-      "mig: persist FAILED after email sent; booking=" + bookingId,
-      e,
-    );
+    // The save itself failed. Nothing was sent, so there's nothing to
+    // roll back — just tell the guest plainly and log loudly.
+    console.error("mig: persist FAILED; booking=" + bookingId, e);
     return errRedirect(
-      "Your confirmation was sent, but we couldn't save the booking on our end. Please contact the host directly to confirm.",
+      "We couldn't save your booking. Please try again in a moment.",
       redirectDateTz,
+    );
+  }
+
+  // Phase 2: the booking is saved — send the emails. A failed send
+  // here undoes the save instead of leaving a booking on disk with no
+  // confirmation and no working cancel link.
+  try {
+    const cancelUrl = new URL(
+      `/cancel?id=${bookingId}&token=${tokenRaw}`,
+      cfg.publicUrl,
+    ).toString();
+    await sendBookingEmails(cfg, booking, cancelUrl);
+  } catch (e) {
+    const msg = (e as Error).message;
+    console.error("mig: email send failed; rolling back booking:", msg);
+    // Optional NTFY push so the host gets a heads-up outside the
+    // email channel. Fire-and-forget — we don't await the NTFY
+    // response before redirecting the user, so a slow NTFY won't
+    // add latency to the page.
+    await notifyBookingEmailFailed(cfg, booking, msg);
+    try {
+      await ctx.state.bookings.mutate((draft) => {
+        const idx = draft.findIndex((b) => b.id === bookingId);
+        if (idx !== -1) draft.splice(idx, 1);
+      });
+    } catch (rollbackErr) {
+      // The booking is now stuck on disk with no email ever sent —
+      // the one state this whole reorder exists to avoid. Log loudly
+      // so the host can clean it up by hand; still redirect the guest
+      // with the same message, since they genuinely got no email.
+      console.error(
+        "mig: rollback FAILED after email send failed; booking=" +
+          bookingId + " may still be on disk with no email sent",
+        rollbackErr,
+      );
+    }
+    return errRedirect(
+      "We couldn't send your confirmation email, so the booking was not created. Please try again in a moment.",
+      redirectState,
     );
   }
 
