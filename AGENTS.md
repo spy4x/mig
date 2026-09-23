@@ -146,6 +146,12 @@ their commands, so the pipeline can't drift from `deno task check`:
 - `deno task test`
 - `deno task build`
 
+Woodpecker substitutes `${VAR}` in the whole file before it parses the YAML, including steps that
+will not run. On a manual run `CI_COMMIT_TAG` is empty, so `mig:${CI_COMMIT_TAG} -t` became
+`mig: -t` and YAML read the command as a map, which failed the whole pipeline. Write a variable the
+shell should expand at run time as `$${VAR}`. `check` also runs on `manual` events, so the pipeline
+can be started by hand from the Woodpecker UI.
+
 ## Hard rules
 
 - **NEVER commit plaintext secrets.** `.env` is gitignored.

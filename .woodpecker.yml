@@ -2,7 +2,7 @@ steps:
   check:
     image: denoland/deno:debian-2.9.5
     when:
-      event: [push, pull_request, tag]
+      event: [push, pull_request, tag, manual]
     commands:
       - deno --version
       - deno install
@@ -18,7 +18,7 @@ steps:
     commands:
       - deno install
       - deno task build
-      - docker build -t antonshubin/mig:${CI_COMMIT_TAG} -t antonshubin/mig:latest .
-      - docker push antonshubin/mig:${CI_COMMIT_TAG}
+      - docker build -t antonshubin/mig:$${CI_COMMIT_TAG} -t antonshubin/mig:latest .
+      - docker push antonshubin/mig:$${CI_COMMIT_TAG}
       - docker push antonshubin/mig:latest
     secrets: [docker_username, docker_password]
