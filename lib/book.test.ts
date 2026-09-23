@@ -439,3 +439,31 @@ Deno.test('handleBookingSubmit: honeypot under "/embed" redirects to /embed/conf
   assertEquals(bookings.list().length, 0, "honeypot must not create a booking");
   await rm(path);
 });
+
+// ─── mig#18: uncapped `slot` on a validation-failure redirect ────────
+
+Deno.test("a validation-failure redirect caps an oversized slot, like date and tz", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const hugeSlot = "9".repeat(200_000);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    // An invalid email fails BookingSchema, landing on the
+    // `redirectState` branch that carries `slot` along — the one
+    // mig#18's reviewer found left uncapped.
+    fields: validFields(date, hugeSlot, { email: "not-an-email" }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const loc = res.headers.get("location")!;
+  assertEquals(loc.startsWith(cfg.publicUrl), true, loc);
+  const url = new URL(loc);
+  assertEquals(url.searchParams.get("slot")?.length, 100);
+  await rm(path);
+});

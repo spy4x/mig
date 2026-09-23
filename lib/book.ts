@@ -92,7 +92,7 @@ export async function handleBookingSubmit(
   };
   const redirectState = {
     ...redirectDateTz,
-    slot: String(form.get("slot") || "") || undefined,
+    slot: capRedirectField(String(form.get("slot") || "") || undefined),
   };
 
   // Rate limit per IP
