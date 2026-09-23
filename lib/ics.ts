@@ -3,11 +3,10 @@
 
 import type { Booking, Config } from "./types.ts";
 import {
+  formatClockLongAt,
   formatInstantLong,
   validTimeZoneOr,
-  zoneCity,
   zonedDateTime,
-  zoneOffsetLabel,
 } from "./tz.ts";
 
 const PRODID = "-//mig//EN";
@@ -114,9 +113,7 @@ export function generateIcs(
   //   3. Notes: guest's notes, if any
   //   4. Cancel URL — wrapped in a single trailing line so the URL
   //      and its label travel together
-  const when = `${formatInstantLong(start, displayTz)}, ${
-    zoneCity(displayTz)
-  }, ${zoneOffsetLabel(displayTz, start)}`;
+  const when = formatClockLongAt(start, displayTz);
 
   const descLines: string[] = [
     `Meeting with ${config.hostName}`,

@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import { generateIcs } from "../lib/ics.ts";
 import { newCancelToken } from "../lib/tokens.ts";
 import type { Booking, Config } from "../lib/types.ts";
+import { formatClockLongAt, zonedDateTime } from "../lib/tz.ts";
 
 function makeConfig(): Config {
   return {
@@ -131,6 +132,74 @@ Deno.test("generateIcs — visitor description uses visitor timezone", async () 
 function unfold(ics: string): string {
   return ics.replace(/\r\n[ \t]/g, "");
 }
+
+// mig#18 round 3: the description used to build its own "time, city,
+// offset" string instead of the shared formatter, so a bare zone like
+// "UTC" doubled up ("...at 02:00, UTC, UTC+0") instead of matching
+// what the guest email actually says. These two tests pin the
+// description to `formatClockLongAt` — the same call `guestText`/
+// `guestHtml` in lib/email.ts make — for a bare zone and an `Etc/*`
+// offset zone, the two cases the hand-built string got wrong.
+Deno.test("generateIcs — UTC description matches the guest email's time string", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZBK8M",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "Europe/Berlin",
+    guestTz: "UTC",
+    guestName: "Client",
+    guestEmail: "client@example.com",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = unfold(
+    generateIcs(b, cfg, `https://example.com/c?t=${raw}`, b.guestTz),
+  );
+
+  // DTSTART is unaffected by the description fix.
+  assertEquals(ics.includes("DTSTART:20260828T080000Z"), true);
+
+  const start = zonedDateTime(b.date, b.time, b.hostTz);
+  const guestEmailWhen = formatClockLongAt(start, "UTC");
+  assertEquals(guestEmailWhen, "Friday, 28 August 2026 at 08:00, UTC");
+  const escaped = guestEmailWhen.replaceAll(",", "\\,");
+  assertEquals(ics.includes(escaped), true);
+  // No doubled-up "UTC, UTC+0" from a hand-built offset suffix.
+  assertEquals(ics.includes("UTC\\, UTC"), false);
+});
+
+Deno.test("generateIcs — Etc/GMT+5 description shows the offset only", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZBK8M",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "Europe/Berlin",
+    guestTz: "Etc/GMT+5",
+    guestName: "Client",
+    guestEmail: "client@example.com",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = unfold(
+    generateIcs(b, cfg, `https://example.com/c?t=${raw}`, b.guestTz),
+  );
+
+  assertEquals(ics.includes("DTSTART:20260828T080000Z"), true);
+
+  const start = zonedDateTime(b.date, b.time, b.hostTz);
+  const guestEmailWhen = formatClockLongAt(start, "Etc/GMT+5");
+  assertEquals(guestEmailWhen, "Friday, 28 August 2026 at 03:00, UTC-5");
+  const escaped = guestEmailWhen.replaceAll(",", "\\,");
+  assertEquals(ics.includes(escaped), true);
+  // "GMT+5" is not a place name — it must never appear as a city.
+  assertEquals(ics.includes("GMT+5"), false);
+});
 
 Deno.test("generateIcs — description includes guest notes when present", async () => {
   const cfg = makeConfig();
