@@ -99,14 +99,128 @@ export async function sendEmail(
   }
 }
 
-export async function sendBookingEmails(
+// mig#19: split into two functions, owner then guest, rather than one
+// sendBookingEmails — lib/book.ts needs to know whether the owner's
+// send went out before the guest's one failed, so it can correct the
+// owner (sendBookingCorrectionEmail, below) instead of leaving them
+// with a stale "New booking" email and invite for a booking the
+// failure just rolled back. Reporting that from a single combined
+// function would need a result type; two calls that lib/book.ts can
+// wrap its own try/catch around is the smaller change. The one cost
+// is buildBookingEmails() running twice on the common (both sends
+// succeed) path instead of once — cheap, since it's pure string
+// building with no I/O.
+//
+// Owner first: a booking that ends up rolled back must never have
+// reached the guest with a "Booking confirmed" message and a
+// calendar invite for a meeting that no longer exists — that
+// phantom-meeting scenario is the bug #19 was filed for. Owner first
+// means an owner-side failure (e.g. a bad HOST_EMAIL) reaches nobody;
+// a guest-side failure after a successful owner send is handled by
+// lib/book.ts's correction email and, best-effort, by the NTFY push
+// in lib/notify.ts.
+export async function sendOwnerBookingEmail(
   config: Config,
   booking: Booking,
   cancelUrl: string,
 ): Promise<void> {
-  const emails = buildBookingEmails(config, booking, cancelUrl);
-  await sendEmail(config, emails.guest);
-  await sendEmail(config, emails.owner);
+  const { owner } = buildBookingEmails(config, booking, cancelUrl);
+  await sendEmail(config, owner);
+}
+
+export async function sendGuestBookingEmail(
+  config: Config,
+  booking: Booking,
+  cancelUrl: string,
+): Promise<void> {
+  const { guest } = buildBookingEmails(config, booking, cancelUrl);
+  await sendEmail(config, guest);
+}
+
+// mig#19 review round 3: sent by lib/book.ts only when the owner's
+// "New booking" email went out and the guest's one then failed — by
+// the time this runs, the booking has already been rolled back, so
+// without this the host is left with an email and a calendar invite
+// for a meeting that no longer exists, and the only other signal (the
+// NTFY push in lib/notify.ts) is optional and off unless NTFY_* is
+// configured.
+export async function sendBookingCorrectionEmail(
+  config: Config,
+  booking: Booking,
+): Promise<void> {
+  const ownerWhenShort = formatOwnerClock(
+    booking.date,
+    booking.time,
+    booking.hostTz,
+    booking.guestTz,
+  );
+  const ownerWhenLong = formatOwnerClock(
+    booking.date,
+    booking.time,
+    booking.hostTz,
+    booking.guestTz,
+    true,
+  );
+  await sendEmail(config, {
+    to: config.hostEmail,
+    subject: `Not booked: ${booking.guestName}, ${ownerWhenShort}`,
+    text: correctionText(config, booking, ownerWhenLong),
+    html: correctionHtml(config, booking, ownerWhenLong),
+    // No .ics attachment: properly retracting the invite already sent
+    // needs a METHOD:CANCEL companion (same UID, a higher SEQUENCE)
+    // to the METHOD:REQUEST one — generateIcs in lib/ics.ts only ever
+    // emits REQUEST, and adding CANCEL support is new ICS code, out
+    // of scope for this fix. The email body below tells the host to
+    // ignore the earlier invite instead.
+  });
+}
+
+function correctionText(
+  config: Config,
+  booking: Booking,
+  ownerWhen: string,
+): string {
+  return [
+    `Hi ${config.hostName},`,
+    "",
+    "The booking below was NOT created after all.",
+    "",
+    `Guest: ${booking.guestName} <${booking.guestEmail}>`,
+    `When:  ${ownerWhen}`,
+    "",
+    "The guest's confirmation email failed to send, so the booking " +
+    "was removed and the slot is free again. Please disregard the " +
+    '"New booking" email and calendar invite you received a moment ' +
+    "ago.",
+    "",
+    "— Sent by mig",
+  ].join("\n");
+}
+
+function correctionHtml(
+  config: Config,
+  booking: Booking,
+  ownerWhen: string,
+): string {
+  return htmlWrap(
+    config,
+    `
+    <p>Hi ${esc(config.hostName)},</p>
+    <p>The booking below was <strong>NOT</strong> created after all.</p>
+    <table style="border-collapse:collapse;margin:16px 0">
+      <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Guest</td>
+          <td style="padding:4px 0">${esc(booking.guestName)} &lt;${
+      esc(booking.guestEmail)
+    }&gt;</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">When</td>
+          <td style="padding:4px 0">${esc(ownerWhen)}</td></tr>
+    </table>
+    <p>The guest's confirmation email failed to send, so the booking
+    was removed and the slot is free again. Please disregard the
+    &ldquo;New booking&rdquo; email and calendar invite you received a
+    moment ago.</p>
+  `,
+  );
 }
 
 export function buildBookingEmails(

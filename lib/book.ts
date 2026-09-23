@@ -11,7 +11,11 @@
 import type { Context } from "fresh";
 import type { State } from "./utils.ts";
 import { generateBookingId, newCancelToken } from "./tokens.ts";
-import { sendBookingEmails } from "./email.ts";
+import {
+  sendBookingCorrectionEmail,
+  sendGuestBookingEmail,
+  sendOwnerBookingEmail,
+} from "./email.ts";
 import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts";
 import { clientIp, humanRetry } from "./ratelimit.ts";
 import { zonedDateTime } from "./tz.ts";
@@ -92,7 +96,7 @@ export async function handleBookingSubmit(
   };
   const redirectState = {
     ...redirectDateTz,
-    slot: String(form.get("slot") || "") || undefined,
+    slot: capRedirectField(String(form.get("slot") || "") || undefined),
   };
 
   // Rate limit per IP
@@ -174,14 +178,20 @@ export async function handleBookingSubmit(
     );
   }
 
-  // Transactional booking flow: email first, then persist. If the
-  // email send fails, the booking is NOT created — we don't want a
-  // booking record without a corresponding email because the cancel
-  // link in the email is the only out-of-band cancellation path
-  // the guest has. If the persist fails after the email went out,
-  // we have a partial state (the guest has the email but the row
-  // isn't on disk) — log loudly and surface a real error to the
-  // user so they can contact the host directly.
+  // Transactional booking flow: save first, then send (mig#19). A
+  // saved booking with no email can still be undone — both catch
+  // blocks below delete it again with a second mutate() (one for a
+  // save that half-failed, one for a send that failed outright), and
+  // the guest is none the wiser. An email that went out for a booking
+  // that was never saved cannot be undone: there is no "unsend" for a
+  // "Booking confirmed" message that already carries a calendar
+  // invite, and the visitor is left holding a confirmation for a
+  // meeting the host never agreed to. The conflict check — the only
+  // place two concurrent requests for the same slot actually collide
+  // — therefore has to run before any mail goes out, not after. The
+  // previous order (email, then persist) got this backwards: the
+  // loser of the race still had its email sent before the conflict
+  // was ever detected.
   const { raw: tokenRaw, hash: tokenHash } = await newCancelToken(
     cfg.cancelSecret,
   );
@@ -200,30 +210,9 @@ export async function handleBookingSubmit(
     status: "active" as const,
   };
 
-  // Phase 1: send the email first.
-  try {
-    const cancelUrl = new URL(
-      `/cancel?id=${bookingId}&token=${tokenRaw}`,
-      cfg.publicUrl,
-    ).toString();
-    await sendBookingEmails(cfg, booking, cancelUrl);
-  } catch (e) {
-    const msg = (e as Error).message;
-    console.error("mig: email send failed; booking NOT created:", msg);
-    // Optional NTFY push so the host gets a heads-up outside the
-    // email channel. Fire-and-forget — we don't await the NTFY
-    // response before redirecting the user, so a slow NTFY won't
-    // add latency to the page.
-    await notifyBookingEmailFailed(cfg, booking, msg);
-    return errRedirect(
-      "We couldn't send your confirmation email, so the booking was not created. Please try again in a moment.",
-      redirectState,
-    );
-  }
-
-  // Phase 2: persist under the mutex. Re-check the conflict because
-  // a concurrent request could have taken the slot in the few
-  // milliseconds between Phase 1 and Phase 2.
+  // Phase 1: persist under the mutex, conflict check inside the same
+  // mutation. Whichever concurrent request reaches this first wins
+  // the slot; the loser finds out here, before it has sent anything.
   try {
     const result = await ctx.state.bookings.mutate((draft) => {
       const conflict = draft.find(
@@ -239,28 +228,111 @@ export async function handleBookingSubmit(
       return { ok: true as const };
     });
     if (!result.ok) {
-      // Someone else booked the slot between our email send and our
-      // persist. The email we already sent is now stale. Fail
-      // loudly so the host can reach out and reschedule.
-      console.error(
-        "mig: slot taken after email sent; booking=" + bookingId,
-      );
+      // Someone else's request took the slot first. No email was
+      // ever sent for this one, so there's nothing to warn the guest
+      // about beyond the slot being gone.
       return errRedirect(
-        "That time was just booked by someone else. The confirmation email you received is no longer valid — please pick another time.",
+        "That time was just booked by someone else. Please pick another time.",
         redirectDateTz,
       );
     }
   } catch (e) {
-    // Persist failed after the email already went out. The guest
-    // has a confirmation but no cancel link will work. Log loudly
-    // so the host can manually add the booking or reach out.
-    console.error(
-      "mig: persist FAILED after email sent; booking=" + bookingId,
-      e,
-    );
+    // The save itself failed — but BookingsStore.mutate() assigns
+    // `this.bookings = draft` *before* it awaits persist() (see
+    // lib/bookings.ts), so the booking pushed above is already
+    // sitting in the in-memory array even though the write to disk
+    // just threw. Left alone, the slot would show as booked, a retry
+    // would be told "just booked by someone else", nobody would ever
+    // get an email or a notification, and the next unrelated write
+    // would flush this orphan to disk. Undo the in-memory push with a
+    // second mutate() — the same shape as the rollback below — before
+    // telling the guest anything. That second mutate() assigns before
+    // it writes too, so the removal holds even if this write also
+    // fails.
+    console.error("mig: persist FAILED; booking=" + bookingId, e);
+    try {
+      await ctx.state.bookings.mutate((draft) => {
+        const idx = draft.findIndex((b) => b.id === bookingId);
+        if (idx !== -1) draft.splice(idx, 1);
+      });
+    } catch (rollbackErr) {
+      // mutate() assigns `this.bookings = draft` *before* it awaits
+      // persist(), so the in-memory removal above always lands even
+      // when this second write also fails — only the on-disk copy can
+      // still hold the booking here.
+      console.error(
+        "mig: rollback FAILED after persist failed; booking=" +
+          bookingId + " may still be on disk",
+        rollbackErr,
+      );
+    }
     return errRedirect(
-      "Your confirmation was sent, but we couldn't save the booking on our end. Please contact the host directly to confirm.",
+      "We couldn't save your booking. Please try again in a moment.",
       redirectDateTz,
+    );
+  }
+
+  // Phase 2: the booking is saved — send the emails, owner first
+  // (lib/email.ts). A failed send here undoes the save instead of
+  // leaving a booking on disk with no confirmation and no working
+  // cancel link. `ownerEmailSucceeded` records whether the owner's
+  // "New booking" email actually went out before a later failure, so
+  // the catch block below knows whether it needs to correct that
+  // email rather than just roll the booking back silently.
+  let ownerEmailSucceeded = false;
+  try {
+    const cancelUrl = new URL(
+      `/cancel?id=${bookingId}&token=${tokenRaw}`,
+      cfg.publicUrl,
+    ).toString();
+    await sendOwnerBookingEmail(cfg, booking, cancelUrl);
+    ownerEmailSucceeded = true;
+    await sendGuestBookingEmail(cfg, booking, cancelUrl);
+  } catch (e) {
+    const msg = (e as Error).message;
+    console.error("mig: email send failed; rolling back booking:", msg);
+    // Optional NTFY push so the host gets a heads-up outside the
+    // email channel. Awaited, not fire-and-forget: notify() in
+    // lib/notify.ts already swallows and logs its own transport
+    // errors, so awaiting it adds real latency but no new failure
+    // mode, and keeps the rollback below from racing it.
+    await notifyBookingEmailFailed(cfg, booking, msg);
+    try {
+      await ctx.state.bookings.mutate((draft) => {
+        const idx = draft.findIndex((b) => b.id === bookingId);
+        if (idx !== -1) draft.splice(idx, 1);
+      });
+    } catch (rollbackErr) {
+      // The booking is now stuck on disk with no email ever sent —
+      // the one state this whole reorder exists to avoid. Log loudly
+      // so the host can clean it up by hand; still redirect the guest
+      // with the same message, since they genuinely got no email.
+      console.error(
+        "mig: rollback FAILED after email send failed; booking=" +
+          bookingId + " may still be on disk with no email sent",
+        rollbackErr,
+      );
+    }
+    // mig#19 review round 3: the owner's "New booking" email (and
+    // calendar invite) already went out above — correct it, since the
+    // NTFY push just above is optional and off unless NTFY_* is
+    // configured. No correction when the owner send itself was the
+    // one that failed: in that case nobody got anything to correct.
+    if (ownerEmailSucceeded) {
+      try {
+        await sendBookingCorrectionEmail(cfg, booking);
+      } catch (correctionErr) {
+        console.error(
+          "mig: correction email FAILED after rollback; booking=" +
+            bookingId +
+            "; host still has a stale 'New booking' email and invite",
+          correctionErr,
+        );
+      }
+    }
+    return errRedirect(
+      "We couldn't send your confirmation email, so the booking was not created. Please try again in a moment.",
+      redirectState,
     );
   }
 
