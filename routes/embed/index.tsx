@@ -5,9 +5,11 @@ import {
   getCandidateDates,
 } from "../../lib/availability.ts";
 import {
+  canonicalValidTimeZoneOrNull,
   formatClockAt,
+  formatDateLong,
+  formatShortDateAt,
   isoDateInTz,
-  isValidTimeZone,
   minToHHMM,
   zonedDateTime,
 } from "../../lib/tz.ts";
@@ -24,6 +26,11 @@ interface SlotCell {
   /** Full "HH:MM, City, UTC±N" clock string in the display zone
    *  (visitor's zone when known, host's otherwise — mig#15). */
   displayTime?: string;
+  /** "Wed 23 Sep" — set only when this slot's visitor-local date
+   *  differs from the picked host day (mig#15 review), so a slot that
+   *  wraps to the previous or next day still tells the visitor which
+   *  day it actually falls on. */
+  dateNote?: string;
 }
 
 export interface EmbedData {
@@ -31,19 +38,22 @@ export interface EmbedData {
   slot: string | null;
   dates: DateCell[];
   selectedDateLabel: string | null;
+  /** The selected slot's own date, built from its exact instant, not
+   *  noon of the host day (mig#15 review) — e.g. "Wednesday, 23
+   *  September 2026" for a 09:00 Thursday Ho Chi Minh slot shown to a
+   *  New York visitor as 22:00 Wednesday. Feeds TimeCard specifically;
+   *  `selectedDateLabel` (noon-based) still feeds DateCard, which
+   *  shows the *picked calendar day*, not a specific time. */
+  slotDateLabel: string | null;
   slots: SlotCell[];
   monthAnchor: string;
   error: string | null;
   /** The visitor's IANA zone, once known from the `tz` query param
-   *  (mig#15). Validated exactly like `guestTz` is validated on
-   *  submit (lib/validators.ts) — an invalid value is `null`, the
-   *  same as a missing one, and always falls back to the host's zone
-   *  rather than an error page. */
+   *  (mig#15), canonicalized (canonicalValidTimeZoneOrNull) so a
+   *  legacy alias or odd casing in the URL always resolves to one
+   *  real zone. An invalid or missing value is `null` and always
+   *  falls back to the host's zone rather than an error page. */
   tz: string | null;
-  /** True only when `tz` is missing outright (not present-but-invalid)
-   *  — the one case where the client-side tz-redirect script should
-   *  run, so a bad value never sends the visitor into a loop. */
-  showTzRedirect: boolean;
 }
 
 function parseDateParam(v: string | null): string | null {
@@ -102,13 +112,10 @@ export const handler = define.handlers({
     // Visitor timezone (mig#15) — the slot list has to render in the
     // visitor's zone from the first paint, not just at submit, and
     // /embed mounts no island to do that client-side after the fact
-    // (issue #11). Validated the same way `guestTz` is validated on
-    // submit: an invalid value is treated the same as a missing one.
-    const tzParam = url.searchParams.get("tz");
-    const tz = tzParam && isValidTimeZone(tzParam) ? tzParam : null;
-    // Only redirect when the param is entirely absent — a
-    // present-but-invalid value must not bounce forever.
-    const showTzRedirect = tzParam === null;
+    // (issue #11). Canonicalized + validated the same way `guestTz` is
+    // on submit (lib/validators.ts): an invalid or missing value falls
+    // back to `null` (host zone), never an error page.
+    const tz = canonicalValidTimeZoneOrNull(url.searchParams.get("tz"));
     const displayTz = tz ?? cfg.hostTz;
 
     const minStart = minStartInstant(cfg.minNoticeHours);
@@ -160,7 +167,13 @@ export const handler = define.handlers({
       }).format(dt);
     }
 
-    const slots: SlotCell[] = [];
+    // The selected slot's own date, from its exact instant — see the
+    // EmbedData.slotDateLabel doc comment (mig#15 review).
+    const slotDateLabel = date && slot
+      ? formatDateLong(date, slot, cfg.hostTz, displayTz)
+      : null;
+
+    let slots: SlotCell[] = [];
     if (date && !cfg.blockedDates.has(date)) {
       const dayBookings = ctx.state.bookings.forDate(date);
       const dayName = dayNameFromDate(date, cfg.hostTz);
@@ -168,6 +181,7 @@ export const handler = define.handlers({
       const booked = new Set(
         dayBookings.filter((b) => b.status === "active").map((b) => b.time),
       );
+      const withInstant: Array<SlotCell & { instant: Date }> = [];
       for (const r of ranges) {
         for (
           let m = r.startMin;
@@ -176,13 +190,25 @@ export const handler = define.handlers({
         ) {
           const time = minToHHMM(m);
           const instant = zonedDateTime(date, time, cfg.hostTz);
-          slots.push({
+          const visitorDate = isoDateInTz(instant, displayTz);
+          withInstant.push({
             time,
+            instant,
             available: !booked.has(time) && instant >= minStart,
             displayTime: formatClockAt(instant, displayTz),
+            dateNote: visitorDate !== date
+              ? formatShortDateAt(instant, displayTz)
+              : undefined,
           });
         }
       }
+      // Sorted by instant (mig#15 review) — host-local generation order
+      // already happens to be instant-ordered for a single host day,
+      // but making the sort explicit means a slot that wraps into the
+      // previous or next visitor-local day still renders in true
+      // chronological order rather than relying on that coincidence.
+      withInstant.sort((a, b) => a.instant.getTime() - b.instant.getTime());
+      slots = withInstant.map(({ instant: _instant, ...s }) => s);
     }
 
     return {
@@ -191,11 +217,11 @@ export const handler = define.handlers({
         slot,
         dates,
         selectedDateLabel,
+        slotDateLabel,
         slots,
         monthAnchor,
         error,
         tz,
-        showTzRedirect,
       },
     };
   },
@@ -228,11 +254,11 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
     slot,
     dates,
     selectedDateLabel,
+    slotDateLabel,
     slots,
     monthAnchor,
     error,
     tz,
-    showTzRedirect,
   } = data;
   const cfg = state.config;
   const displayTz = tz ?? cfg.hostTz;
@@ -265,14 +291,15 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
   return (
     <div class="min-h-dvh bg-surface text-ink">
       {
-        /* mig#15 — only emitted when `tz` is missing outright, never
-           for a present-but-invalid value (that would loop). */
+        /* mig#15 — always emitted; the script itself only redirects
+           when the browser's detected zone doesn't already match the
+           URL's `tz` param, so a correct param (or the very next load
+           after a redirect) never loops. See
+           lib/guest-tz-script.ts:shouldRedirectTz for the decision. */
       }
-      {showTzRedirect && (
-        <script
-          dangerouslySetInnerHTML={{ __html: embedTzRedirectScript() }}
-        />
-      )}
+      <script
+        dangerouslySetInnerHTML={{ __html: embedTzRedirectScript() }}
+      />
       <main id="main" class="px-4 sm:px-5 py-4 sm:py-5">
         {
           /* A plain <div>, not a <header> element — /embed must not
@@ -306,6 +333,7 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
           basePath="/embed"
           tz={tz}
           displaySlot={displaySlot}
+          slotDateLabel={slotDateLabel}
         />
       </main>
     </div>

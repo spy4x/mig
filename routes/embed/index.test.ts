@@ -12,6 +12,7 @@ import type { Config } from "../../lib/types.ts";
 import { BookingsStore } from "../../lib/bookings.ts";
 import { RateLimiter } from "../../lib/ratelimit.ts";
 import { parseWeeklyAvailability } from "../../lib/availability.ts";
+import { zonedDateTime } from "../../lib/tz.ts";
 import { handler } from "./index.tsx";
 import type { EmbedData } from "./index.tsx";
 
@@ -95,41 +96,79 @@ Deno.test("mig#15: /embed with a valid tz renders the slot list in the visitor's
   );
 
   assertEquals(data.tz, "America/New_York");
-  assertEquals(data.showTzRedirect, false);
   assert(data.slots.length > 0, "expected slots for a MON-FRI date");
   // 09:00 host-local (Ho Chi Minh) is 22:00 the previous day in New York.
   const first = data.slots.find((s: SlotCell) => s.time === "09:00");
   assert(first, "expected the 09:00 host-local slot");
   assertEquals(first!.displayTime, "22:00, New York, UTC-4");
-  // The picked day's own label is converted too — it's the previous
-  // calendar day in New York for this slot's neighbourhood, though the
-  // label itself is computed at noon (see routes/embed/index.tsx); the
-  // important thing here is it reads in New York, not Ho Chi Minh.
   assert(
     data.selectedDateLabel?.includes("October 2026"),
     `expected an October 2026 date label, got "${data.selectedDateLabel}"`,
   );
 });
 
-Deno.test("mig#15: /embed with no tz param falls back to the host's zone and asks the client to redirect", async () => {
+Deno.test("mig#15: picked-day label converts into the visitor's zone, not the host's", async () => {
+  // Ho Chi Minh (UTC+7) / Los Angeles (PDT, UTC-7 in October) is a
+  // 14-hour gap — wide enough that noon on the host's picked day
+  // (Tuesday 6 October) is still the previous evening (Monday 5
+  // October) in the visitor's zone. Regression guard for
+  // routes/embed/index.tsx's selectedDateLabel: reverting it to format
+  // in cfg.hostTz instead of displayTz would silently pass a same-zone
+  // or small-offset test but fail this one.
+  const data = await getEmbedData(
+    `http://localhost/embed?date=${TEST_DATE}&tz=America%2FLos_Angeles`,
+  );
+  assertEquals(data.selectedDateLabel, "Monday, 5 October 2026");
+});
+
+Deno.test("mig#15: /embed's slot list is sorted by instant and labels a slot whose visitor date differs from the picked day", async () => {
+  const data = await getEmbedData(
+    `http://localhost/embed?date=${TEST_DATE}&tz=America%2FNew_York`,
+  );
+  // Every slot from 09:00 host-local onward is 22:00+ the previous
+  // evening in New York until the host's midday; those slots must
+  // still come FIRST (true chronological order), not after the ones
+  // that stay on the picked day.
+  const instants = data.slots.map((s) =>
+    zonedDateTime(TEST_DATE, s.time, HOST_TZ).getTime()
+  );
+  const sorted = [...instants].sort((a, b) => a - b);
+  assertEquals(instants, sorted, "slots must already be instant-sorted");
+  const wrapped = data.slots.find((s) => s.time === "09:00");
+  assertEquals(wrapped?.dateNote, "Mon 5 Oct");
+  // 16:30 host-local (the last slot; availability ends 17:00) is
+  // 05:30 the *same* New York calendar day — no note expected.
+  const sameDay = data.slots.find((s) => s.time === "16:30");
+  assertEquals(sameDay?.dateNote, undefined);
+});
+
+Deno.test("mig#15: /embed with no tz param falls back to the host's zone", async () => {
   const data = await getEmbedData(`http://localhost/embed?date=${TEST_DATE}`);
 
   assertEquals(data.tz, null);
-  assertEquals(data.showTzRedirect, true);
   const first = data.slots.find((s: SlotCell) => s.time === "09:00");
   assert(first, "expected the 09:00 host-local slot");
   assertEquals(first!.displayTime, "09:00, Ho Chi Minh, UTC+7");
 });
 
-Deno.test("mig#15: /embed with an invalid tz falls back to the host's zone without redirecting again", async () => {
+Deno.test("mig#15: /embed with an invalid tz falls back to the host's zone", async () => {
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&tz=Not%2FA_Timezone`,
   );
 
   assertEquals(data.tz, null);
-  // Present-but-invalid must not trigger another redirect — that
-  // would loop forever on a bad value.
-  assertEquals(data.showTzRedirect, false);
   const first = data.slots.find((s: SlotCell) => s.time === "09:00");
   assertEquals(first!.displayTime, "09:00, Ho Chi Minh, UTC+7");
+});
+
+Deno.test("mig#15: /embed canonicalizes a legacy zone alias in the tz param", async () => {
+  // "Japan" has no "/" so, pre-canonicalization, it looked like a
+  // bare zone and lost its offset entirely ("11:00, Japan"). Canonical
+  // form is "Asia/Tokyo".
+  const data = await getEmbedData(
+    `http://localhost/embed?date=${TEST_DATE}&tz=Japan`,
+  );
+  assertEquals(data.tz, "Asia/Tokyo");
+  const first = data.slots.find((s: SlotCell) => s.time === "09:00");
+  assertEquals(first!.displayTime, "11:00, Tokyo, UTC+9");
 });

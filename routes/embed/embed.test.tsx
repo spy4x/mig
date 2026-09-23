@@ -103,10 +103,10 @@ function embedData(overrides: Partial<EmbedData>): EmbedData {
     dates: DATES,
     selectedDateLabel: null,
     slots: [],
+    slotDateLabel: null,
     monthAnchor: "2027-01-01",
     error: null,
     tz: null,
-    showTzRedirect: true,
     ...overrides,
   };
 }
@@ -259,7 +259,6 @@ Deno.test("mig#15: every picker link carries tz once the visitor's zone is known
         selectedDateLabel: "Monday, 4 January 2027",
         slots: SLOTS,
         tz: "America/New_York",
-        showTzRedirect: false,
       }))}
     />,
   );
@@ -276,10 +275,123 @@ Deno.test("mig#15: every picker link carries tz once the visitor's zone is known
   }
 });
 
-Deno.test("mig#15: no tz known yet — links have no tz param, and the redirect script is present", () => {
+Deno.test("mig#15: BookingForm pre-fills the hidden guestTz field from the known tz", () => {
+  // Regression guard: without this pre-fill, a visitor whose device
+  // zone differs from what the page actually rendered (a shared link,
+  // or a mid-flow zone change) could submit a guestTz that disagrees
+  // with every time they were just shown on screen.
   const html = renderToString(
     <EmbedPage
-      {...fakePageProps(embedData({ tz: null, showTzRedirect: true }))}
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slot: "09:00",
+        slots: SLOTS,
+        tz: "America/New_York",
+      }))}
+    />,
+  );
+  const inputTag = html.match(/<input[^>]*name="guestTz"[^>]*>/)?.[0];
+  assert(inputTag, "expected a guestTz hidden input");
+  assertEquals(attr(inputTag!, "value"), "America/New_York");
+});
+
+Deno.test("mig#15: calendar date links and month-nav links carry tz (step 1, no date picked)", () => {
+  // Regression guard for Calendar.tsx: date cells and the prev/next
+  // month arrows are only reachable when no date is picked yet — the
+  // blanket "every link carries tz" test above always picks a date,
+  // so it never exercises this component's own tz threading.
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({ tz: "America/New_York" }))}
+    />,
+  );
+  const dateLinks = anchors(html).map((a) => a.href).filter((h) =>
+    /[?&]date=/.test(h)
+  );
+  const monthLinks = anchors(html).map((a) => a.href).filter((h) =>
+    /[?&]month=/.test(h)
+  );
+  assert(dateLinks.length > 0, "expected at least one calendar date link");
+  assert(monthLinks.length > 0, "expected at least one month-nav link");
+  for (const link of [...dateLinks, ...monthLinks]) {
+    assert(
+      link.includes("tz=America%2FNew_York"),
+      `expected "${link}" to carry tz=`,
+    );
+  }
+});
+
+Deno.test("mig#15: the time card's Change link carries tz (step 2, slot picked)", () => {
+  // Regression guard for TimeCard.tsx: this link is only reachable
+  // once a slot is picked — the blanket test above never picks one.
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slot: "09:00",
+        slots: SLOTS,
+        tz: "America/New_York",
+      }))}
+    />,
+  );
+  // TimeCard's own Change link goes back to the date-picked step (its
+  // href carries `date=` but never `slot=`); DateCard's Change link
+  // (also on screen at this step) carries neither.
+  const changeLink = anchors(html).find((a) =>
+    a.href.includes("date=") && !a.href.includes("slot=")
+  );
+  assert(changeLink, "expected the TimeCard 'Change' link");
+  assert(
+    changeLink!.href.includes("tz=America%2FNew_York"),
+    `expected "${changeLink!.href}" to carry tz=`,
+  );
+});
+
+Deno.test("mig#15: /embed's own confirm label converts into the visitor's zone, not the host's", () => {
+  // Regression guard for routes/embed/index.tsx's confirmLabel: it's
+  // computed inside the page component itself (not passed in via
+  // EmbedData), so this has to render the real component with a real
+  // date+slot+tz combination that crosses a date boundary — same pair
+  // as lib/tz.test.ts's cross-zone case (09:00 Tuesday Ho Chi Minh =
+  // 22:00 Monday New York).
+  const cfg: Config = { ...FAKE_CONFIG, hostTz: "Asia/Ho_Chi_Minh" };
+  const props = {
+    ...fakePageProps(embedData({
+      date: "2026-10-06",
+      slot: "09:00",
+      selectedDateLabel: "Tuesday, 6 October 2026",
+      slots: SLOTS,
+      tz: "America/New_York",
+    })),
+    state: { config: cfg } as unknown as State,
+  };
+  const html = renderToString(<EmbedPage {...props} />);
+  assert(
+    html.includes("22:00, New York, UTC-4"),
+    "expected the confirm label to show the converted visitor clock",
+  );
+  assert(
+    html.includes("5 Oct"),
+    "expected the confirm label's date to be Mon 5 Oct, not Tue 6 (host)",
+  );
+  assertFalse(
+    html.includes("Confirm — Tue"),
+    "confirm label must not use the host's weekday (Tuesday)",
+  );
+});
+
+Deno.test("mig#15: no tz known yet (missing or invalid) — links have no tz param, and the redirect script is present", () => {
+  // The route resolves both a missing `tz` param and a present-but-
+  // invalid one to the same `tz: null` — the page (and the always-
+  // present redirect script) render identically either way; only the
+  // script's own client-side comparison (lib/guest-tz-script.ts:
+  // shouldRedirectTz) decides whether to actually redirect, so a
+  // page-level test can't (and shouldn't) tell the two cases apart.
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({ tz: null }))}
     />,
   );
   const links = anchors(html).map((a) => a.href);
@@ -289,22 +401,6 @@ Deno.test("mig#15: no tz known yet — links have no tz param, and the redirect 
   assert(
     html.includes("location.replace"),
     "expected the tz-redirect script",
-  );
-  assert(
-    html.includes("Times are shown in the host&#39;s timezone."),
-    "expected the host-timezone fallback note",
-  );
-});
-
-Deno.test("mig#15: an invalid tz (already resolved to null) shows the host-timezone note without the redirect script", () => {
-  const html = renderToString(
-    <EmbedPage
-      {...fakePageProps(embedData({ tz: null, showTzRedirect: false }))}
-    />,
-  );
-  assert(
-    !html.includes("location.replace"),
-    "must not redirect again on a present-but-invalid tz",
   );
   assert(
     html.includes("Times are shown in the host&#39;s timezone."),

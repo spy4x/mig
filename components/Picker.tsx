@@ -35,6 +35,8 @@ interface DateCell {
 interface SlotCell {
   time: string;
   available: boolean;
+  displayTime?: string;
+  dateNote?: string;
 }
 
 interface PickerProps {
@@ -66,6 +68,12 @@ interface PickerProps {
    *  clock string in the visitor's zone, for TimeCard. Falls back to
    *  the bare host-local `selectedSlot` when omitted. */
   displaySlot?: string | null;
+  /** "Wednesday, 23 September 2026" — the selected slot's own date,
+   *  built from its exact instant, not noon of the host day (mig#15
+   *  review). Feeds TimeCard specifically; falls back to
+   *  `selectedDateLabel` when omitted (no slot picked yet, or the
+   *  caller hasn't computed one — e.g. the standalone baseline test). */
+  slotDateLabel?: string | null;
 }
 
 export function Picker(props: PickerProps) {
@@ -84,6 +92,7 @@ export function Picker(props: PickerProps) {
     basePath = "",
     tz,
     displaySlot,
+    slotDateLabel,
   } = props;
 
   const slotsByDate: Record<string, number> = {};
@@ -168,7 +177,8 @@ export function Picker(props: PickerProps) {
                 <TimeCard
                   date={selectedDate!}
                   slot={selectedSlot!}
-                  dateLabel={selectedDateLabel ?? selectedDate!}
+                  dateLabel={slotDateLabel ?? selectedDateLabel ??
+                    selectedDate!}
                   displaySlot={displaySlot ?? undefined}
                   basePath={basePath}
                   tz={tz}

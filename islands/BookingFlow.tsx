@@ -6,7 +6,12 @@ import { DateCard } from "../components/DateCard.tsx";
 import { TimeCard } from "../components/TimeCard.tsx";
 import { BookingForm } from "../components/BookingForm.tsx";
 import { SummaryBar } from "../components/SummaryBar.tsx";
-import { formatClockAt, isoDateInTz, zonedDateTime } from "../lib/tz.ts";
+import {
+  formatClockAt,
+  formatShortDateAt,
+  isoDateInTz,
+  zonedDateTime,
+} from "../lib/tz.ts";
 
 /*
   BookingFlow — client-driven booking picker.
@@ -48,6 +53,8 @@ interface DateCell {
 interface SlotCell {
   time: string;
   available: boolean;
+  displayTime?: string;
+  dateNote?: string;
 }
 
 interface BookingFlowProps {
@@ -312,6 +319,14 @@ export default function BookingFlow(props: BookingFlowProps) {
     ? formatDateShortInTz(date.value, "12:00", hostTz, displayTz)
     : null;
 
+  // The selected slot's own date, from its exact instant, not noon of
+  // the host day (mig#15 review) — feeds TimeCard specifically.
+  // `dateLabel` above (noon-based) still feeds DateCard, which shows
+  // the *picked calendar day*, not a specific time.
+  const slotDateLabel: string | null = date.value && slot.value
+    ? formatDateLongInTz(date.value, slot.value, hostTz, displayTz)
+    : null;
+
   // Slot clock in visitor TZ ("11:00, New York, UTC-4" — mig#15). The
   // slot grid is rendered in host TZ (HH:MM strings are host-local by
   // definition), but once the user picks one, we display the labelled
@@ -337,16 +352,33 @@ export default function BookingFlow(props: BookingFlowProps) {
   // against — never swapped). After hydration Preact diffs the text
   // node and updates in place; the surrounding DOM structure stays
   // identical.
+  //
+  // Also sorted by instant and labelled with a `dateNote` when a
+  // slot's visitor-local date differs from the picked day (mig#15
+  // review) — the fetched `slots.value` from GET /api/slots is
+  // already host-chronological (and therefore instant-ordered), but
+  // sorting explicitly here — the same as routes/embed/index.tsx —
+  // means a slot that wraps into the previous or next visitor-local
+  // day renders in true chronological order rather than relying on
+  // that coincidence.
   const slotsForDisplay = (mounted.value && date.value)
-    ? slots.value.map((s) => ({
-      ...s,
-      displayTime: formatClockInTz(
-        date.value!,
-        s.time,
-        hostTz,
-        displayTz,
-      ) ?? s.time,
-    }))
+    ? slots.value
+      .map((s) => {
+        const instant = zonedDateTime(date.value!, s.time, hostTz);
+        const visitorDate = isoDateInTz(instant, displayTz);
+        return {
+          ...s,
+          instant,
+          displayTime:
+            formatClockInTz(date.value!, s.time, hostTz, displayTz) ??
+              s.time,
+          dateNote: visitorDate !== date.value
+            ? formatShortDateAt(instant, displayTz)
+            : undefined,
+        };
+      })
+      .sort((a, b) => a.instant.getTime() - b.instant.getTime())
+      .map(({ instant: _instant, ...s }) => s)
     : slots.value;
 
   // ─── Render ──────────────────────────────────────────────────────
@@ -428,7 +460,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                 <TimeCard
                   date={date.value!}
                   slot={slot.value!}
-                  dateLabel={dateLabel ?? date.value!}
+                  dateLabel={slotDateLabel ?? dateLabel ?? date.value!}
                   displaySlot={slotLabelVisitorTz ?? undefined}
                   onClear={interactive ? clearSlot : undefined}
                 />
