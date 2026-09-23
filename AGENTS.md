@@ -8,11 +8,11 @@
 - **Styling:** Tailwind CSS v4 (utility classes only — no custom CSS files)
 - **Container:** Debian-based, two-stage build (`denoland/deno:debian-2.9.5` for
   both stages — the alpine variant's musl libc can't load `@tailwindcss/oxide`'s
-  native binding). The build stage installs Node.js/npm, runs `deno task build`
-  (Vite) to produce `_fresh/`; the runtime stage copies only `_fresh/` and
-  `static/` and serves them with `deno serve -A --port=${PORT} _fresh/server.js`
-  — not the `deno compile` binary from `deno task compile`, which is a separate,
-  unused-in-prod option.
+  native binding). The build stage runs `deno install --frozen` then
+  `deno task build` (Vite) to produce `_fresh/`, no Node.js or npm involved; the
+  runtime stage copies only `_fresh/` and `static/` and serves them with
+  `deno serve -A --port=${PORT} _fresh/server.js` — not the `deno compile`
+  binary from `deno task compile`, which is a separate, unused-in-prod option.
 - **CI:** Woodpecker `check` step — `deno install --frozen`, `deno task check`
   (fmt --check + lint + type check), `deno task test`, `deno task build` — on
   every push, pull request, tag and manual run; a tag-only `release` step then
@@ -67,7 +67,7 @@ src/
 │   ├── availability.ts      — weekly pattern + blocked-dates parser
 │   ├── bookings.ts          — JSON store + AsyncMutex
 │   ├── tokens.ts            — ULID + HMAC sign/verify
-│   ├── email.ts             — SMTP via denomailer
+│   ├── email.ts             — SMTP via nodemailer
 │   ├── ics.ts               — ICS VCALENDAR generator
 │   ├── ratelimit.ts         — in-memory per-IP sliding window
 │   ├── tz.ts                — IANA tz helpers
@@ -91,8 +91,11 @@ src/
 - **Errors as data** — return `{ ok: true, value } | { ok: false, error }` for
   expected failure modes (validation, conflict). `throw` only for programmer
   errors and truly exceptional cases.
-- **No third-party deps without justification.** Fresh, Preact, Tailwind,
-  denomailer, zod are the budget. Anything else needs a comment.
+- **No third-party deps without justification.** `deno.json`'s imports are the
+  budget: Fresh (`fresh`, `@fresh/plugin-vite`), Preact (`preact`,
+  `preact-render-to-string`, `@preact/signals`), Tailwind (`tailwindcss`,
+  `@tailwindcss/vite`), `vite`, `nodemailer`, `zod`, `@std/assert`, `@std/ulid`.
+  Anything else needs a comment.
 - **Concurrency:** every mutation goes through `bookings.mutate()` which
   acquires the in-process mutex. Never read-then-write the JSON directly.
 
@@ -167,6 +170,37 @@ and `deno task build` all pass, and `deno.lock` is byte-identical (`cmp`) before
 and after; with `deno.json` given an import the lock has no entry for,
 `deno install --frozen` alone exits non-zero and never reaches the later
 commands.
+
+**The Dockerfile's build stage honours `deno.lock` too**, the same way CI does.
+It used to delete `deno.lock`, exclude it from the build context via
+`.dockerignore`, and pull `vite`, `tailwindcss`, `preact`, `@preact/signals` and
+`nodemailer` with a separate `npm install` by `^` range — so the published image
+could carry different dependency versions than the ones CI tested and the lock
+recorded — and it did: that path resolved `@preact/signals@2.11.2` where
+`deno.lock` records `2.11.1`. Since CI's own `check` step already runs
+`deno install --frozen` then `deno task build` inside the exact same
+`denoland/deno:debian-2.9.5` image as the build stage, with no Node.js or npm,
+the build stage now does the same: it keeps `deno.lock` in the build context and
+runs `deno install --frozen` before `deno task build`, dropping the Node.js/npm
+install and the npm-install workaround entirely. `deno install --frozen` builds
+its own `/src/node_modules` (a `.deno/`-backed store) in the build stage — see
+`.dockerignore`'s `node_modules` entry for why a host-managed one must still
+stay out of the build context. Verified with a real `docker build` from a clean
+`git archive` checkout (so a host `node_modules`/`_fresh` can't leak in, same
+risk `.dockerignore` guards against): the build exits 0 with no Node.js or npm
+installed anywhere in the image; the resolved `vite`, `preact`, `tailwindcss`
+and `nodemailer` versions inside the build stage equal `deno.lock`'s recorded
+versions exactly; a container from the built image answers `/`, `/embed` and
+`/health` with 200, `/` is a full page (not the 77-byte empty-`<body>` failure
+mode), and the footer shows the injected `MIG_VERSION`; and, with `deno.json`
+given an import range the lock has no entry for, `docker build` fails at the
+`deno install --frozen` step instead of silently building different versions
+than CI tested, while an unchanged copy still builds. The runtime stage's layers
+(base image, `_fresh/` + `static/` copy, env/healthcheck/CMD) are unchanged, so
+the published image's own footprint doesn't change — the win is a build stage
+that can no longer silently drift from what CI already tested, and a smaller,
+faster one besides (no `apt-get install` of Node.js/npm and their several
+hundred transitive dependencies, no separate npm resolution).
 
 `release` runs after `check` on a `v<digit>` tag and publishes `antonshubin/mig`
 to Docker Hub: `v1.2.3` and `latest`, built with `MIG_VERSION=1.2.3`. A

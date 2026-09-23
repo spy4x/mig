@@ -11,15 +11,17 @@ Thanks for your interest in mig! Contributions welcome.
 - **Don't add dependencies.** Each new `jsr:` or `npm:` package needs a
   justification in the PR description. The existing budget:
   - `fresh` (Fresh framework)
+  - `@fresh/plugin-vite` (Vite integration)
   - `preact` (UI rendering)
+  - `preact-render-to-string` (SSR)
   - `@preact/signals` (theme toggle state)
   - `tailwindcss` (utility classes)
   - `@tailwindcss/vite` (Vite plugin)
   - `vite` (build tool)
-  - `denomailer` (SMTP)
+  - `nodemailer` (SMTP)
   - `zod` (validation)
+  - `@std/assert` (tests)
   - `@std/ulid` (IDs)
-  - `@fresh/plugin-vite` (Vite integration)
 - **One logical change per commit.** Angular commit convention
   (`feat(scope): ...`, `fix(scope): ...`).
 - **Run `deno task check` before committing.** Lint, format, and type-check must
