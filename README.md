@@ -89,7 +89,7 @@ docker run -d --name mig \
   -e SMTP_HOST=smtp.example.com \
   -e SMTP_PORT=587 \
   -e SMTP_USER=jane@example.com \
-  -e SMTP_PASSWORD=<REDACTED:SMTP_PASSWORD> \
+  -e SMTP_PASSWORD='change-me' \
   -e SMTP_FROM="Bookings <book@example.com>" \
   -e CANCEL_SECRET=$(openssl rand -base64 32) \
   -e PUBLIC_URL=https://meet.example.com \
@@ -107,9 +107,12 @@ sudo chown 1993:1993 ./data
 ```
 
 `chown`ing to a different uid needs root, hence `sudo`; a plain `chown` as your
-own user fails with "Operation not permitted". If you'd rather not use `sudo`,
-run the container as your own user instead — this works because you created
-`./data` yourself above, so you already own it:
+own user fails with "Operation not permitted". This also assumes rootful Docker
+— rootless Docker and Podman remap container uids to a different host range, so
+`chown 1993:1993` is meaningless there; use `--user`/`user:` below instead. If
+you'd rather not use `sudo` (or you're on rootless Docker/Podman), run the
+container as your own user instead — this works because you created `./data`
+yourself above, so you already own it:
 
 ```bash
 mkdir -p ./data
@@ -127,6 +130,8 @@ derivatives) so the container is allowed to read and write it at all — without
 it, a host with SELinux enforcing rejects the access with the same "Permission
 denied" the uid mismatch above produces, even once the uid/gid ownership is
 correct. It's a no-op, and safe to leave in, on a host that doesn't run SELinux.
+`:z` relabels the _entire_ directory for container access, so only use it on a
+folder that belongs to mig alone — never a home directory, `/srv`, or `/etc`.
 
 ### Docker Compose
 
