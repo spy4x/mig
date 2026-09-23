@@ -15,10 +15,24 @@ import type { Config } from "../lib/types.ts";
 import { BookingsStore } from "../lib/bookings.ts";
 import { RateLimiter } from "../lib/ratelimit.ts";
 import { parseWeeklyAvailability } from "../lib/availability.ts";
+import { addDays, dayOfWeek, isoDateInTz } from "../lib/tz.ts";
 import Index from "./index.tsx";
 
 const HOST_TZ = "Asia/Ho_Chi_Minh";
 const TEST_DATE = "2026-10-06"; // Tuesday, within MON-FRI 09:00-17:00
+
+/** A bookable weekday at least `daysAhead` days out, computed from
+ *  whenever the suite actually runs — same helper as lib/book.test.ts's
+ *  futureWeekday, needed here too so a test isn't pinned to a literal
+ *  date that eventually lands in the past (see the slot-link test
+ *  below). */
+function futureWeekday(daysAhead: number, tz: string): string {
+  let d = addDays(isoDateInTz(new Date(), tz), daysAhead, tz);
+  while (dayOfWeek(d, tz) === "SAT" || dayOfWeek(d, tz) === "SUN") {
+    d = addDays(d, 1, tz);
+  }
+  return d;
+}
 
 function fakeConfig(): Config {
   return {
@@ -161,21 +175,33 @@ Deno.test("mig#18: the standalone time card shows the slot's date and clock in t
 // tz actually needs to survive on: the one a no-JS visitor clicks to
 // advance the flow.
 Deno.test("mig#18: standalone / keeps tz on every slot link", async () => {
+  // review follow-up: the literal TEST_DATE (2026-10-06) other tests
+  // in this file use deliberately, for its cross-zone date-boundary
+  // crossing, is a fixed calendar date — once the suite runs on or
+  // after that date, minNoticeHours/the horizon check reject it as
+  // "in the past", the page renders no slots at all, and the loop
+  // below would pass vacuously (zero slot links, zero iterations).
+  // This test doesn't need that specific date, only *a* bookable
+  // weekday, so it computes one relative to whenever the suite
+  // actually runs, the same way lib/book.test.ts's futureWeekday does.
+  const date = futureWeekday(3, HOST_TZ);
   const html = await renderIndex(
-    `http://localhost/?date=${TEST_DATE}&tz=America/New_York`,
+    `http://localhost/?date=${date}&tz=America/New_York`,
   );
-  // review follow-up: a single `html.match` (no `g` flag) only ever
-  // checks the *first* slot link — a mutation that dropped `tz` from
-  // every link except the first (e.g. threading it through correctly
-  // for one hard-coded slot and forgetting the rest) would have
-  // stayed green. `matchAll` with `g` collects every slot link's
-  // `href` so all of them are checked, not just one.
+  // A single `html.match` (no `g` flag) only ever checks the *first*
+  // slot link — a mutation that dropped `tz` from every link except
+  // the first would have stayed green. `matchAll` with `g` collects
+  // every slot link's `href` so all of them are checked, not just one.
   const slotLinks = [...html.matchAll(/href="([^"]*slot=[^"]*)"/g)].map((
     m,
   ) => m[1]);
+  // Guards against the vacuous pass above: an empty page (wrong date,
+  // broken availability config, a future regression in this test
+  // itself) must fail loudly instead of the `for` loop below silently
+  // running zero times and reporting success.
   assert(
-    slotLinks.length > 1,
-    `expected multiple slot links in the rendered HTML, got ${slotLinks.length}`,
+    slotLinks.length > 0,
+    `expected at least one slot link in the rendered HTML, got ${slotLinks.length}`,
   );
   for (const href of slotLinks) {
     assert(
