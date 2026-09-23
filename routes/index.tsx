@@ -3,13 +3,20 @@ import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
 import BookingFlow from "../islands/BookingFlow.tsx";
 import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
-import { isoDateInTz, minToHHMM, zonedDateTime } from "../lib/tz.ts";
+import {
+  formatClockAt,
+  isoDateInTz,
+  minToHHMM,
+  zonedDateTime,
+} from "../lib/tz.ts";
 
 interface IndexData {
   date: string | null;
   slot: string | null;
   dates: Array<{ date: string; slots: number }>;
-  slots: Array<{ time: string; available: boolean }>;
+  slots: Array<
+    { time: string; available: boolean; displayTime?: string }
+  >;
   error: string | null;
   monthAnchor: string;
 }
@@ -124,6 +131,13 @@ export default define.page(function Index(ctx) {
         slots.push({
           time,
           available: !booked.has(time) && instant >= minStart,
+          // Host-labeled by default (mig#15 review) — the same
+          // "HH:MM, City, UTC±N" clock /embed shows when the visitor's
+          // zone is unknown. BookingFlow's hydration replaces this
+          // with the visitor's own labelled clock once mounted; a
+          // no-JS visitor keeps this one, which is why it's never bare
+          // HH:MM even before any script runs.
+          displayTime: formatClockAt(instant, cfg.hostTz),
         });
       }
     }
@@ -143,6 +157,20 @@ export default define.page(function Index(ctx) {
             hostName={cfg.hostName}
             durationMin={cfg.slotDurationMin}
           />
+
+          {
+            /* mig#15 review: only ever rendered when JavaScript is
+               unavailable — browsers strip <noscript> content the
+               instant JS is enabled, before hydration timing is even
+               relevant, so there's no flash either way. When JS *is*
+               available, BookingFlow's own hydration silently swaps
+               the host-labelled clocks below for the visitor's. */
+          }
+          <noscript>
+            <p class="mt-4 text-xs text-ink-subtle">
+              Times are shown in the host's timezone.
+            </p>
+          </noscript>
 
           <div class="mt-8 sm:mt-10">
             <BookingFlow
