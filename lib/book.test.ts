@@ -137,7 +137,7 @@ setTransportForTesting(defaultTransport());
 // `mail.data.to` / `mail.message.getEnvelope()` access pattern this
 // mirrors.
 interface TestMail {
-  data: { to?: string; subject?: string };
+  data: { to?: string; subject?: string; text?: string };
   message: { getEnvelope(): unknown };
 }
 type TestSendCallback = (err: Error | null, info?: unknown) => void;
@@ -177,13 +177,16 @@ function failingTransport(message: string) {
  *  on (and, if `sentSubjects` is passed, each one's subject too —
  *  round 3 needs that to tell the "New booking" email apart from the
  *  correction that follows it, both sent `to` the same owner
- *  address). Lets a test single out an owner-send failure from a
- *  guest-send failure without caring which one lib/email.ts happens
- *  to attempt first. */
+ *  address; `sentTexts`, mig#27, records each one's plain-text body,
+ *  so a test can inspect the correction's actual wording instead of
+ *  just its subject). Lets a test single out an owner-send failure
+ *  from a guest-send failure without caring which one lib/email.ts
+ *  happens to attempt first. */
 function failingAddressTransport(
   addressToFail: string,
   sentTo: string[],
   sentSubjects?: string[],
+  sentTexts?: string[],
 ) {
   return nodemailer.createTransport({
     name: "failing-address-test-transport",
@@ -196,6 +199,7 @@ function failingAddressTransport(
       }
       sentTo.push(to);
       sentSubjects?.push(String(mail.data.subject ?? ""));
+      sentTexts?.push(String(mail.data.text ?? ""));
       callback(null, { envelope: mail.message.getEnvelope() });
     },
   });
@@ -1357,6 +1361,79 @@ Deno.test("handleBookingSubmit: a guest-send failure where the rollback write al
     Deno.env.delete("NTFY_TOPIC");
     Deno.env.delete("NTFY_TOKEN");
     Deno.env.delete("NTFY_MODE");
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+// mig#27: the correction email had the same bug the NTFY push above
+// was fixed for (mig#19 review round 3) — it always claimed the
+// booking "was removed and the slot is free again", even when the
+// rollback's own disk write also failed. Same setup as the NTFY test
+// above (guest-send failure, rollback write fails on the second
+// persist() call), but reading the correction email's own body
+// instead of the push.
+Deno.test("mig#27: the correction email does not claim removal when the rollback write also fails", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  makePersistFailOnCall(bookings, 2, "simulated disk write failure");
+  const date = futureWeekday(3, HOST_TZ);
+  const sentTo: string[] = [];
+  const sentSubjects: string[] = [];
+  const sentTexts: string[] = [];
+  setTransportForTesting(
+    failingAddressTransport(
+      "visitor@example.com",
+      sentTo,
+      sentSubjects,
+      sentTexts,
+    ),
+  );
+
+  try {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        fields: validFields(date, "09:00"),
+      }),
+      "",
+    );
+    assertEquals(res.status, 303);
+    // Same "New booking" + correction shape as the NTFY tests above.
+    assertEquals(
+      sentTo,
+      [cfg.hostEmail, cfg.hostEmail],
+      `the owner must have gotten "New booking" then the correction: ${sentTo}`,
+    );
+    const correctionText = sentTexts[1] ?? "";
+    assertEquals(
+      /not.*(booked|created)/i.test(sentSubjects[1] ?? ""),
+      true,
+      `correction subject: ${sentSubjects[1]}`,
+    );
+    assertEquals(
+      /removed|free/i.test(correctionText),
+      false,
+      `correction email must not claim removal or a free slot when the rollback write failed: ${correctionText}`,
+    );
+    assertStringIncludes(correctionText.toLowerCase(), "remove it by hand");
+    // The booking id must be named so the host can find it in the
+    // data file — read straight off disk, since the in-memory list
+    // no longer has it (BookingsStore.mutate() assigns before it
+    // awaits persist()).
+    const onDisk = JSON.parse(await Deno.readTextFile(path));
+    const diskId = onDisk[0]?.id;
+    assertEquals(
+      typeof diskId,
+      "string",
+      `on-disk booking: ${JSON.stringify(onDisk)}`,
+    );
+    assertStringIncludes(correctionText, diskId);
+  } finally {
     setTransportForTesting(defaultTransport());
     await rm(path);
   }

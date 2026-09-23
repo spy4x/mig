@@ -329,7 +329,7 @@ export async function handleBookingSubmit(
     // one that failed: in that case nobody got anything to correct.
     if (ownerEmailSucceeded) {
       try {
-        await sendBookingCorrectionEmail(cfg, booking);
+        await sendBookingCorrectionEmail(cfg, booking, { rolledBack });
       } catch (correctionErr) {
         console.error(
           "mig: correction email FAILED after rollback; booking=" +
