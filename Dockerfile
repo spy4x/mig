@@ -46,6 +46,19 @@ ENV DATA_PATH=/data/bookings.json
 ARG MIG_VERSION=dev
 ENV MIG_VERSION=${MIG_VERSION}
 
+# Non-root runtime user. The base image already has `deno`, uid/gid
+# 1993, with DENO_DIR owned by it. /data is bookings.json's parent
+# dir (DATA_PATH above) — BookingsStore writes there via
+# temp-file-then-rename (lib/bookings.ts), so the process needs write
+# access to the directory itself, not just the file. Creating it here,
+# owned by deno, means a Docker named volume mounted at /data inherits
+# that ownership; a host bind mount instead needs its own directory
+# writable by uid 1993 (see README). /app's COPY'd files stay
+# world-readable (Docker's default COPY permissions), so `deno` can
+# read them without any extra chown.
+RUN mkdir -p /data && chown deno:deno /data
+USER deno
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --spider -q http://localhost:${PORT}/health || exit 1
 
