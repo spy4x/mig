@@ -961,7 +961,7 @@ Deno.test("mig#19: a persist failure on the initial save leaves nothing behind a
 
 // ─── review follow-up: the rollback-failure log must say whether the owner email went out ──
 
-Deno.test("mig#book: rollback-failure log says the owner email was sent when the guest send is what failed", async () => {
+Deno.test("rollback-failure log says the owner email was sent when the guest send is what failed", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });
@@ -1003,7 +1003,7 @@ Deno.test("mig#book: rollback-failure log says the owner email was sent when the
   }
 });
 
-Deno.test("mig#book: rollback-failure log says the owner email was not sent when the owner send itself failed", async () => {
+Deno.test("rollback-failure log says the owner email was not sent when the owner send itself failed", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });

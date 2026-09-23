@@ -157,7 +157,7 @@ Deno.test("mig#15: NTFY body never claims a visitor timezone that was never capt
   );
 });
 
-Deno.test("mig#19 review round 3: email-failed NTFY body says the booking was not created and removed", async () => {
+Deno.test("email-failed NTFY body says the booking was not created and removed", async () => {
   const cfg = makeConfig();
   const booking = makeCrossZoneBooking("America/New_York");
   const body = await captureNtfyBody(() =>
