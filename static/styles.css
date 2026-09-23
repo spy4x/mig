@@ -22,9 +22,20 @@
   --color-brand-200: oklch(0.87 0.10 55);
   --color-brand-300: oklch(0.80 0.15 50);
   --color-brand-400: oklch(0.72 0.18 45);
-  --color-brand-500: oklch(0.65 0.21 40);
-  --color-brand-600: oklch(0.57 0.20 38);
-  --color-brand-700: oklch(0.48 0.17 35);
+  /* 500/600 darkened from the original 0.65/0.57 — white text on
+     bg-brand-500 (Confirm button, step badges, selected slot) measured
+     3.53:1, below the 4.5:1 floor for normal text. 0.56 clears it with
+     margin (5.08:1) while keeping the ring/border uses (ring-brand-500,
+     border-brand-500) at 3.5:1+ against both surface families, above the
+     3:1 non-text floor. 600 (hover) moves to 0.49 so it stays visibly
+     darker than 500 instead of nearly merging with it. */
+  --color-brand-500: oklch(0.56 0.21 40);
+  --color-brand-600: oklch(0.49 0.20 38);
+  /* Nudged darker (0.48 -> 0.44) so it stays a visible step below the
+     new 600 (0.49) instead of nearly the same lightness. Used as
+     hover:text-brand-700 (components/TimeSlots.tsx), text on a light
+     surface — darkening it only raises that text's contrast. */
+  --color-brand-700: oklch(0.44 0.17 35);
   --color-brand-800: oklch(0.40 0.13 32);
   --color-brand-900: oklch(0.32 0.09 30);
 
@@ -38,7 +49,12 @@
   /* Text on the surfaces above. */
   --color-ink: oklch(0.18 0.01 60);
   --color-ink-muted: oklch(0.42 0.012 60);
-  --color-ink-subtle: oklch(0.58 0.012 60);
+  /* Darkened from 0.58 — measured 4.18:1 on --color-surface (and worse,
+     3.94:1, on --color-surface-sunken, where inactive step badges and
+     disabled slots place this text). 0.53 clears the 4.5:1 floor on both
+     (5.18:1 / 4.88:1) and stays lighter than --color-ink-muted, keeping
+     the ink > ink-muted > ink-subtle hierarchy visible. */
+  --color-ink-subtle: oklch(0.53 0.012 60);
 
   /* Focus ring — uses brand so all interactive surfaces share the same
      keyboard cue. */
@@ -75,7 +91,11 @@
 
     --color-ink: oklch(0.96 0.005 80);
     --color-ink-muted: oklch(0.72 0.012 80);
-    --color-ink-subtle: oklch(0.54 0.012 80);
+    /* Lightened from 0.54 — measured 3.84:1 on --color-surface (and
+       worse, 3.58:1, on --color-surface-raised, where cards like
+       BookingForm's labels place this text). 0.61 clears the 4.5:1 floor
+       on both (5.11:1 / 4.76:1) and stays darker than --color-ink-muted. */
+    --color-ink-subtle: oklch(0.61 0.012 80);
 
     --color-ring: var(--color-brand-400);
   }

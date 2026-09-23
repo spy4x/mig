@@ -266,14 +266,14 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
                   rows={3}
                   maxLength={500}
                   placeholder="Let the other person know why (optional)."
-                  class="block w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle/70 transition-colors focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-y"
+                  class="block w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle transition-colors focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-y"
                 />
               </div>
 
               <div class="flex items-center justify-end pt-2">
                 <button
                   type="submit"
-                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-500 hover:bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
+                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
                 >
                   Cancel
                 </button>

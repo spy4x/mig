@@ -13,7 +13,7 @@ export default define.page(function Error(
       {cfg && <Header compact />}
       <main class="flex-1 grid place-items-center px-6 py-16">
         <div class="max-w-sm text-center">
-          <p class="text-xs font-medium uppercase tracking-[0.18em] text-red-500 mb-3">
+          <p class="text-xs font-medium uppercase tracking-[0.18em] text-red-600 dark:text-red-400 mb-3">
             500
           </p>
           <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
