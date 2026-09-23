@@ -5,7 +5,7 @@ steps:
       event: [push, pull_request, tag, manual]
     commands:
       - deno --version
-      - deno install
+      - deno install --frozen
       - deno task check
       - deno task test
       - deno task build
