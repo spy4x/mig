@@ -55,9 +55,11 @@ admin UI.
 - **Cancellation by link.** Both owner and guest get a cancellable link in their
   email. SHA-256 HMAC of a random token; stateless.
 - **Two clocks, everywhere.** The visitor always sees times in their own zone —
-  date, city and UTC offset, e.g. `11:00, New York, UTC-4` — on every page of
-  the booking flow and in every email. The owner sees the same for their own
-  zone, plus the visitor's clock alongside it in the owner email and the NTFY
+  city and UTC offset next to every time, e.g. `11:00, New York,
+  UTC-4`, with
+  its date converted alongside it — on every page of the booking flow and in
+  every email. The owner sees the same for the host zone, plus the visitor's
+  clock (and date, when it differs) alongside it in the owner email and the NTFY
   push, so they always know both the time and where the visitor is. Guest zone
   is auto-detected in the browser; without JavaScript, times fall back to the
   host's zone, labelled as such.
@@ -210,13 +212,17 @@ previous config may still be setting it globally. The rest of the site (`/`,
 `/confirmed`, `/cancel`) can keep denying framing entirely.
 
 `/embed` detects the visitor's timezone with a small inline script (no tracking,
-nothing sent anywhere) as soon as the page loads, and carries it forward as a
-`?tz=` query param on every link in the flow — so the slot list itself renders
-in the visitor's zone, not just the confirmation email. A query param was chosen
-over a cookie so `/embed` stays stateless and works even where an iframe's
-third-party cookies are blocked. Without JavaScript that param is never set and
-the booking still goes through; every page then shows the host's time instead,
-labelled "Times are shown in the host's timezone."
+nothing sent anywhere) on every page load, and carries it forward as a `?tz=`
+query param on every link in the flow — so the slot list itself renders in the
+visitor's zone, not just the confirmation email. The script re-checks on every
+load and corrects the param if it doesn't match the browser's own zone (a link
+shared with someone else's `?tz=` already in it gets fixed on their first
+visit), never redirecting again once it matches. A query param was chosen over a
+cookie so `/embed` stays stateless and works even where an iframe's third-party
+cookies are blocked. Without JavaScript that param is never set and the booking
+still goes through; every page (`/embed` and the standalone site alike) then
+shows the host's time instead, labelled "Times are shown in the host's
+timezone."
 
 ## Architecture
 
