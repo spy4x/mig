@@ -7,7 +7,11 @@
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import type { Booking, Config } from "./types.ts";
-import { notifyBookingCancelled, notifyBookingSucceeded } from "./notify.ts";
+import {
+  notifyBookingCancelled,
+  notifyBookingEmailFailed,
+  notifyBookingSucceeded,
+} from "./notify.ts";
 
 function makeConfig(): Config {
   return {
@@ -151,4 +155,20 @@ Deno.test("mig#15: NTFY body never claims a visitor timezone that was never capt
     false,
     "must not guess a visitor zone that was never captured",
   );
+});
+
+Deno.test("mig#19 review round 3: email-failed NTFY body says the booking was not created and removed", async () => {
+  const cfg = makeConfig();
+  const booking = makeCrossZoneBooking("America/New_York");
+  const body = await captureNtfyBody(() =>
+    notifyBookingEmailFailed(cfg, booking, "simulated SMTP failure")
+  );
+
+  // The previous wording ("booking confirmation email failed to
+  // send") only described the failure, not its outcome — lib/book.ts
+  // rolls the booking back on any send failure here, so the push must
+  // say that plainly.
+  const lower = body.toLowerCase();
+  assertStringIncludes(lower, "not created");
+  assertStringIncludes(lower, "removed");
 });

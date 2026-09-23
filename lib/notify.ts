@@ -195,6 +195,12 @@ export function notifyBookingCancelled(
   });
 }
 
+// mig#19 review round 3: the previous wording ("booking confirmation
+// email failed to send") only described the failure, not its
+// outcome — a host skimming a phone push could easily read it as "an
+// email is late" rather than "there is no booking". lib/book.ts
+// rolls the booking back on any send failure here, so the push must
+// say that plainly: not created, and already removed.
 export function notifyBookingEmailFailed(
   config: Config,
   booking: Booking | null,
@@ -203,8 +209,11 @@ export function notifyBookingEmailFailed(
   if (!isEventEnabled("error")) return Promise.resolve();
   const lines = [
     booking
-      ? `mig: ${config.hostName}'s booking confirmation email failed to send`
-      : "mig: booking email send failed (no booking record - transactional rollback)",
+      ? `mig: a booking for ${booking.guestName} was NOT created — the ` +
+        `confirmation email failed, so it was removed and the slot is ` +
+        `free again`
+      : "mig: a booking was NOT created (no record — the send failed " +
+        "before anything was saved)",
     "",
     `Error: ${error}`,
   ];
@@ -221,8 +230,8 @@ export function notifyBookingEmailFailed(
   }
   return notify(config, {
     title: booking
-      ? `mig: email failed for ${booking.guestName}`
-      : "mig: email failed",
+      ? `mig: NOT booked - ${booking.guestName}`
+      : "mig: booking NOT created",
     message: lines.join("\n"),
     priority: 4,
     tags: ["mig", "email-failed", "warning"],

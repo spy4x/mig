@@ -956,3 +956,58 @@ Deno.test("mig#19: an owner-send failure reaches nobody, sends no correction", a
     await rm(path);
   }
 });
+
+// ─── mig#19 review round 3: the NTFY push must be true ──────────────
+
+Deno.test("mig#19: a failed send pushes an NTFY notice that says the booking was not created", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  setTransportForTesting(failingTransport("SMTP send failed (mig#19 test)"));
+
+  // Same "stub fetch, set NTFY_* env vars" pattern as
+  // lib/notify.test.ts's captureNtfyBody, inlined here because this
+  // test needs it wrapped around a full handleBookingSubmit call
+  // (to catch a deleted notifyBookingEmailFailed call site in
+  // lib/book.ts), not a direct call into lib/notify.ts.
+  const originalFetch = globalThis.fetch;
+  let pushCalled = false;
+  let pushBody = "";
+  globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
+    pushCalled = true;
+    pushBody = String(init?.body ?? "");
+    return Promise.resolve(new Response(null, { status: 200 }));
+  }) as typeof fetch;
+  Deno.env.set("NTFY_URL", "https://ntfy.example.com");
+  Deno.env.set("NTFY_TOPIC", "mig-test");
+  Deno.env.set("NTFY_TOKEN", "test-token");
+
+  try {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        fields: validFields(date, "09:00"),
+      }),
+      "",
+    );
+    assertEquals(res.status, 303);
+    assertEquals(pushCalled, true, "expected an NTFY push");
+    // mig#19 review round 3: the push must say the booking was not
+    // created, not only that an email "failed to send" — a host
+    // skimming a phone notification could read the old wording as "an
+    // email is late" rather than "there is no booking".
+    assertStringIncludes(pushBody.toLowerCase(), "not created");
+  } finally {
+    globalThis.fetch = originalFetch;
+    Deno.env.delete("NTFY_URL");
+    Deno.env.delete("NTFY_TOPIC");
+    Deno.env.delete("NTFY_TOKEN");
+    Deno.env.delete("NTFY_MODE");
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
