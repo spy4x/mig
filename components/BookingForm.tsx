@@ -220,7 +220,7 @@ interface FieldProps {
 function Field(p: FieldProps) {
   const id = `f-${p.name}`;
   const base =
-    "block w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle/70 transition-colors focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
+    "block w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle transition-colors focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
   return (
     <div>
       <label
