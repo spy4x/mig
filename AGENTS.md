@@ -6,10 +6,19 @@
 - **Framework:** [Fresh 2](https://fresh.deno.dev/) (Preact + JSX, islands
   architecture)
 - **Styling:** Tailwind CSS v4 (utility classes only — no custom CSS files)
-- **Container:** Alpine-based, single binary via `deno compile`
-- **CI:** Woodpecker (deno fmt + lint + check + test)
+- **Container:** Debian-based, two-stage build (`denoland/deno:debian-2.9.5` for
+  both stages — the alpine variant's musl libc can't load `@tailwindcss/oxide`'s
+  native binding). The build stage installs Node.js/npm, runs `deno task build`
+  (Vite) to produce `_fresh/`; the runtime stage copies only `_fresh/` and
+  `static/` and serves them with `deno serve -A --port=${PORT} _fresh/server.js`
+  — not the `deno compile` binary from `deno task compile`, which is a separate,
+  unused-in-prod option.
+- **CI:** Woodpecker `check` step — `deno install`, `deno task check` (fmt
+  --check + lint + type check), `deno task test`, `deno task build` — on every
+  push, pull request, tag and manual run; a tag-only `release` step then builds
+  and publishes the Docker image.
 - **Storage:** JSON file (`./data/bookings.json`) + in-process async mutex
-- **Email:** SMTP via `denomailer`
+- **Email:** SMTP via `nodemailer`
 - **IDs:** ULID (Crockford base32, time-sortable)
 
 ## Invariants
@@ -133,13 +142,13 @@ deno task compile      # deno compile → single binary
 
 ## CI
 
-Woodpecker pipeline (`.woodpecker.yml`) on `denoland/deno:debian` (matching the
-Dockerfile's build stage — the alpine variant's musl libc can't load
-`@tailwindcss/oxide`'s native binding, so `deno task build` fails under it).
-`nodeModulesDir` is `"manual"` in `deno.json`, so `deno install` must run before
-any task that touches TypeScript or builds: the `check` step runs it right after
-`deno --version`. The step calls the manifest's tasks instead of repeating their
-commands, so the pipeline can't drift from `deno task check`:
+Woodpecker pipeline (`.woodpecker.yml`) on `denoland/deno:debian-2.9.5`
+(matching the Dockerfile's build stage — the alpine variant's musl libc can't
+load `@tailwindcss/oxide`'s native binding, so `deno task build` fails under
+it). `nodeModulesDir` is `"manual"` in `deno.json`, so `deno install` must run
+before any task that touches TypeScript or builds: the `check` step runs it
+right after `deno --version`. The step calls the manifest's tasks instead of
+repeating their commands, so the pipeline can't drift from `deno task check`:
 
 - `deno task check` (fmt --check + lint + type check)
 - `deno task test`
