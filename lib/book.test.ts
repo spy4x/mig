@@ -1059,10 +1059,11 @@ Deno.test("mig#19: a guest-send failure corrects the owner after rolling back", 
   const date = futureWeekday(3, HOST_TZ);
   const sentTo: string[] = [];
   const sentSubjects: string[] = [];
+  const sentTexts: string[] = [];
   // validFields()'s default guest address.
   const guestEmail = "visitor@example.com";
   setTransportForTesting(
-    failingAddressTransport(guestEmail, sentTo, sentSubjects),
+    failingAddressTransport(guestEmail, sentTo, sentSubjects, sentTexts),
   );
 
   try {
@@ -1089,6 +1090,15 @@ Deno.test("mig#19: a guest-send failure corrects the owner after rolling back", 
     assertEquals(
       /not.*(booked|created)/i.test(sentSubjects[1]),
       true,
+      `correction subject: ${sentSubjects[1]}`,
+    );
+    // The rollback here succeeds (no persist failure injected), so the
+    // correction must use the "removed, slot free again" wording, not
+    // the rollback-failed one.
+    assertStringIncludes(sentTexts[1], "the slot is free again");
+    assertEquals(
+      sentSubjects[1].includes("remove by hand"),
+      false,
       `correction subject: ${sentSubjects[1]}`,
     );
     assertStringIncludes(

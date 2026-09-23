@@ -204,7 +204,9 @@ function correctionText(
   return [
     `Hi ${config.hostName},`,
     "",
-    "The booking below was NOT created after all.",
+    rolledBack
+      ? "The booking below was NOT created after all."
+      : "The booking below was NOT confirmed.",
     "",
     `Guest: ${booking.guestName} <${booking.guestEmail}>`,
     `When:  ${ownerWhen}`,
@@ -234,7 +236,11 @@ function correctionHtml(
     config,
     `
     <p>Hi ${esc(config.hostName)},</p>
-    <p>The booking below was <strong>NOT</strong> created after all.</p>
+    ${
+      rolledBack
+        ? "<p>The booking below was <strong>NOT</strong> created after all.</p>"
+        : "<p>The booking below was <strong>NOT</strong> confirmed.</p>"
+    }
     <table style="border-collapse:collapse;margin:16px 0">
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Guest</td>
           <td style="padding:4px 0">${esc(booking.guestName)} &lt;${

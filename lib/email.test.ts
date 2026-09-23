@@ -333,9 +333,10 @@ interface RecordedMail {
   html?: string;
 }
 
-/** Test-only transport: records the one email sent to it and resolves
- *  immediately, no network I/O — same "jsonTransport-backed recording
- *  transport" spirit as lib/book.test.ts's recordingTransport. */
+/** Test-only transport: records every email sent to it and resolves
+ *  each one immediately, no network I/O — a custom `send()` transport,
+ *  same "recording transport" spirit as lib/book.test.ts's
+ *  recordingTransport (which is also not jsonTransport-backed). */
 function recordingTransport(sent: RecordedMail[]) {
   return nodemailer.createTransport({
     name: "email-test-recording-transport",
@@ -391,10 +392,29 @@ Deno.test("sendBookingCorrectionEmail: rolledBack false does not claim the booki
     const html = sent[0].html ?? "";
     assertEquals(/removed|free/i.test(text), false, `text: ${text}`);
     assertEquals(/removed|free/i.test(html), false, `html: ${html}`);
+    assertEquals(text.includes("NOT created"), false, `text: ${text}`);
+    assertEquals(html.includes("NOT created"), false, `html: ${html}`);
     assertStringIncludes(text, booking.id);
     assertStringIncludes(html, booking.id);
     assertStringIncludes(text.toLowerCase(), "remove it by hand");
     assertStringIncludes(text, '"New booking"');
+  } finally {
+    setTransportForTesting(null);
+  }
+});
+
+Deno.test("sendBookingCorrectionEmail: rolledBack false HTML-escapes the booking id", async () => {
+  const sent: RecordedMail[] = [];
+  setTransportForTesting(recordingTransport(sent));
+  try {
+    const booking = { ...makeBooking(), id: `id<&">` };
+    await sendBookingCorrectionEmail(makeConfig(), booking, {
+      rolledBack: false,
+    });
+    assertEquals(sent.length, 1);
+    const html = sent[0].html ?? "";
+    assertStringIncludes(html, "id&lt;&amp;&quot;&gt;");
+    assertEquals(html.includes(booking.id), false, `html: ${html}`);
   } finally {
     setTransportForTesting(null);
   }
