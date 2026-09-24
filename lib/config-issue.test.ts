@@ -45,6 +45,49 @@ Deno.test("formatConfigIssue: a union issue whose escaped value defeats a plain 
   );
 });
 
+// mig#42: HIDE_BRANDING has a fixed, name-keyed message (FIXED_MESSAGES in
+// lib/config-issue.ts) that lists its accepted values, regardless of what
+// arktype's `expected` says — the raw value in `expected` here proves it's
+// ignored, not just absent from this particular fixture.
+Deno.test("formatConfigIssue: HIDE_BRANDING gets its fixed accepted-values message, never `expected`", () => {
+  const marker = "HIDE-BRANDING-MARKER-9k2";
+  const leaky = `HIDE_BRANDING must be boolean (was "${marker}")`;
+  assertEquals(
+    formatConfigIssue("HIDE_BRANDING", marker, "union", leaky),
+    "  HIDE_BRANDING: must be true, false, 1, 0, yes, no or empty",
+  );
+});
+
+// A variable with no FIXED_MESSAGES entry keeps the generic union handling.
+Deno.test("formatConfigIssue: a non-HIDE_BRANDING union issue still gets the generic message", () => {
+  const marker = "UNION-OTHER-MARKER-3q7";
+  const leaky = `THEME must be "dark" or "light" (was "${marker}")`;
+  assertEquals(
+    formatConfigIssue("THEME", marker, "union", leaky),
+    "  THEME: has an invalid value",
+  );
+});
+
+// FIXED_MESSAGES is looked up with Object.hasOwn, not `in`: `in` walks the
+// prototype chain, so a variable name that collides with an inherited
+// Object.prototype member (e.g. "toString") would otherwise return that
+// member's value instead of falling through to the generic message.
+Deno.test("formatConfigIssue: a variable named like an inherited Object member still gets the generic message", () => {
+  assertEquals(
+    formatConfigIssue("toString", "x", "union", "e"),
+    "  toString: has an invalid value",
+  );
+});
+
+// An absent HIDE_BRANDING must still say "is not set", not consult
+// FIXED_MESSAGES — that check runs before the name lookup.
+Deno.test("formatConfigIssue: an absent HIDE_BRANDING is reported as 'is not set', not its fixed message", () => {
+  assertEquals(
+    formatConfigIssue("HIDE_BRANDING", undefined, "union", "boolean"),
+    "  HIDE_BRANDING: is not set",
+  );
+});
+
 // Belt and suspenders: even a non-union code whose `expected` happens to
 // contain the raw value verbatim must not print it.
 Deno.test("formatConfigIssue: a non-union issue whose expected contains the raw value also gets the generic message", () => {

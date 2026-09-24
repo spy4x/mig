@@ -3,6 +3,19 @@
 // the three primitive fields any arktype ArkErrors issue carries), so it
 // can be unit-tested directly without booting the app's env parsing.
 
+// Per-variable fixed messages, keyed by name, that skip the union/includes
+// leak check entirely: the string is chosen by hand, never built from
+// arktype's `expected`, so it can list accepted values without risking a
+// leak (mig#42 — `HIDE_BRANDING: has an invalid value` didn't say what
+// "valid" meant). Add an entry here, not a new branch below, for any other
+// field that wants this. Looked up with `Object.hasOwn`, not `in` — `name`
+// comes from `issue.path.join(".")` on data an operator controls (an env
+// var name), and `in` would walk the prototype chain for a name like
+// `"toString"`.
+const FIXED_MESSAGES: Record<string, string> = {
+  HIDE_BRANDING: "must be true, false, 1, 0, yes, no or empty",
+};
+
 /** Renders one arktype issue as a single startup-log line, naming the
  *  variable and never the value.
  *
@@ -24,6 +37,10 @@
  *  the raw value verbatim (any other code) also gets the generic
  *  message, as a second line of defense.
  *
+ *  A name listed in `FIXED_MESSAGES` (above) skips all of that: its
+ *  message is a fixed string chosen by variable name, never built from
+ *  arktype's `expected`.
+ *
  *  `raw` is the *original* env string for that variable (never the
  *  defaulted/coerced candidate value ConfigSchema actually saw), so
  *  the leak check compares against what the operator actually typed.
@@ -35,6 +52,9 @@ export function formatConfigIssue(
   expected: string,
 ): string {
   if (raw === undefined) return `  ${name}: is not set`;
+  if (Object.hasOwn(FIXED_MESSAGES, name)) {
+    return `  ${name}: ${FIXED_MESSAGES[name]}`;
+  }
   if (code === "union" || (raw !== "" && expected.includes(raw))) {
     return `  ${name}: has an invalid value`;
   }

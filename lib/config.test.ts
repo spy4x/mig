@@ -402,6 +402,15 @@ function assertRawValueNotLeaked(stderr: string, raw: string): void {
   );
 }
 
+// mig#42: the fixed message below (lib/config-issue.ts's FIXED_MESSAGES)
+// itself contains the word "no", so a naive substring check for a marker
+// like "on" could false-positive against it. It can't here: checked by
+// hand, none of the markers in the loop below ("on", "off", "2", "-1",
+// "truee", "y") is itself a substring of "must be true, false, 1, 0, yes,
+// no or empty" at all — the message has no "on", "off", "2", "-1", "truee"
+// or standalone "y" anywhere in it — so assertRawValueNotLeaked's
+// whole-token check needs no stripping of the fixed message from stderr
+// before it runs.
 for (const raw of ["on", "off", "2", "-1", "truee", "y"]) {
   Deno.test(`config: HIDE_BRANDING=${JSON.stringify(raw)} is rejected, not echoed`, async () => {
     const { code, stderr } = await runConfig({
@@ -413,6 +422,21 @@ for (const raw of ["on", "off", "2", "-1", "truee", "y"]) {
     assertRawValueNotLeaked(stderr, raw);
   });
 }
+
+// mig#42: HIDE_BRANDING's startup error used to just say "has an invalid
+// value" — this pins the fixed, accepted-values message it prints instead.
+Deno.test("config: HIDE_BRANDING=on prints the accepted values, not just 'invalid'", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    HIDE_BRANDING: "on",
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(
+    stderr,
+    "  HIDE_BRANDING: must be true, false, 1, 0, yes, no or empty",
+  );
+  assertRawValueNotLeaked(stderr, "on");
+});
 
 // mig#38: HOST_TZ, WEEKLY_AVAILABILITY and BLOCKED_DATES bypass
 // ConfigSchema (they're checked by hand after arktype passes, see
