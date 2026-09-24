@@ -189,6 +189,40 @@ Deno.test("parseBlockedDates — bad range throws, naming the position", () => {
   );
 });
 
+// mig#38 round 2 follow-up: expandDateRange (via addDays) runs Intl-backed
+// tz math against `hostTz` — only reachable when the value is a *range*
+// (a plain list of single dates never calls it). An invalid `hostTz`
+// makes that throw its own foreign error (V8: "Invalid time zone
+// specified: <value>"), which embeds the raw value. This calls
+// parseBlockedDates directly (unlike lib/config.test.ts's child-process
+// route, which can no longer reach this because HOST_TZ is validated
+// first there) to pin the FieldSyntaxError guard in isolation: even with
+// a bad `hostTz`, the thrown message must stay value-free.
+Deno.test("parseBlockedDates — an invalid hostTz on a range throws a value-free reason, not Intl's own message", () => {
+  const marker = "HOSTTZ-DIRECT-MARKER-9pj4";
+  let err = "";
+  try {
+    parseBlockedDates("2026-12-24..2026-12-26", `Not/A/Real/Zone-${marker}`);
+  } catch (e) {
+    err = (e as Error).message;
+  }
+  assertEquals(err, "entry 1: could not be evaluated — check HOST_TZ");
+  assertEquals(
+    err.includes(marker),
+    false,
+    `error echoed the bad hostTz:\n${err}`,
+  );
+});
+
+// parseWeeklyAvailability's own checks (parseAvailabilityEntry, parseHHMM,
+// expandDayRange) never call Intl or anything else that could throw a
+// foreign, value-carrying error — every throw on that path is already a
+// FieldSyntaxError raised directly by this module. There is currently no
+// input that reaches the `: "could not be evaluated"` fallback in
+// parseWeeklyAvailability's catch, so there's no equivalent standalone
+// test to pin here; the fallback exists only as a guard against a future
+// change (e.g. a day-name lookup added later that calls Intl).
+
 // mig#38 round 2: position counting must count every comma-split field,
 // including the ones that are empty after trimming — a parser that first
 // filters out empties and only then indexes would misreport the position
