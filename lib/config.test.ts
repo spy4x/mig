@@ -331,3 +331,69 @@ Deno.test("config: MIG_VERSION is trimmed", async () => {
   );
   assertEquals(value, "1.2.3");
 });
+
+// mig#35: HIDE_BRANDING was parsed with Boolean(raw), so "false" and "0"
+// (and any other non-empty string) turned into true. Each accepted
+// spelling below is pinned individually; the true/false split matters,
+// not just "did it parse".
+for (
+  const raw of ["false", "0", "no", "FALSE", "  FALSE  "]
+) {
+  Deno.test(`config: HIDE_BRANDING=${JSON.stringify(raw)} shows the branding`, async () => {
+    const value = await runConfigField(
+      { ...VALID_ENV, HIDE_BRANDING: raw },
+      "hideBranding",
+    );
+    assertEquals(value, false);
+  });
+}
+
+for (
+  const raw of ["true", "1", "yes", "TRUE", " Yes "]
+) {
+  Deno.test(`config: HIDE_BRANDING=${JSON.stringify(raw)} hides the branding`, async () => {
+    const value = await runConfigField(
+      { ...VALID_ENV, HIDE_BRANDING: raw },
+      "hideBranding",
+    );
+    assertEquals(value, true);
+  });
+}
+
+Deno.test("config: HIDE_BRANDING empty string shows the branding", async () => {
+  const value = await runConfigField(
+    { ...VALID_ENV, HIDE_BRANDING: "" },
+    "hideBranding",
+  );
+  assertEquals(value, false);
+});
+
+Deno.test("config: HIDE_BRANDING whitespace-only shows the branding", async () => {
+  const value = await runConfigField(
+    { ...VALID_ENV, HIDE_BRANDING: "   " },
+    "hideBranding",
+  );
+  assertEquals(value, false);
+});
+
+Deno.test("config: HIDE_BRANDING absent shows the branding", async () => {
+  const env = { ...VALID_ENV };
+  delete env.HIDE_BRANDING;
+  const value = await runConfigField(env, "hideBranding");
+  assertEquals(value, false);
+});
+
+Deno.test("config: an invalid HIDE_BRANDING is named but its value is not echoed", async () => {
+  const marker = "maybe-7f3a";
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    HIDE_BRANDING: marker,
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "HIDE_BRANDING");
+  assertEquals(
+    stderr.includes(marker),
+    false,
+    `stderr echoed the bad value:\n${stderr}`,
+  );
+});
