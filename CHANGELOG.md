@@ -62,7 +62,10 @@ updater, until you've done the upgrade steps below.
   when nothing sets `DATA_PATH` at all, such as a non-Docker deploy.
 
 **Upgrade note.** Changing only the image, without also changing your mount,
-loses existing bookings — read the step for your setup before redeploying.
+breaks bookings either way: it silently loses existing ones on the old
+`docker run` command or Docker Compose snippet, or leaves new ones failing to
+save on the `DATA_PATH` setup, with nothing lost there. Read the step for your
+setup before redeploying.
 
 **If you followed the README's `docker run` command or its Docker Compose
 snippet, or `compose.example.yml` with no `DATA_PATH` in your `.env` — whether
@@ -177,7 +180,7 @@ anything to 1993 — see the README's Docker quick start for that command in ful
   Confirm button and step badges, secondary text, the footer, form placeholders,
   the Cancel button and the 500-page label (#34).
 
-### Tests
+### Changed
 
 - Both correction emails a host receives after a failed guest send — successful
   rollback and failed rollback — are now pinned word for word, so a wording
