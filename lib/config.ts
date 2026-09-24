@@ -60,6 +60,18 @@ function withDefault<T>(
 
 const identity = (raw: string): string => raw;
 
+// mig#35: z.coerce.boolean()/Boolean(raw) turned any non-empty string,
+// including "false" and "0", into true. This coerces case-insensitively
+// and trims first (whitespace-only counts as empty), and leaves anything
+// else as the raw string so ConfigSchema's `"boolean"` check rejects it —
+// same "coerce here, validate in the schema" split the other fields use.
+function coerceHideBranding(raw: string): boolean | string {
+  const v = raw.trim().toLowerCase();
+  if (v === "true" || v === "1" || v === "yes") return true;
+  if (v === "false" || v === "0" || v === "no" || v === "") return false;
+  return raw;
+}
+
 function loadEnv(): Record<string, string> {
   // Load .env if present; in production env is set by container.
   try {
@@ -95,9 +107,10 @@ function parseConfig(): Config {
   // missing/empty one with a message naming the variable.
   // Optional vars (had a `.default()`): substitute the default when
   // the key is absent, coerce the raw string when it's present —
-  // z.coerce.number()/boolean() were literally `Number(x)`/`Boolean(x)`,
-  // so that's what `Number`/`Boolean` below reproduce, warts (e.g.
-  // `Boolean("false") === true`) and all.
+  // z.coerce.number() was literally `Number(x)`, so that's what `Number`
+  // below reproduces. HIDE_BRANDING instead goes through
+  // coerceHideBranding (mig#35): Boolean(x) treated every non-empty
+  // string, including "false" and "0", as true.
   const candidate = {
     HOST_NAME: env.HOST_NAME,
     HOST_EMAIL: env.HOST_EMAIL,
@@ -119,7 +132,13 @@ function parseConfig(): Config {
     CANCEL_SECRET: env.CANCEL_SECRET,
     PORT: withDefault(env, "PORT", 8080, Number),
     DATA_PATH: withDefault(env, "DATA_PATH", "./data/bookings.json", identity),
-    HIDE_BRANDING: withDefault(env, "HIDE_BRANDING", false, Boolean),
+    // Not withDefault<T>: coerceHideBranding can return a string (an
+    // invalid raw value, passed through so ConfigSchema rejects it), which
+    // withDefault's single type parameter can't express alongside the
+    // `false` default.
+    HIDE_BRANDING: "HIDE_BRANDING" in env
+      ? coerceHideBranding(env.HIDE_BRANDING)
+      : false,
     GITHUB_URL: withDefault(
       env,
       "GITHUB_URL",
