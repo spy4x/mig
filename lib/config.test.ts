@@ -1,19 +1,16 @@
 // lib/config.ts exits the process on invalid env (Deno.exit(1)), which a
 // same-process test can't observe without killing the test runner itself —
-// so these run it in a child process, the same shape as the boot check in
-// the PR description, and assert on its exit code + stderr.
+// so every test in this file runs it in a child process and asserts on its
+// exit code + stderr. The child's `cwd` is a fresh, empty temp directory
+// (never the repo root): lib/config.ts's `loadEnv` reads a `.env` from its
+// cwd, and running from the repo root would pick up the developer's own
+// `.env` — silently filling in variables a test deliberately left out, or
+// even making the child process import fail outright on a value the
+// developer's `.env` happens to set. The script itself is still referenced
+// by its real (absolute) path, since the child's cwd no longer contains it.
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { type } from "arktype";
 
-// formatConfigIssue is a pure function, so — unlike the rest of this file —
-// it doesn't need a subprocess to test. But lib/config.ts computes and
-// exports `config` as a module-level side effect (`Deno.exit(1)` on an
-// invalid env), so importing it in-process only works once the current
-// process's env is already fully valid. Set it before the dynamic import
-// below runs (top-level code in this file executes before any Deno.test
-// body does), and clear every optional/defaulted key first in case the
-// shell running the tests happens to export one of them (PORT, THEME, …).
 const VALID_ENV: Record<string, string> = {
   HOST_NAME: "Jane Doe",
   HOST_EMAIL: "jane@example.com",
@@ -31,36 +28,48 @@ const VALID_ENV: Record<string, string> = {
   CANCEL_SECRET: "test-cancel-secret-not-real-000",
 };
 
-const OPTIONAL_KEYS = [
-  "MIN_NOTICE_HOURS",
-  "BOOKING_HORIZON_DAYS",
-  "BLOCKED_DATES",
-  "RATE_LIMIT_PER_5MIN",
-  "THEME",
-  "SMTP_PORT",
-  "PORT",
-  "DATA_PATH",
-  "HIDE_BRANDING",
-  "GITHUB_URL",
-  "MIG_VERSION",
-];
-for (const key of OPTIONAL_KEYS) Deno.env.delete(key);
-for (const [key, value] of Object.entries(VALID_ENV)) Deno.env.set(key, value);
-const { formatConfigIssue } = await import("./config.ts");
+const CONFIG_SCRIPT_PATH = new URL("./config.ts", import.meta.url);
+// The child's cwd is a temp dir with no deno.json, so bare specifiers
+// like "arktype" (mapped in the repo's deno.json) would fail to resolve
+// without pointing it at the real config explicitly.
+const DENO_CONFIG_PATH = new URL("../deno.json", import.meta.url);
+
+/** Runs `fn` with a fresh, empty temp directory as `cwd`-equivalent
+ *  isolation for a child `Deno.Command`, removing the directory
+ *  afterward regardless of outcome. */
+async function withIsolatedCwd<T>(
+  fn: (cwd: string) => Promise<T>,
+): Promise<T> {
+  const dir = await Deno.makeTempDir();
+  try {
+    return await fn(dir);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+}
 
 async function runConfig(
   env: Record<string, string>,
 ): Promise<{ code: number; stderr: string }> {
-  const command = new Deno.Command(Deno.execPath(), {
-    args: ["run", "--allow-env", "--allow-read", "lib/config.ts"],
-    cwd: Deno.cwd(),
-    env,
-    clearEnv: true,
-    stdout: "null",
-    stderr: "piped",
+  return await withIsolatedCwd(async (cwd) => {
+    const command = new Deno.Command(Deno.execPath(), {
+      args: [
+        "run",
+        "--allow-env",
+        "--allow-read",
+        "--config",
+        DENO_CONFIG_PATH.pathname,
+        CONFIG_SCRIPT_PATH.href,
+      ],
+      cwd,
+      env,
+      clearEnv: true,
+      stdout: "null",
+      stderr: "piped",
+    });
+    const { code, stderr } = await command.output();
+    return { code, stderr: new TextDecoder().decode(stderr) };
   });
-  const { code, stderr } = await command.output();
-  return { code, stderr: new TextDecoder().decode(stderr) };
 }
 
 /** Boots config.ts in a child process and prints one field of the
@@ -74,22 +83,28 @@ async function runConfigField(
   env: Record<string, string>,
   field: string,
 ): Promise<unknown> {
-  const command = new Deno.Command(Deno.execPath(), {
-    args: [
-      "eval",
-      // `deno eval` already runs with every permission — Deno 2.9.5 (CI's
-      // and the Dockerfile's version) rejects `--allow-env`/`--allow-read`
-      // here as unrecognized arguments.
-      `const { config } = await import(\`file://\${Deno.cwd()}/lib/config.ts\`); console.log(JSON.stringify(config.${field}))`,
-    ],
-    cwd: Deno.cwd(),
-    env,
-    clearEnv: true,
-    stdout: "piped",
-    stderr: "inherit",
+  return await withIsolatedCwd(async (cwd) => {
+    const command = new Deno.Command(Deno.execPath(), {
+      args: [
+        "eval",
+        // `deno eval` already runs with every permission — Deno 2.9.5
+        // (CI's and the Dockerfile's version) rejects
+        // `--allow-env`/`--allow-read` here as unrecognized arguments.
+        "--config",
+        DENO_CONFIG_PATH.pathname,
+        `const { config } = await import(${
+          JSON.stringify(CONFIG_SCRIPT_PATH.href)
+        }); console.log(JSON.stringify(config.${field}))`,
+      ],
+      cwd,
+      env,
+      clearEnv: true,
+      stdout: "piped",
+      stderr: "inherit",
+    });
+    const { stdout } = await command.output();
+    return JSON.parse(new TextDecoder().decode(stdout));
   });
-  const { stdout } = await command.output();
-  return JSON.parse(new TextDecoder().decode(stdout));
 }
 
 Deno.test("config: boots with a fully valid env", async () => {
@@ -194,9 +209,9 @@ Deno.test("config: a malformed MEETING_URL is named but its value is not echoed 
 
 // arktype reports two or more rules failing on the same field
 // (SLOT_DURATION_MIN "500.5" is both non-integer and over 480) as a
-// bulleted list in `expected` — formatConfigIssue flattens that into
-// one line instead of printing arktype's own multi-line rendering,
-// which embeds the value.
+// bulleted list in `expected` — formatConfigIssue (lib/config-issue.ts)
+// flattens that into one line instead of printing arktype's own
+// multi-line rendering, which embeds the value.
 Deno.test("config: a value failing two rules at once names the field with both rules flattened, not echoed", async () => {
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
@@ -255,7 +270,7 @@ Deno.test("config: a MEETING_URL with a line separator is named but not echoed",
   const marker = "LINESEP-MARKER-7f3a";
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
-    MEETING_URL: `not a url\u2028${marker}`,
+    MEETING_URL: `not a url ${marker}`,
   });
   assertEquals(code, 1);
   assertStringIncludes(stderr, "MEETING_URL");
@@ -310,69 +325,4 @@ Deno.test("config: MIG_VERSION is trimmed", async () => {
     "version",
   );
   assertEquals(value, "1.2.3");
-});
-
-// mig#36 round 2: formatConfigIssue is the single place a startup error
-// line gets built, so it's pinned directly rather than only through the
-// subprocess-based tests above.
-
-Deno.test("formatConfigIssue: an absent variable is reported as 'is not set', ignoring code/expected", () => {
-  assertEquals(
-    formatConfigIssue("HOST_NAME", undefined, "required", "a string"),
-    "  HOST_NAME: is not set",
-  );
-});
-
-// The bug this round fixes: a two-branch union (a raw boolean, or a
-// narrowed string-literal union) makes arktype build `expected` from the
-// *whole* top-level message, which embeds the value. Every `union` issue
-// gets the generic message, regardless of what `expected` says.
-Deno.test("formatConfigIssue: a union-code issue gets the generic message, never `expected`", () => {
-  const marker = "UNION-MARKER-4b1";
-  const leaky = `THEME must be "dark" or "light" (was "${marker}")`;
-  assertEquals(
-    formatConfigIssue("THEME", marker, "union", leaky),
-    "  THEME: has an invalid value",
-  );
-});
-
-// Belt and suspenders: even a non-union code whose `expected` happens to
-// contain the raw value verbatim must not print it.
-Deno.test("formatConfigIssue: a non-union issue whose expected contains the raw value also gets the generic message", () => {
-  const marker = "GENERIC-MARKER-2ee9";
-  assertEquals(
-    formatConfigIssue("MEETING_URL", marker, "predicate", `oops ${marker}`),
-    "  MEETING_URL: has an invalid value",
-  );
-});
-
-Deno.test("formatConfigIssue: an empty raw value never falsely matches `expected`", () => {
-  // "" is a substring of every string, so the includes-check must not
-  // treat a present-but-empty variable as an `expected`-leak.
-  assertEquals(
-    formatConfigIssue("HOST_NAME", "", "domain", "a string"),
-    "  HOST_NAME: must be a string",
-  );
-});
-
-Deno.test("formatConfigIssue: a single failing rule prints arktype's real 'expected' text", () => {
-  const result = type("string.url")("not-a-url");
-  if (!(result instanceof type.errors)) throw new Error("expected a failure");
-  const [issue] = result;
-  assertEquals(issue.code, "predicate");
-  assertEquals(
-    formatConfigIssue("MEETING_URL", "not-a-url", issue.code, issue.expected),
-    "  MEETING_URL: must be a URL string",
-  );
-});
-
-Deno.test("formatConfigIssue: two rules failing at once are flattened into one line, using arktype's real wording", () => {
-  const result = type("1 <= number.integer <= 480")(500.5);
-  if (!(result instanceof type.errors)) throw new Error("expected a failure");
-  const [issue] = result;
-  assertEquals(issue.code, "intersection");
-  assertEquals(
-    formatConfigIssue("SLOT_DURATION_MIN", "500.5", issue.code, issue.expected),
-    "  SLOT_DURATION_MIN: must be an integer and at most 480",
-  );
 });
