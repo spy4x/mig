@@ -1,12 +1,28 @@
 # mig ⏱
 
+[![CI](https://ci.antonshubin.com/api/badges/12/status.svg)](https://ci.antonshubin.com/repos/12)
 [![Docker](https://img.shields.io/badge/docker-antonshubin%2Fmig-blue)](https://hub.docker.com/r/antonshubin/mig)
 [![Deno](https://img.shields.io/badge/deno-2.x-black?logo=deno)](https://deno.land)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![GitHub](https://img.shields.io/badge/github-spy4x%2Fmig-181717?logo=github)](https://github.com/spy4x/mig)
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/booking-time-dark.png">
+  <img src="docs/screenshots/booking-time-light.png" alt="mig's booking page: Jane Doe's name at the top, the picked weekday, and a grid of free 30-minute time slots from 09:00 to 16:30, Berlin time.">
+</picture>
+
+```bash
+docker run -d -p 8080:8080 -v ./data:/data --env-file .env antonshubin/mig:latest
+```
+
+Fill `.env` from [`.env.example`](.env.example) first;
+[Quick start](#quick-start) has the full command and the data directory's
+permissions.
+
 **mig** (миг — Russian for "moment") is a tiny self-hosted meeting scheduler.
-One owner, one URL, one feature: book a time slot.
+One owner, one URL, one feature: book a time slot. It is a modern web app built
+on web standards — Fetch, Web Crypto, Streams and ES modules — and runs on Deno
+in a small Docker image.
 
 ```
 ┌──────────┐    ┌──────────┐    ┌──────────┐
@@ -24,7 +40,7 @@ One owner, one URL, one feature: book a time slot.
 ## Why mig?
 
 Calendly alternatives are heavyweight (cal.com = Next.js + Postgres + Redis,
-CloudMeet = Cloudflare + D1 + OAuth). Mig is a single Deno binary that reads its
+CloudMeet = Cloudflare + D1 + OAuth). Mig is one small process that reads its
 config from env vars and stores bookings in a JSON file. No DB, no OAuth, no
 admin UI.
 
@@ -39,8 +55,20 @@ admin UI.
 - You need a team scheduler, payments, or calendar sync
 - You need to scale to thousands of bookings per day
 
-![The standalone booking page: pick a date, then a time slot](docs/booking-page.png)
-_The standalone booking page (`/`) — date on the left, time slots on the right._
+## See it
+
+![A visitor books a meeting: picks a date in the calendar, picks 15:30, types a name and email, confirms, and lands on the "You're booked" page.](docs/screenshots/booking-flow.gif)
+
+| Confirm step                                                                                                                                                                                                        | Confirmation page                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![The confirm step: the picked time, 14:00 Berlin time, above a form filled with the name John Doe, the email john@example.com and a short note, and a Confirm button.](docs/screenshots/booking-confirm-light.png) | ![The confirmation page: "You're booked", with the date, time, duration and meeting link of the booking.](docs/screenshots/confirmed-light.png) |
+
+![The guest's confirmation email: subject "Booking confirmed", the meeting's date and time in Berlin time, the meeting link, a note about the attached calendar invite, and a cancel link.](docs/screenshots/email-confirmation.png)
+_The confirmation email the guest receives, with the `.ics` invite attached._
+
+Dark-theme versions of the app pictures are in
+[`docs/screenshots/`](docs/screenshots/). `deno task screenshots` regenerates
+them all from placeholder data.
 
 ## Features
 
@@ -235,9 +263,13 @@ on both ends. Comma-separated, whitespace tolerant.
 
 ## Embedding
 
-![The /embed iframe variant: same booking flow, no header or footer chrome](docs/embed.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/embed-dark.png">
+  <img src="docs/screenshots/embed-light.png" alt="The /embed variant framed on a plain example website: the site's own heading and text on the left, mig's date calendar on the right with no mig header or footer.">
+</picture>
+
 _The `/embed` variant — the same flow, stripped of header/footer chrome for
-framing._
+framing, here with `?theme=` matching the host page._
 
 Drop the booking flow into another page with an iframe:
 
@@ -392,3 +424,7 @@ Copyright (C) 2026 Anton Shubin
 
 Licensed under [AGPL-3.0](LICENSE). Contribution terms are in
 [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+Made by Anton Shubin · [antonshubin.com](https://antonshubin.com)

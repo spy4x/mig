@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `deno task screenshots` writes every README picture and the GitHub social
+  preview from a local build, with placeholder data, a local SMTP sink and a
+  pinned Playwright, so the pictures can be regenerated on any checkout (#53).
+
+### Changed
+
+- The README opens with the CI badge, a screenshot of the booking page and a
+  one-line `docker run`, and describes mig as a web-standards app that runs on
+  Deno in a small Docker image. New screenshots in light and dark, a GIF of the
+  booking flow and a picture of the confirmation email replace the two old ones
+  (#43).
+
 ## [0.5.0] - 2026-09-25
 
 ### Added

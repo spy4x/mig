@@ -1,0 +1,775 @@
+// Writes the README screenshots under docs/screenshots/, plus
+// docs/social-preview.png, from a local build of mig.
+//
+//   deno task build && deno task screenshots
+//
+// It starts the built app (`_fresh/server.js`) on a free port with
+// placeholder configuration only ("Jane Doe", example.com addresses,
+// Europe/Berlin), a throwaway data file and an in-process SMTP sink,
+// so a booking succeeds and no mail leaves the machine. Chromium
+// resolves meet.example.com (the placeholder PUBLIC_URL) to that local
+// server and every other host name to nothing, so the pictures and
+// the email show only placeholder addresses and the browser never
+// reaches the network. PUBLIC_URL is plain http because the local
+// server has no TLS; no picture shows it. Playwright's request routing
+// can't stand in for the host mapping: it doesn't see the request a
+// fulfilled redirect leads to, and the booking form's POST ends in one.
+//
+// Playwright is a dev-only tool outside the dependency budget in
+// AGENTS.md, so it is not in deno.json's imports. The task runs this
+// script with `--node-modules-dir=none --no-lock`: the pinned package
+// comes from Deno's global cache, and neither node_modules nor
+// deno.lock changes. The specifier is imported through a variable,
+// not a string literal, because `deno check` (part of `deno task
+// check`) resolves literal imports against the manual node_modules
+// directory, where Playwright is not installed; the small interfaces
+// below stand in for Playwright's own types.
+
+const PLAYWRIGHT = "npm:playwright@1.63.0";
+
+const ROOT = new URL("../", import.meta.url);
+const SHOTS = new URL("docs/screenshots/", ROOT);
+const SOCIAL = new URL("docs/social-preview.png", ROOT);
+const PUBLIC_URL = "http://meet.example.com";
+const PARENT_URL = "http://www.example.com/";
+const VIEWPORT = { width: 1280, height: 800 };
+const GUEST = {
+  name: "John Doe",
+  email: "john@example.com",
+  notes: "A quick intro call about the new website.",
+};
+/** PNGs above this size get quantised to 256 colours, if ImageMagick is installed. */
+const PNG_BUDGET = 400 * 1024;
+
+// ─── Minimal Playwright types (see the header for why) ──────────────
+
+interface Locator {
+  click(): Promise<void>;
+  fill(value: string): Promise<void>;
+  pressSequentially(value: string, opts?: { delay?: number }): Promise<void>;
+  first(): Locator;
+  nth(index: number): Locator;
+  count(): Promise<number>;
+  getAttribute(name: string): Promise<string | null>;
+  waitFor(opts?: { state?: string; timeout?: number }): Promise<void>;
+  filter(opts: { hasText?: string | RegExp }): Locator;
+  locator(selector: string): Locator;
+}
+
+interface Page {
+  goto(url: string, opts?: { waitUntil?: string }): Promise<unknown>;
+  setContent(html: string, opts?: { waitUntil?: string }): Promise<void>;
+  locator(selector: string): Locator;
+  frameLocator(selector: string): { locator(selector: string): Locator };
+  screenshot(
+    opts: {
+      path: string;
+      animations?: string;
+      caret?: string;
+      clip?: { x: number; y: number; width: number; height: number };
+    },
+  ): Promise<unknown>;
+  waitForURL(url: RegExp, opts?: { timeout?: number }): Promise<void>;
+  waitForTimeout(ms: number): Promise<void>;
+  waitForFunction(fn: string): Promise<unknown>;
+  evaluate(fn: string): Promise<unknown>;
+  url(): string;
+  mouse: {
+    move(x: number, y: number, opts?: { steps?: number }): Promise<void>;
+  };
+  video(): { path(): Promise<string> } | null;
+}
+
+interface Route {
+  request(): { url(): string };
+  fulfill(
+    opts: { status: number; contentType: string; body: string },
+  ): Promise<void>;
+}
+
+interface ContextOptions {
+  viewport: { width: number; height: number };
+  deviceScaleFactor: number;
+  timezoneId: string;
+  locale: string;
+  colorScheme: "light" | "dark";
+  recordVideo?: { dir: string; size: { width: number; height: number } };
+}
+
+interface BrowserContext {
+  newPage(): Promise<Page>;
+  route(
+    url: string | RegExp,
+    handler: (route: Route) => Promise<void>,
+  ): Promise<void>;
+  close(): Promise<void>;
+}
+
+interface Browser {
+  newContext(opts: ContextOptions): Promise<BrowserContext>;
+  close(): Promise<void>;
+}
+
+interface Playwright {
+  chromium: { launch(opts: { args: string[] }): Promise<Browser> };
+}
+
+// ─── Local SMTP sink ────────────────────────────────────────────────
+
+interface CapturedMail {
+  to: string;
+  raw: string;
+}
+
+/** Accepts every message on 127.0.0.1 and keeps it in memory. Speaks
+ *  just enough SMTP for nodemailer: EHLO, AUTH (any credentials),
+ *  MAIL, RCPT, DATA, RSET, NOOP, QUIT. No STARTTLS is offered, so
+ *  nodemailer stays on plain TCP to localhost. */
+function startSmtpSink(): {
+  port: number;
+  mails: CapturedMail[];
+  close(): void;
+} {
+  const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
+  const mails: CapturedMail[] = [];
+  const serve = async () => {
+    for await (const conn of listener) handle(conn).catch(() => {});
+  };
+  const handle = async (conn: Deno.Conn) => {
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+    const say = (line: string) => conn.write(enc.encode(`${line}\r\n`));
+    let buf = "";
+    let inData = false;
+    let authLoginSteps = 0;
+    let rcpt = "";
+    await say("220 localhost mig screenshot sink");
+    const chunk = new Uint8Array(64 * 1024);
+    while (true) {
+      const n = await conn.read(chunk);
+      if (n === null) break;
+      buf += dec.decode(chunk.subarray(0, n));
+      while (true) {
+        if (inData) {
+          const end = buf.indexOf(`\r\n.\r\n`);
+          if (end === -1) break;
+          mails.push({
+            to: rcpt,
+            raw: buf.slice(0, end).replaceAll(`\r\n..`, `\r\n.`),
+          });
+          buf = buf.slice(end + 5);
+          inData = false;
+          await say("250 OK queued");
+          continue;
+        }
+        const eol = buf.indexOf(`\r\n`);
+        if (eol === -1) break;
+        const line = buf.slice(0, eol);
+        buf = buf.slice(eol + 2);
+        const verb = line.split(" ")[0].toUpperCase();
+        if (authLoginSteps > 0) {
+          authLoginSteps--;
+          await say(
+            authLoginSteps > 0 ? "334 UGFzc3dvcmQ6" : "235 Authenticated",
+          );
+        } else if (verb === "EHLO" || verb === "HELO") {
+          await say("250-localhost");
+          await say("250-AUTH PLAIN LOGIN");
+          await say("250 8BITMIME");
+        } else if (verb === "AUTH") {
+          if (/^AUTH LOGIN\s*$/i.test(line)) {
+            authLoginSteps = 2;
+            await say("334 VXNlcm5hbWU6");
+          } else if (/^AUTH LOGIN /i.test(line)) {
+            authLoginSteps = 1;
+            await say("334 UGFzc3dvcmQ6");
+          } else {
+            await say("235 Authenticated");
+          }
+        } else if (verb === "RCPT") {
+          rcpt = line.match(/<([^>]*)>/)?.[1] ?? "";
+          await say("250 OK");
+        } else if (verb === "DATA") {
+          inData = true;
+          await say("354 End data with <CR><LF>.<CR><LF>");
+        } else if (verb === "QUIT") {
+          await say("221 Bye");
+          break;
+        } else {
+          await say("250 OK");
+        }
+      }
+    }
+    conn.close();
+  };
+  serve();
+  return {
+    port: (listener.addr as Deno.NetAddr).port,
+    mails,
+    close: () => listener.close(),
+  };
+}
+
+/** The text/html part of a nodemailer message, decoded. */
+function htmlPart(raw: string): string {
+  const start = raw.search(/Content-Type: text\/html/i);
+  if (start === -1) throw new Error("the captured email has no text/html part");
+  const part = raw.slice(start);
+  const headerEnd = part.indexOf(`\r\n\r\n`);
+  const headers = part.slice(0, headerEnd);
+  const body = part.slice(headerEnd + 4).split(/\r\n--/)[0];
+  const encoding = headers.match(/Content-Transfer-Encoding:\s*(\S+)/i)?.[1]
+    .toLowerCase();
+  const bytes = encoding === "base64"
+    ? Uint8Array.from(atob(body.replace(/\s+/g, "")), (c) => c.charCodeAt(0))
+    : encoding === "quoted-printable"
+    ? decodeQuotedPrintable(body)
+    : new TextEncoder().encode(body);
+  return new TextDecoder().decode(bytes);
+}
+
+function decodeQuotedPrintable(body: string): Uint8Array {
+  const soft = body.replace(/=\r\n/g, "");
+  const out: number[] = [];
+  for (let i = 0; i < soft.length; i++) {
+    if (soft[i] === "=" && /^[0-9A-F]{2}$/i.test(soft.slice(i + 1, i + 3))) {
+      out.push(parseInt(soft.slice(i + 1, i + 3), 16));
+      i += 2;
+    } else {
+      out.push(...new TextEncoder().encode(soft[i]));
+    }
+  }
+  return new Uint8Array(out);
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
+
+function freePort(): number {
+  const l = Deno.listen({ hostname: "127.0.0.1", port: 0 });
+  const port = (l.addr as Deno.NetAddr).port;
+  l.close();
+  return port;
+}
+
+async function latestVersion(): Promise<string> {
+  try {
+    const out = await new Deno.Command("git", {
+      args: ["describe", "--tags", "--abbrev=0"],
+      cwd: ROOT,
+      stderr: "null",
+    }).output();
+    const tag = new TextDecoder().decode(out.stdout).trim();
+    if (out.success && /^v\d/.test(tag)) return tag.slice(1);
+  } catch {
+    // git missing: fall through to the default below.
+  }
+  return "0.5.0";
+}
+
+async function hasCommand(name: string): Promise<boolean> {
+  try {
+    const out = await new Deno.Command(name, {
+      args: ["-version"],
+      stdout: "null",
+      stderr: "null",
+    })
+      .output();
+    return out.success;
+  } catch {
+    return false;
+  }
+}
+
+async function run(cmd: string, args: string[]): Promise<void> {
+  const out = await new Deno.Command(cmd, {
+    args,
+    stdout: "null",
+    stderr: "piped",
+  }).output();
+  if (!out.success) {
+    throw new Error(
+      `${cmd} failed: ${new TextDecoder().decode(out.stderr).slice(-2000)}`,
+    );
+  }
+}
+
+async function waitForHealth(
+  base: string,
+  server: Deno.ChildProcess,
+): Promise<void> {
+  let exited = false;
+  server.status.then(() => exited = true);
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (exited) throw new Error("the server exited before it became healthy");
+    try {
+      const res = await fetch(`${base}/health`);
+      await res.body?.cancel();
+      if (res.ok) return;
+    } catch {
+      // Not listening yet.
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error("the server did not answer /health within 30 s");
+}
+
+/** Serves the neutral parent page for the embed shots. */
+async function routeParentPage(ctx: BrowserContext): Promise<void> {
+  await ctx.route(
+    new RegExp(`^${PARENT_URL.replaceAll(`.`, `\\.`)}`),
+    async (route) => {
+      const theme =
+        new URL(route.request().url()).searchParams.get("theme") === "dark"
+          ? "dark"
+          : "light";
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: parentPage(theme),
+      });
+    },
+  );
+}
+
+/** A neutral host page framing /embed, sized by its height message. */
+function parentPage(theme: "light" | "dark"): string {
+  const dark = theme === "dark";
+  const bg = dark ? "#0f1115" : "#f4f4f5";
+  const ink = dark ? "#e4e4e7" : "#18181b";
+  const muted = dark ? "#a1a1aa" : "#52525b";
+  const bar = dark ? "#1c1f26" : "#ffffff";
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Example site</title>
+<style>
+  body { margin: 0; background: ${bg}; color: ${ink}; font: 16px/1.5 system-ui, sans-serif; }
+  header { background: ${bar}; padding: 18px 48px; font-weight: 600; display: flex; gap: 32px; }
+  header span { color: ${muted}; font-weight: 400; }
+  main { display: grid; grid-template-columns: 1fr 36rem; gap: 56px; padding: 48px; max-width: 1180px; margin: 0 auto; box-sizing: border-box; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 24px 0 12px; }
+  p { color: ${muted}; margin: 0 0 12px; }
+  iframe { width: 100%; border: 0; height: 600px; display: block; }
+</style></head>
+<body>
+<header>Example Studio <span>Work</span><span>About</span><span>Contact</span></header>
+<main>
+  <section>
+    <h1>Let's talk</h1>
+    <p>Pick a time that suits you. You'll get a calendar invite and a meeting link by email.</p>
+    <p>Calls last 30 minutes.</p>
+  </section>
+  <iframe id="mig-embed" src="${PUBLIC_URL}/embed?theme=${theme}" title="Book a meeting"></iframe>
+</main>
+<script>
+  const iframe = document.getElementById("mig-embed")
+  addEventListener("message", (event) => {
+    if (event.origin !== "${PUBLIC_URL}") return
+    if (event.source !== iframe.contentWindow) return
+    if (event.data?.type !== "mig:height") return
+    iframe.style.height = event.data.height + "px"
+  })
+</script>
+</body></html>`;
+}
+
+/** A plain mail-client frame around the real email HTML. */
+function emailPage(
+  mail: { from: string; to: string; subject: string; html: string },
+): string {
+  const esc = (s: string) =>
+    s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+      .replaceAll(
+        `"`,
+        "&quot;",
+      );
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Email</title>
+<style>
+  body { margin: 0; background: #f4f4f5; font: 14px/1.5 system-ui, sans-serif; color: #18181b; }
+  .card { width: 760px; margin: 40px auto; background: #fff; border: 1px solid #e4e4e7; border-radius: 12px; overflow: hidden; }
+  .head { padding: 20px 28px; border-bottom: 1px solid #e4e4e7; }
+  .subject { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+  .meta { color: #52525b; }
+  iframe { width: 100%; border: 0; display: block; }
+</style></head>
+<body><div class="card">
+  <div class="head">
+    <div class="subject">${esc(mail.subject)}</div>
+    <div class="meta">From: ${esc(mail.from)}</div>
+    <div class="meta">To: ${esc(mail.to)}</div>
+    <div class="meta">Attachment: meeting.ics</div>
+  </div>
+  <iframe id="body" srcdoc="${esc(mail.html)}"></iframe>
+</div>
+<script>
+  const f = document.getElementById("body")
+  f.addEventListener("load", () => {
+    f.style.height = f.contentDocument.documentElement.scrollHeight + "px"
+    document.body.dataset.ready = "1"
+  })
+</script>
+</body></html>`;
+}
+
+function header(raw: string, name: string): string {
+  const m = raw.match(new RegExp(`^${name}: (.*(?:\\r\\n[ \\t].*)*)`, "im"));
+  return (m?.[1] ?? "").replace(/\r\n[ \t]+/g, " ").trim();
+}
+
+/** Screenshot with no hover, focus ring, caret or running animation.
+ *  Refuses to write a picture taken in any zone but Europe/Berlin, so a
+ *  dropped `timezoneId` can never leak the machine's own zone. `clip`
+ *  crops to a region, for a page shorter than the viewport. */
+async function shot(
+  page: Page,
+  name: string,
+  clip?: { x: number; y: number; width: number; height: number },
+): Promise<void> {
+  const zone = await page.evaluate(
+    "Intl.DateTimeFormat().resolvedOptions().timeZone",
+  );
+  if (zone !== "Europe/Berlin") {
+    throw new Error(`${name}: the browser runs in ${zone}, not Europe/Berlin`);
+  }
+  await page.evaluate("document.activeElement?.blur?.()");
+  await page.mouse.move(2, VIEWPORT.height - 2);
+  await page.waitForTimeout(300);
+  const path = new URL(name, SHOTS).pathname;
+  await page.screenshot({ path, animations: "disabled", caret: "hide", clip });
+  console.log(`wrote docs/screenshots/${name}`);
+}
+
+async function fitPng(path: string, magick: boolean): Promise<void> {
+  if ((await Deno.stat(path)).size <= PNG_BUDGET || !magick) return;
+  await run("magick", [path, "-colors", "256", `PNG8:${path}`]);
+}
+
+// ─── Main ───────────────────────────────────────────────────────────
+
+async function main(): Promise<void> {
+  const serverEntry = new URL("_fresh/server.js", ROOT);
+  try {
+    await Deno.stat(serverEntry);
+  } catch {
+    throw new Error(
+      `_fresh/server.js is missing: run \`deno task build\` first`,
+    );
+  }
+
+  const { chromium } = (await import(PLAYWRIGHT)) as Playwright;
+  const tmp = await Deno.makeTempDir({ prefix: "mig-screenshots-" });
+  const smtp = startSmtpSink();
+  const port = freePort();
+  const local = `http://127.0.0.1:${port}`;
+
+  const cancelSecret = btoa(
+    String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))),
+  );
+  let server: Deno.ChildProcess | null = null;
+  let browser: Browser | null = null;
+  try {
+    server = new Deno.Command(Deno.execPath(), {
+      args: [
+        "serve",
+        "-A",
+        "--unstable-temporal",
+        `--port=${port}`,
+        "_fresh/server.js",
+      ],
+      cwd: ROOT,
+      clearEnv: true,
+      env: {
+        PATH: Deno.env.get("PATH") ?? "",
+        HOME: Deno.env.get("HOME") ?? tmp,
+        ...(Deno.env.get("DENO_DIR")
+          ? { DENO_DIR: Deno.env.get("DENO_DIR")! }
+          : {}),
+        HOST_NAME: "Jane Doe",
+        HOST_EMAIL: "jane@example.com",
+        HOST_TZ: "Europe/Berlin",
+        MEETING_URL: "https://video.example.com/jane-doe",
+        WEEKLY_AVAILABILITY: "MON-FRI 09:00-17:00",
+        SLOT_DURATION_MIN: "30",
+        MIN_NOTICE_HOURS: "6",
+        BOOKING_HORIZON_DAYS: "21",
+        CANCEL_SECRET: cancelSecret,
+        SMTP_HOST: "127.0.0.1",
+        SMTP_PORT: String(smtp.port),
+        SMTP_USER: "jane@example.com",
+        SMTP_PASSWORD: "placeholder",
+        SMTP_FROM: "Bookings <book@example.com>",
+        PUBLIC_URL,
+        PORT: String(port),
+        DATA_PATH: `${tmp}/bookings.json`,
+        RATE_LIMIT_PER_5MIN: "100",
+        MIG_VERSION: await latestVersion(),
+      },
+      stdout: "null",
+      stderr: "null",
+    }).spawn();
+    await waitForHealth(local, server);
+
+    await Deno.mkdir(SHOTS, { recursive: true });
+    browser = await chromium.launch({
+      args: [
+        `--host-resolver-rules=MAP meet.example.com 127.0.0.1:${port}, MAP * ~NOTFOUND`,
+        // Chromium would otherwise try https:// first for the placeholder
+        // host, and refuse to frame it from the placeholder parent page
+        // because it resolves to a loopback address.
+        "--disable-features=HttpsUpgrades,LocalNetworkAccessChecks",
+      ],
+    });
+    const contextFor = async (colorScheme: "light" | "dark", extra = {}) => {
+      const ctx = await browser!.newContext({
+        viewport: VIEWPORT,
+        deviceScaleFactor: 2,
+        timezoneId: "Europe/Berlin",
+        locale: "en-US",
+        colorScheme,
+        ...extra,
+      });
+      await routeParentPage(ctx);
+      return ctx;
+    };
+
+    // The first bookable date with a full day of slots, read from the picker.
+    const probe = await contextFor("light");
+    const probePage = await probe.newPage();
+    await probePage.goto(`${PUBLIC_URL}/`, { waitUntil: "networkidle" });
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Berlin",
+    }).format(new Date());
+    const days = probePage.locator(`[aria-label$=" 16 slots available"]`);
+    const dates: string[] = [];
+    for (let i = 0; i < (await days.count()); i++) {
+      dates.push(
+        (await days.nth(i).getAttribute("aria-label"))?.split(" ")[0] ?? "",
+      );
+    }
+    // A later weekday, not today, so no slot has passed while the script runs.
+    const date = dates.find((d) => d > today);
+    if (!date) {
+      throw new Error("the picker shows no fully bookable weekday after today");
+    }
+    await probe.close();
+
+    const slotsVisible = (page: Page) =>
+      page.locator(`section[aria-labelledby="step-time"] :is(button, a)`)
+        .first().waitFor();
+
+    for (const scheme of ["light", "dark"] as const) {
+      const ctx = await contextFor(scheme);
+      const page = await ctx.newPage();
+
+      await page.goto(`${PUBLIC_URL}/?date=${date}`, {
+        waitUntil: "networkidle",
+      });
+      await slotsVisible(page);
+      await shot(page, `booking-time-${scheme}.png`);
+
+      await page.goto(`${PUBLIC_URL}/?date=${date}&slot=14:00`, {
+        waitUntil: "networkidle",
+      });
+      await page.locator(`input[name="name"]`).fill(GUEST.name);
+      await page.locator(`input[name="email"]`).fill(GUEST.email);
+      await page.locator(`textarea[name="notes"]`).fill(GUEST.notes);
+      // Start the frame at the picked-time card, just under the sticky header.
+      await page.evaluate(`{
+        const step = document.querySelector('section[aria-labelledby="step-time"]')
+        const header = document.querySelector("header")
+        const top = step.getBoundingClientRect().top + scrollY - header.offsetHeight - 24
+        scrollTo({ top, behavior: "instant" })
+      }`);
+      await shot(page, `booking-confirm-${scheme}.png`);
+
+      await page.goto(`${PARENT_URL}?theme=${scheme}`, {
+        waitUntil: "networkidle",
+      });
+      await page.frameLocator("#mig-embed").locator(
+        `[aria-label$=" available"]`,
+      ).first().waitFor();
+      await page.waitForTimeout(500);
+      await shot(page, `embed-${scheme}.png`);
+      await ctx.close();
+    }
+
+    // One real booking through the form, then its confirmation page in both themes.
+    const bookCtx = await contextFor("light");
+    const bookPage = await bookCtx.newPage();
+    await bookPage.goto(`${PUBLIC_URL}/?date=${date}&slot=11:00`, {
+      waitUntil: "networkidle",
+    });
+    await bookPage.locator(`input[name="name"]`).fill(GUEST.name);
+    await bookPage.locator(`input[name="email"]`).fill(GUEST.email);
+    await bookPage.locator(`textarea[name="notes"]`).fill(GUEST.notes);
+    await bookPage.locator(
+      `form[aria-label="Booking details"] button[type="submit"]`,
+    ).click();
+    await bookPage.waitForURL(/\/confirmed\?/, { timeout: 30_000 });
+    await bookPage.waitForTimeout(500);
+    const confirmedUrl = bookPage.url();
+    await shot(bookPage, "confirmed-light.png");
+    await bookCtx.close();
+    const darkCtx = await contextFor("dark");
+    const darkPage = await darkCtx.newPage();
+    await darkPage.goto(confirmedUrl, { waitUntil: "networkidle" });
+    await shot(darkPage, "confirmed-dark.png");
+    await darkCtx.close();
+
+    // The guest's confirmation email, exactly as lib/email.ts produced it.
+    const guestMail = smtp.mails.find((m) => m.to === GUEST.email);
+    if (!guestMail) {
+      throw new Error("the SMTP sink received no email for the guest");
+    }
+    const mailCtx = await contextFor("light");
+    const mailPage = await mailCtx.newPage();
+    await mailPage.setContent(
+      emailPage({
+        from: header(guestMail.raw, "From"),
+        to: `${GUEST.name} <${GUEST.email}>`,
+        subject: header(guestMail.raw, "Subject"),
+        html: htmlPart(guestMail.raw),
+      }),
+      { waitUntil: "load" },
+    );
+    await mailPage.waitForFunction(`document.body.dataset.ready === "1"`);
+    // The email is shorter than the viewport: crop 40px below the card.
+    const cardBottom = Number(
+      await mailPage.evaluate(
+        `document.querySelector(".card").getBoundingClientRect().bottom`,
+      ),
+    );
+    await shot(mailPage, "email-confirmation.png", {
+      x: 0,
+      y: 0,
+      width: VIEWPORT.width,
+      height: Math.min(VIEWPORT.height, Math.ceil(cardBottom) + 40),
+    });
+    await mailCtx.close();
+
+    // The main flow as a short clip: date → time → confirm → confirmed.
+    const videoDir = `${tmp}/video`;
+    const videoCtx = await contextFor("light", {
+      deviceScaleFactor: 1,
+      recordVideo: { dir: videoDir, size: VIEWPORT },
+    });
+    const videoPage = await videoCtx.newPage();
+    await videoPage.goto(`${PUBLIC_URL}/`, { waitUntil: "networkidle" });
+    await videoPage.mouse.move(640, 700);
+    await videoPage.waitForTimeout(900);
+    await videoPage.locator(`[aria-label^="${date} "]`).click();
+    await slotsVisible(videoPage);
+    await videoPage.waitForTimeout(1100);
+    await videoPage.locator(
+      `section[aria-labelledby="step-time"] :is(button, a)`,
+    )
+      .filter({ hasText: /^\s*15:30\s*$/ }).first().click();
+    await videoPage.locator(`input[name="name"]`).waitFor();
+    await videoPage.waitForTimeout(700);
+    await videoPage.locator(`input[name="name"]`).pressSequentially(
+      GUEST.name,
+      { delay: 60 },
+    );
+    await videoPage.locator(`input[name="email"]`).pressSequentially(
+      GUEST.email,
+      { delay: 40 },
+    );
+    await videoPage.waitForTimeout(500);
+    await videoPage.locator(
+      `form[aria-label="Booking details"] button[type="submit"]`,
+    ).click();
+    await videoPage.waitForURL(/\/confirmed\?/, { timeout: 30_000 });
+    await videoPage.mouse.move(1270, 790);
+    await videoPage.waitForTimeout(2200);
+    const video = videoPage.video();
+    await videoCtx.close();
+    const webm = await video?.path();
+    if (!webm) throw new Error("Playwright recorded no video");
+    if (await hasCommand("ffmpeg")) {
+      const gif = new URL("booking-flow.gif", SHOTS).pathname;
+      await run("ffmpeg", [
+        "-y",
+        "-i",
+        webm,
+        "-vf",
+        "fps=10,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle",
+        "-loop",
+        "0",
+        gif,
+      ]);
+      console.log("wrote docs/screenshots/booking-flow.gif");
+    } else {
+      await Deno.copyFile(webm, new URL("booking-flow.webm", SHOTS));
+      console.log(
+        "ffmpeg not found: wrote docs/screenshots/booking-flow.webm instead of a GIF",
+      );
+    }
+
+    // The social preview: the product on a neutral background, name and one line.
+    const hero = await Deno.readFile(new URL("booking-time-light.png", SHOTS));
+    const heroSrc = `data:image/png;base64,${
+      btoa(Array.from(hero, (b) => String.fromCharCode(b)).join(``))
+    }`;
+    const socialCtx = await browser.newContext({
+      viewport: { width: 1280, height: 640 },
+      deviceScaleFactor: 1,
+      timezoneId: "Europe/Berlin",
+      locale: "en-US",
+      colorScheme: "light",
+    });
+    const socialPage = await socialCtx.newPage();
+    await socialPage.setContent(
+      `<!doctype html><html><head><meta charset="utf-8"><style>
+        body { margin: 0; width: 1280px; height: 640px; overflow: hidden; background: #eef0f3;
+          font-family: system-ui, sans-serif; color: #18181b; position: relative; }
+        .text { position: absolute; left: 72px; top: 0; bottom: 0; width: 420px;
+          display: flex; flex-direction: column; justify-content: center; }
+        .name { font-size: 112px; font-weight: 800; letter-spacing: -4px; line-height: 1; }
+        .line { font-size: 30px; line-height: 1.3; color: #3f3f46; margin-top: 24px; }
+        .url { font-size: 20px; color: #71717a; margin-top: 32px; }
+        img { position: absolute; left: 540px; top: 72px; width: 880px; border-radius: 14px;
+          box-shadow: 0 24px 60px rgba(24, 24, 27, .18), 0 0 0 1px rgba(24, 24, 27, .08); }
+      </style></head><body>
+        <div class="text">
+          <div class="name">mig</div>
+          <div class="line">A tiny self-hosted meeting scheduler.</div>
+          <div class="url">One owner · one URL · no database</div>
+        </div>
+        <img src="${heroSrc}" alt="">
+      </body></html>`,
+      { waitUntil: "load" },
+    );
+    await socialPage.screenshot({
+      path: SOCIAL.pathname,
+      animations: "disabled",
+      caret: "hide",
+    });
+    await socialCtx.close();
+    console.log("wrote docs/social-preview.png");
+
+    const magick = await hasCommand("magick");
+    if (!magick) {
+      console.log("ImageMagick not found: PNGs are left uncompressed");
+    }
+    for await (const entry of Deno.readDir(SHOTS)) {
+      if (entry.name.endsWith(".png")) {
+        await fitPng(new URL(entry.name, SHOTS).pathname, magick);
+      }
+    }
+    await fitPng(SOCIAL.pathname, magick);
+  } finally {
+    await browser?.close().catch(() => {});
+    if (server) {
+      try {
+        server.kill("SIGTERM");
+      } catch {
+        // Already exited.
+      }
+      await server.status;
+    }
+    smtp.close();
+    await Deno.remove(tmp, { recursive: true });
+  }
+}
+
+await main();
