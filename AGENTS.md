@@ -88,6 +88,7 @@ src/
 │   ├── theme.ts             — theme bootstrap script + /embed's ?theme= parser
 │   └── height-report-script.ts — /embed's postMessage height-reporting script
 ├── components/              — server-side Preact components (no hydration)
+├── scripts/screenshots.ts   — writes the README pictures (see "Screenshots")
 └── data/.gitkeep            — runtime mount point
 ```
 
@@ -153,6 +154,36 @@ deno task check        # fmt + lint + type-check
 deno task test         # unit tests
 deno task compile      # deno compile → single binary
 ```
+
+## Screenshots
+
+```bash
+deno task build && deno task screenshots
+```
+
+`scripts/screenshots.ts` writes every README picture under `docs/screenshots/`
+(booking page, confirm step, `/embed`, confirmation page, each light and dark;
+the confirmation email; the booking-flow GIF) and `docs/social-preview.png`,
+which the owner uploads by hand in the GitHub repository settings. The pictures
+are placeholders only: "Jane Doe", example.com addresses and Europe/Berlin,
+never real data, so rerunning the command is always safe to commit.
+
+It serves the existing `_fresh/` build on a free port with a throwaway data file
+and its own in-process SMTP sink, so the booking it makes succeeds and no mail
+leaves the machine. Chromium maps `meet.example.com` to that server and every
+other host name to nothing. Browser time zone and locale are fixed
+(`Europe/Berlin`, `en-US`), never the machine's own; the picked date is the
+first full weekday after today, so the dates in the pictures move with the day
+the command runs. The GIF needs `ffmpeg` (otherwise it keeps the WebM), and PNGs
+over 400 KB are quantised with ImageMagick when it is installed.
+
+Playwright is pinned inside the script (`npm:playwright@1.63.0`), not in
+`deno.json`'s imports: it is a dev-only tool outside the dependency budget. The
+task runs with `--node-modules-dir=none --no-lock`, so neither `node_modules`
+nor `deno.lock` changes. It launches Playwright 1.63.0's own Chromium build from
+`~/.cache/ms-playwright`; install it once with
+`deno run -A --node-modules-dir=none --no-lock npm:playwright@1.63.0 install chromium`
+(Chromium 1243 plus Playwright's ffmpeg for the video) if it is missing.
 
 ## CI
 
