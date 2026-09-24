@@ -59,6 +59,47 @@ function withDefault<T>(
 
 const identity = (raw: string): string => raw;
 
+/** Renders one arktype issue as a single startup-log line, naming the
+ *  variable and never the value.
+ *
+ *  `expected` (arktype's description of the failed rule — "a URL
+ *  string", "at least length 16", "an integer") is safe to print for
+ *  most issue codes: `predicate`, `domain`, `required`,
+ *  `min`/`max`/`divisor` and their `intersection` combination never
+ *  embed the checked value. The `union` code is the exception — for a
+ *  two-branch union (a raw `boolean`, or a narrow string-literal
+ *  union like `'light' | 'dark'`) arktype builds `expected` from the
+ *  *whole* top-level message, which does embed the value (e.g.
+ *  `THEME must be "dark" or "light" (was "blue-secret")`). Rather
+ *  than special-case which unions are "safe" (a 3-way union
+ *  happens not to hit this path today, but a future field could),
+ *  every `union` issue and every issue whose `expected` happens to
+ *  contain the raw value verbatim gets the same generic message.
+ *
+ *  `raw` is the *original* env string for that variable (never the
+ *  defaulted/coerced candidate value ConfigSchema actually saw), so
+ *  the leak check compares against what the operator actually typed.
+ */
+export function formatConfigIssue(
+  name: string,
+  raw: string | undefined,
+  code: string,
+  expected: string,
+): string {
+  if (raw === undefined) return `  ${name}: is not set`;
+  if (code === "union" || (raw !== "" && expected.includes(raw))) {
+    return `  ${name}: has an invalid value`;
+  }
+  const flattened = expected
+    .split("\n")
+    .map((line) => line.replace(/^\s*◦\s*/, "").trim())
+    .filter((line) => line.length > 0)
+    .join(" and ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `  ${name}: must be ${flattened}`;
+}
+
 function loadEnv(): Record<string, string> {
   // Load .env if present; in production env is set by container.
   try {
@@ -135,19 +176,18 @@ function parseConfig(): Config {
 
   const validated = ConfigSchema(candidate);
   if (validated instanceof type.errors) {
-    // arktype's default `.message` echoes the actual value (e.g.
-    // `... must be a number (was NaN)`, or the raw env string for a
-    // type/pattern mismatch) — never safe for a startup log line.
-    // Stripping the echoed text back out of the rendered message is
-    // fragile (a value containing U+2028 or the literal text
-    // "must be (" can survive a regex strip). Instead, never touch
-    // `.message`: build the line from `path` (the variable name) and
-    // `expected` (arktype's description of the rule that failed —
-    // "a URL string", "at least length 16", "an integer" — which
-    // describes the *rule*, not the value, for every issue code this
-    // schema produces, missing-required-variable included).
+    // Never touch arktype's own `.message` — it echoes the actual
+    // value, and stripping that back out with a regex is fragile (a
+    // value containing U+2028 or the literal text "must be (" can
+    // survive a strip). formatConfigIssue builds the line from the
+    // variable name and `expected` instead, and falls back to a
+    // generic message for the one issue code (`union`) whose
+    // `expected` also embeds the value. See its doc comment.
     const issues = [...validated]
-      .map((issue) => `  ${issue.path.join(".")}: must be ${issue.expected}`)
+      .map((issue) => {
+        const name = issue.path.join(".");
+        return formatConfigIssue(name, env[name], issue.code, issue.expected);
+      })
       .join("\n");
     console.error(`mig: invalid environment configuration:\n${issues}`);
     Deno.exit(1);
