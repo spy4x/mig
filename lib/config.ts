@@ -5,6 +5,7 @@ import { type } from "arktype";
 import { parseWeeklyAvailability } from "./availability.ts";
 import { parseBlockedDates } from "./availability.ts";
 import { Email } from "./email-pattern.ts";
+import { formatConfigIssue } from "./config-issue.ts";
 import type { Config } from "./types.ts";
 
 // Field-level shape + constraints, applied to the already-defaulted/
@@ -58,47 +59,6 @@ function withDefault<T>(
 }
 
 const identity = (raw: string): string => raw;
-
-/** Renders one arktype issue as a single startup-log line, naming the
- *  variable and never the value.
- *
- *  `expected` (arktype's description of the failed rule — "a URL
- *  string", "at least length 16", "an integer") is safe to print for
- *  most issue codes: `predicate`, `domain`, `required`,
- *  `min`/`max`/`divisor` and their `intersection` combination never
- *  embed the checked value. The `union` code is the exception — for a
- *  two-branch union (a raw `boolean`, or a narrow string-literal
- *  union like `'light' | 'dark'`) arktype builds `expected` from the
- *  *whole* top-level message, which does embed the value (e.g.
- *  `THEME must be "dark" or "light" (was "blue-secret")`). Rather
- *  than special-case which unions are "safe" (a 3-way union
- *  happens not to hit this path today, but a future field could),
- *  every `union` issue and every issue whose `expected` happens to
- *  contain the raw value verbatim gets the same generic message.
- *
- *  `raw` is the *original* env string for that variable (never the
- *  defaulted/coerced candidate value ConfigSchema actually saw), so
- *  the leak check compares against what the operator actually typed.
- */
-export function formatConfigIssue(
-  name: string,
-  raw: string | undefined,
-  code: string,
-  expected: string,
-): string {
-  if (raw === undefined) return `  ${name}: is not set`;
-  if (code === "union" || (raw !== "" && expected.includes(raw))) {
-    return `  ${name}: has an invalid value`;
-  }
-  const flattened = expected
-    .split("\n")
-    .map((line) => line.replace(/^\s*◦\s*/, "").trim())
-    .filter((line) => line.length > 0)
-    .join(" and ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return `  ${name}: must be ${flattened}`;
-}
 
 function loadEnv(): Record<string, string> {
   // Load .env if present; in production env is set by container.
