@@ -413,3 +413,159 @@ for (const raw of ["on", "off", "2", "-1", "truee", "y"]) {
     assertRawValueNotLeaked(stderr, raw);
   });
 }
+
+// mig#38: HOST_TZ, WEEKLY_AVAILABILITY and BLOCKED_DATES bypass
+// ConfigSchema (they're checked by hand after arktype passes, see
+// lib/config.ts) and used to interpolate the raw value straight into the
+// startup log line. Each marker below is unique and must never reach
+// stderr; the variable name and, for the two list vars, the 1-based
+// position of the bad entry, must.
+
+Deno.test("config: an invalid HOST_TZ is named but not echoed", async () => {
+  const marker = "TZ-MARKER-4k9d";
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    HOST_TZ: `Not/A/Zone-${marker}`,
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "HOST_TZ");
+  assertRawValueNotLeaked(stderr, marker);
+});
+
+// mig#38 round 2: only a BLOCKED_DATES *range* runs Intl-backed tz math
+// against HOST_TZ (via parseBlockedDates -> expandDateRange -> addDays) —
+// a plain list of single dates never calls into it, so a version of this
+// test using single dates can't actually catch HOST_TZ being validated
+// too late. With the HOST_TZ check moved back to run after BLOCKED_DATES,
+// this used to print `mig: BLOCKED_DATES: entry 1: Invalid time zone
+// specified: <the HOST_TZ value>` — the timezone's own value, leaked
+// through a variable it doesn't even belong to.
+Deno.test("config: an invalid HOST_TZ is reported as HOST_TZ, not BLOCKED_DATES, with a blocked-date range set", async () => {
+  const marker = "TZ-ORDER-MARKER-7q2w";
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    HOST_TZ: `Not/A/Real/Zone-${marker}`,
+    BLOCKED_DATES: "2026-12-24..2026-12-26",
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "HOST_TZ");
+  assertEquals(
+    stderr.includes("BLOCKED_DATES"),
+    false,
+    `stderr blamed BLOCKED_DATES instead of HOST_TZ:\n${stderr}`,
+  );
+  assertRawValueNotLeaked(stderr, marker);
+});
+
+// Each WEEKLY_AVAILABILITY case below is built to reach its own message,
+// not the generic "invalid, expected e.g." fallback every case used to
+// fall through to. Day codes and HH:MM digits can't carry a long unique
+// marker (the entry pattern requires exactly 3 letters / 2 digits), so
+// those assert the exact value-free message instead; only the unknown-day
+// case has room for one (an arbitrary day code).
+
+Deno.test("config: a WEEKLY_AVAILABILITY unknown day (inside a range) is named by position, not echoed", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    WEEKLY_AVAILABILITY: "MON 09:00-17:00, MON-QZX 09:00-17:00",
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "WEEKLY_AVAILABILITY: entry 2: unknown day");
+  assertEquals(
+    stderr.includes("QZX"),
+    false,
+    `stderr echoed the bad day code:\n${stderr}`,
+  );
+});
+
+Deno.test("config: a WEEKLY_AVAILABILITY time out of range is named by position, value-free", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    WEEKLY_AVAILABILITY: "MON 09:00-17:00, TUE 25:00-26:00",
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(
+    stderr,
+    "WEEKLY_AVAILABILITY: entry 2: time out of range (hour 0-24, minute 0-59)",
+  );
+  assertEquals(stderr.includes("25:00"), false, `stderr echoed:\n${stderr}`);
+});
+
+Deno.test("config: a WEEKLY_AVAILABILITY 24:00 with minutes is named by position, value-free", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    WEEKLY_AVAILABILITY: "MON 09:00-17:00, TUE 09:00-24:30",
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(
+    stderr,
+    "WEEKLY_AVAILABILITY: entry 2: 24:00 must be exact, no other minutes allowed",
+  );
+  assertEquals(stderr.includes("24:30"), false, `stderr echoed:\n${stderr}`);
+});
+
+Deno.test("config: a WEEKLY_AVAILABILITY backwards day range is named by position, value-free", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    WEEKLY_AVAILABILITY: "MON 09:00-17:00, FRI-MON 09:00-17:00",
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(
+    stderr,
+    "WEEKLY_AVAILABILITY: entry 2: day range goes backwards",
+  );
+});
+
+// Pins the mig#38 round 2 wording ("must be after", not "is before") and
+// the equal-times boundary from the issue's own example (09:00-09:00).
+Deno.test("config: a WEEKLY_AVAILABILITY end time not after start is named by position, value-free", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    WEEKLY_AVAILABILITY: "MON 09:00-17:00, TUE 09:00-09:00",
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(
+    stderr,
+    "WEEKLY_AVAILABILITY: entry 2: end time must be after start time",
+  );
+});
+
+for (
+  const [label, value] of [
+    ["bad date", "2026-12-24,MARKER-e5not-a-date,2026-12-26"],
+    ["bad range", "2026-12-24,2026-12-24..MARKER-f6..2026-12-26,2026-12-27"],
+  ] as const
+) {
+  Deno.test(`config: a BLOCKED_DATES entry 2 with ${label} is named by position, not echoed`, async () => {
+    const { code, stderr } = await runConfig({
+      ...VALID_ENV,
+      BLOCKED_DATES: value,
+    });
+    assertEquals(code, 1);
+    assertStringIncludes(stderr, "BLOCKED_DATES");
+    assertStringIncludes(stderr, "entry 2");
+    assertEquals(
+      /MARKER-[a-f]\d/.test(stderr),
+      false,
+      `stderr echoed the bad value:\n${stderr}`,
+    );
+  });
+}
+
+// Reaches parseSingleDate's own message (called from inside a ".." range)
+// rather than parseDateToken's generic fallback the two cases above hit —
+// a distinct code path, unlike the previous round's tests which (despite
+// their different labels) all funneled into the same message.
+Deno.test("config: a BLOCKED_DATES malformed date inside a range is named by position, not echoed", async () => {
+  const marker = "MARKER-QDATE-g7";
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    BLOCKED_DATES: `2026-12-24,2026-12-24..${marker},2026-12-27`,
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(
+    stderr,
+    "BLOCKED_DATES: entry 2: invalid, expected YYYY-MM-DD or DD.MM.YYYY",
+  );
+  assertRawValueNotLeaked(stderr, marker);
+});

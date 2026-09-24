@@ -25,16 +25,49 @@ const DAYS: DayOfWeek[] = [
   "SUN",
 ];
 
+/** Thrown by parseWeeklyAvailability/parseBlockedDates on bad syntax.
+ *  `index` is the 1-based position of the offending entry, exactly as the
+ *  caller's `s.split(",")` produces it — 0 when the problem isn't about one
+ *  entry (e.g. the whole value is empty). `reason` never repeats the raw
+ *  value: these startup errors land in container logs (mig#38), so the
+ *  message names the shape that was expected instead of echoing what was
+ *  typed. config.ts prints `.message` straight through. */
+export class ConfigSyntaxError extends Error {
+  constructor(public readonly index: number, public readonly reason: string) {
+    super(index > 0 ? `entry ${index}: ${reason}` : reason);
+  }
+}
+
+/** Thrown only by this module's own syntax checks — the ones raised
+ *  directly by parseAvailabilityEntry/parseHHMM/expandDayRange
+ *  (WEEKLY_AVAILABILITY) and parseDateToken/parseSingleDate
+ *  (BLOCKED_DATES). Never by the Intl-backed tz math `expandDateRange`
+ *  (via `addDays`) calls into — which, given an invalid `hostTz`, throws
+ *  its own *foreign* error carrying the raw value (V8: "Invalid time
+ *  zone specified: <value>"). HOST_TZ is validated on its own, before
+ *  either of these run (lib/config.ts), and named there — never here.
+ *  parseWeeklyAvailability/parseBlockedDates below only forward a
+ *  caught error's `.message` when it's one of these; anything else
+ *  (mig#38 round 2) becomes a fixed, value-free reason instead, so a
+ *  foreign message can never pass through as if it were one of ours. */
+class FieldSyntaxError extends Error {}
+
 function parseHHMM(s: string): number {
   const m = s.match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) throw new Error(`bad time "${s}" — expected HH:MM`);
+  // Unreachable through the public API today: parseAvailabilityEntry's
+  // own regex already requires \d{1,2}:\d{2} before either time string
+  // reaches here, so `m` is never null in practice. Kept (rather than a
+  // non-null assertion) as a guard against that invariant breaking if
+  // the caller's regex ever changes; covered directly via `_internals`
+  // in lib/availability.test.ts since the public route can't reach it.
+  if (!m) throw new FieldSyntaxError("bad time, expected HH:MM");
   const h = parseInt(m[1], 10);
   const min = parseInt(m[2], 10);
   if (h < 0 || h > 24 || min < 0 || min > 59) {
-    throw new Error(`bad time "${s}" — hour 0-24, minute 0-59`);
+    throw new FieldSyntaxError("time out of range (hour 0-24, minute 0-59)");
   }
   if (h === 24 && min !== 0) {
-    throw new Error(`bad time "${s}" — 24:00 only allowed as 24:00`);
+    throw new FieldSyntaxError("24:00 must be exact, no other minutes allowed");
   }
   return h * 60 + min;
 }
@@ -42,12 +75,46 @@ function parseHHMM(s: string): number {
 function expandDayRange(start: string, end: string): DayOfWeek[] {
   const a = DAYS.indexOf(start as DayOfWeek);
   const b = DAYS.indexOf(end as DayOfWeek);
-  if (a === -1) throw new Error(`unknown day "${start}"`);
-  if (b === -1) throw new Error(`unknown day "${end}"`);
+  if (a === -1 || b === -1) throw new FieldSyntaxError("unknown day");
   if (b < a) {
-    throw new Error(`day range ${start}-${end} goes backwards`);
+    throw new FieldSyntaxError("day range goes backwards");
   }
   return DAYS.slice(a, b + 1);
+}
+
+/** Parses one "DAY[-DAY] HH:MM-HH:MM" entry. Throws a `FieldSyntaxError`
+ *  — the caller (parseWeeklyAvailability) wraps it with the entry's
+ *  position. */
+function parseAvailabilityEntry(entry: string): {
+  dayNames: DayOfWeek[];
+  startMin: number;
+  endMin: number;
+} {
+  const m = entry.match(
+    /^([A-Z]{3}(?:-[A-Z]{3})?)\s+(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/,
+  );
+  if (!m) {
+    throw new FieldSyntaxError('invalid, expected e.g. "MON-FRI 09:00-17:00"');
+  }
+  const [, dayPart, startStr, endStr] = m;
+  const startMin = parseHHMM(startStr);
+  const endMin = parseHHMM(endStr);
+  if (endMin <= startMin) {
+    throw new FieldSyntaxError("end time must be after start time");
+  }
+
+  let dayNames: DayOfWeek[];
+  if (dayPart.includes("-")) {
+    const [a, b] = dayPart.split("-");
+    dayNames = expandDayRange(a, b);
+  } else {
+    if (!(DAYS as readonly string[]).includes(dayPart)) {
+      throw new FieldSyntaxError("unknown day");
+    }
+    dayNames = [dayPart as DayOfWeek];
+  }
+
+  return { dayNames, startMin, endMin };
 }
 
 export function parseWeeklyAvailability(s: string): Availability {
@@ -62,45 +129,25 @@ export function parseWeeklyAvailability(s: string): Availability {
   };
 
   if (!s.trim()) {
-    throw new Error("WEEKLY_AVAILABILITY is empty");
+    throw new ConfigSyntaxError(0, "is empty");
   }
 
-  for (const raw of s.split(",")) {
-    const entry = raw.trim();
+  const rawEntries = s.split(",");
+  for (let i = 0; i < rawEntries.length; i++) {
+    const entry = rawEntries[i].trim();
     if (!entry) continue;
+    const position = i + 1;
 
-    // "DAY[-DAY] HH:MM-HH:MM"
-    const m = entry.match(
-      /^([A-Z]{3}(?:-[A-Z]{3})?)\s+(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/,
-    );
-    if (!m) {
-      throw new Error(
-        `bad entry "${entry}" — expected e.g. "MON-FRI 09:00-17:00"`,
-      );
-    }
-    const [, dayPart, startStr, endStr] = m;
-    const startMin = parseHHMM(startStr);
-    const endMin = parseHHMM(endStr);
-    if (endMin <= startMin) {
-      throw new Error(
-        `bad range "${entry}" — end must be after start`,
-      );
-    }
-
-    let dayNames: DayOfWeek[];
-    if (dayPart.includes("-")) {
-      const [a, b] = dayPart.split("-");
-      dayNames = expandDayRange(a, b);
-    } else {
-      // Validate the single day name explicitly
-      if (!(DAYS as readonly string[]).includes(dayPart)) {
-        throw new Error(`unknown day "${dayPart}"`);
+    try {
+      const { dayNames, startMin, endMin } = parseAvailabilityEntry(entry);
+      for (const d of dayNames) {
+        out[d].push({ startMin, endMin });
       }
-      dayNames = [dayPart as DayOfWeek];
-    }
-
-    for (const d of dayNames) {
-      out[d].push({ startMin, endMin });
+    } catch (e) {
+      const reason = e instanceof FieldSyntaxError
+        ? e.message
+        : "could not be evaluated";
+      throw new ConfigSyntaxError(position, reason);
     }
   }
 
@@ -139,7 +186,9 @@ function parseDateToken(tok: string, hostTz: string): string[] {
   if (t.includes("..")) {
     const parts = t.split("..").map((p) => p.trim());
     if (parts.length !== 2) {
-      throw new Error(`bad range "${t}" — expected ".." between two dates`);
+      throw new FieldSyntaxError(
+        'invalid range, expected two dates joined with ".."',
+      );
     }
     const [a, b] = parts.map(parseSingleDate).sort();
     return expandDateRange(a, b, hostTz);
@@ -162,8 +211,9 @@ function parseDateToken(tok: string, hostTz: string): string[] {
     }
   }
 
-  throw new Error(
-    `bad date "${t}" — expected YYYY-MM-DD, DD.MM.YYYY, or a range`,
+  throw new FieldSyntaxError(
+    "invalid, expected YYYY-MM-DD, DD.MM.YYYY or a range like " +
+      "2026-12-24..2026-12-31",
   );
 }
 
@@ -191,7 +241,7 @@ function parseSingleDate(s: string): string {
   if (m) {
     return `${m[3]}-${m[2]}-${m[1]}`;
   }
-  throw new Error(`bad date "${s}" — expected YYYY-MM-DD or DD.MM.YYYY`);
+  throw new FieldSyntaxError("invalid, expected YYYY-MM-DD or DD.MM.YYYY");
 }
 
 export function parseBlockedDates(s: string, hostTz = "UTC"): Set<string> {
@@ -200,9 +250,23 @@ export function parseBlockedDates(s: string, hostTz = "UTC"): Set<string> {
 
   // Split on comma at top level only
   const tokens = s.split(",");
-  for (const tok of tokens) {
-    for (const d of parseDateToken(tok, hostTz)) {
-      out.add(d);
+  for (let i = 0; i < tokens.length; i++) {
+    const position = i + 1;
+    try {
+      for (const d of parseDateToken(tokens[i], hostTz)) {
+        out.add(d);
+      }
+    } catch (e) {
+      // expandDateRange (via addDays) runs Intl-backed tz math against
+      // hostTz — given an invalid HOST_TZ, that throws its own *foreign*
+      // error carrying the raw value (mig#38 round 2). Only a
+      // FieldSyntaxError raised by this module's own token/date checks
+      // is safe to forward; anything else collapses to a fixed,
+      // value-free reason instead of ever risking that leak.
+      const reason = e instanceof FieldSyntaxError
+        ? e.message
+        : "could not be evaluated — check HOST_TZ";
+      throw new ConfigSyntaxError(position, reason);
     }
   }
   return out;
@@ -293,9 +357,10 @@ export function getCandidateDates(
   return out;
 }
 
-// Convenience for tests
+// Convenience for tests. parseHHMM's malformed-format branch is
+// unreachable through the public API (parseAvailabilityEntry's own regex
+// already guarantees the \d{1,2}:\d{2} shape before either time string
+// reaches parseHHMM) — this is the only way to exercise it directly.
 export const _internals = {
   parseHHMM,
-  expandDayRange,
-  parseDateToken,
 };

@@ -173,7 +173,20 @@ function parseConfig(): Config {
   }
   const r = validated;
 
-  // Parse availability + blocked dates (throw on bad syntax)
+  // IANA tz sanity check (Intl.DateTimeFormat throws on invalid). Validated
+  // before BLOCKED_DATES below: parseBlockedDates needs r.HOST_TZ to expand
+  // date ranges, so an invalid timezone must fail here with its own message
+  // rather than surface as a confusing BLOCKED_DATES failure.
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: r.HOST_TZ });
+  } catch {
+    console.error("mig: HOST_TZ: is not a valid IANA time zone");
+    Deno.exit(1);
+  }
+
+  // Parse availability + blocked dates (throw on bad syntax). Both throw a
+  // ConfigSyntaxError (lib/availability.ts) whose `.message` already names
+  // the entry's position and a value-free reason — never the raw value.
   let availability;
   try {
     availability = parseWeeklyAvailability(r.WEEKLY_AVAILABILITY);
@@ -187,14 +200,6 @@ function parseConfig(): Config {
     blockedDates = parseBlockedDates(r.BLOCKED_DATES, r.HOST_TZ);
   } catch (e) {
     console.error(`mig: BLOCKED_DATES: ${(e as Error).message}`);
-    Deno.exit(1);
-  }
-
-  // IANA tz sanity check (Intl.DateTimeFormat throws on invalid)
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: r.HOST_TZ });
-  } catch {
-    console.error(`mig: HOST_TZ="${r.HOST_TZ}" is not a valid IANA timezone`);
     Deno.exit(1);
   }
 
