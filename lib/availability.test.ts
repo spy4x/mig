@@ -1,4 +1,4 @@
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import {
   parseBlockedDates,
   parseWeeklyAvailability,
@@ -39,45 +39,64 @@ Deno.test("parseWeeklyAvailability — mixed per-day", () => {
   assertEquals(a.FRI, [{ startMin: 540, endMin: 900 }]);
 });
 
-Deno.test("parseWeeklyAvailability — bad day throws", () => {
+Deno.test("parseWeeklyAvailability — bad day throws, naming the position not the day", () => {
   let err = "";
   try {
     parseWeeklyAvailability("FOO 09:00-17:00");
   } catch (e) {
     err = (e as Error).message;
   }
-  assertExists(err);
-  assertEquals(err.includes("FOO"), true);
+  assertEquals(err, "entry 1: unknown day");
 });
 
-Deno.test("parseWeeklyAvailability — backwards day range throws", () => {
+Deno.test("parseWeeklyAvailability — backwards day range throws, naming the position", () => {
   let err = "";
   try {
     parseWeeklyAvailability("FRI-MON 09:00-17:00");
   } catch (e) {
     err = (e as Error).message;
   }
-  assertExists(err);
+  assertEquals(err, "entry 1: day range goes backwards");
 });
 
-Deno.test("parseWeeklyAvailability — end before start throws", () => {
+Deno.test("parseWeeklyAvailability — end before start throws, naming the position", () => {
   let err = "";
   try {
     parseWeeklyAvailability("MON 17:00-09:00");
   } catch (e) {
     err = (e as Error).message;
   }
-  assertExists(err);
+  assertEquals(err, "entry 1: end time is before start time");
 });
 
-Deno.test("parseWeeklyAvailability — bad time throws", () => {
+Deno.test("parseWeeklyAvailability — bad time throws, naming the position", () => {
   let err = "";
   try {
     parseWeeklyAvailability("MON 9am-5pm");
   } catch (e) {
     err = (e as Error).message;
   }
-  assertExists(err);
+  assertEquals(err, 'entry 1: invalid, expected e.g. "MON-FRI 09:00-17:00"');
+});
+
+Deno.test("parseWeeklyAvailability — bad entry at position 2 is named by position", () => {
+  let err = "";
+  try {
+    parseWeeklyAvailability("MON 09:00-17:00, FOO 09:00-17:00");
+  } catch (e) {
+    err = (e as Error).message;
+  }
+  assertEquals(err, "entry 2: unknown day");
+});
+
+Deno.test("parseWeeklyAvailability — empty value throws without a position", () => {
+  let err = "";
+  try {
+    parseWeeklyAvailability("   ");
+  } catch (e) {
+    err = (e as Error).message;
+  }
+  assertEquals(err, "is empty");
 });
 
 Deno.test("parseBlockedDates — single dates ISO", () => {
@@ -122,12 +141,39 @@ Deno.test("parseBlockedDates — empty string yields empty set", () => {
   assertEquals(parseBlockedDates("   ").size, 0);
 });
 
-Deno.test("parseBlockedDates — bad date throws", () => {
+Deno.test("parseBlockedDates — bad date throws, naming the position not the value", () => {
   let err = "";
   try {
     parseBlockedDates("not-a-date");
   } catch (e) {
     err = (e as Error).message;
   }
-  assertExists(err);
+  assertEquals(
+    err,
+    "entry 1: invalid, expected YYYY-MM-DD, DD.MM.YYYY or a range like " +
+      "2026-12-24..2026-12-31",
+  );
+});
+
+Deno.test("parseBlockedDates — bad entry at position 3 is named by position", () => {
+  let err = "";
+  try {
+    parseBlockedDates("2026-12-24,2026-12-25,not-a-date");
+  } catch (e) {
+    err = (e as Error).message;
+  }
+  assertEquals(err.startsWith("entry 3:"), true);
+});
+
+Deno.test("parseBlockedDates — bad range throws, naming the position", () => {
+  let err = "";
+  try {
+    parseBlockedDates("2026-12-24,2026-12-25,2026-12-24..bad..2026-12-26");
+  } catch (e) {
+    err = (e as Error).message;
+  }
+  assertEquals(
+    err,
+    'entry 3: invalid range, expected two dates joined with ".."',
+  );
 });

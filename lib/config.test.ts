@@ -413,3 +413,81 @@ for (const raw of ["on", "off", "2", "-1", "truee", "y"]) {
     assertRawValueNotLeaked(stderr, raw);
   });
 }
+
+// mig#38: HOST_TZ, WEEKLY_AVAILABILITY and BLOCKED_DATES bypass
+// ConfigSchema (they're checked by hand after arktype passes, see
+// lib/config.ts) and used to interpolate the raw value straight into the
+// startup log line. Each marker below is unique and must never reach
+// stderr; the variable name and, for the two list vars, the 1-based
+// position of the bad entry, must.
+
+Deno.test("config: an invalid HOST_TZ is named but not echoed", async () => {
+  const marker = "TZ-MARKER-4k9d";
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    HOST_TZ: `Not/A/Zone-${marker}`,
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "HOST_TZ");
+  assertRawValueNotLeaked(stderr, marker);
+});
+
+// The old code passed r.HOST_TZ into parseBlockedDates before HOST_TZ
+// itself was validated — an invalid HOST_TZ together with a non-empty
+// BLOCKED_DATES could surface as a BLOCKED_DATES failure instead. HOST_TZ
+// must be checked first and reported as HOST_TZ.
+Deno.test("config: an invalid HOST_TZ is reported as HOST_TZ even with BLOCKED_DATES set", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    HOST_TZ: "Not/A/Real/Zone",
+    BLOCKED_DATES: "2026-12-24,2026-12-25",
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "HOST_TZ");
+});
+
+for (
+  const [label, value] of [
+    ["bad day", "MON 09:00-17:00, FOO-MARKER-a1 09:00-17:00"],
+    ["bad time", "MON 09:00-17:00, TUE 9amMARKER-b2-17:00"],
+    ["backwards range", "MON 09:00-17:00, MARKER-c3FRI-MON 09:00-17:00"],
+    ["missing time part", "MON 09:00-17:00, MARKER-d4WED 09:00"],
+  ] as const
+) {
+  Deno.test(`config: a WEEKLY_AVAILABILITY entry 2 with ${label} is named by position, not echoed`, async () => {
+    const { code, stderr } = await runConfig({
+      ...VALID_ENV,
+      WEEKLY_AVAILABILITY: value,
+    });
+    assertEquals(code, 1);
+    assertStringIncludes(stderr, "WEEKLY_AVAILABILITY");
+    assertStringIncludes(stderr, "entry 2");
+    assertEquals(
+      /MARKER-[a-d]\d/.test(stderr),
+      false,
+      `stderr echoed the bad value:\n${stderr}`,
+    );
+  });
+}
+
+for (
+  const [label, value] of [
+    ["bad date", "2026-12-24,MARKER-e5not-a-date,2026-12-26"],
+    ["bad range", "2026-12-24,2026-12-24..MARKER-f6..2026-12-26,2026-12-27"],
+  ] as const
+) {
+  Deno.test(`config: a BLOCKED_DATES entry 2 with ${label} is named by position, not echoed`, async () => {
+    const { code, stderr } = await runConfig({
+      ...VALID_ENV,
+      BLOCKED_DATES: value,
+    });
+    assertEquals(code, 1);
+    assertStringIncludes(stderr, "BLOCKED_DATES");
+    assertStringIncludes(stderr, "entry 2");
+    assertEquals(
+      /MARKER-[a-f]\d/.test(stderr),
+      false,
+      `stderr echoed the bad value:\n${stderr}`,
+    );
+  });
+}
