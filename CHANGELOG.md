@@ -189,6 +189,10 @@ Docker; rootless Podman remaps container uids to a different host range, so
 there use `--userns=keep-id --user "$(id -u):$(id -g)"` instead of chowning
 anything to 1993 — see the README's Docker quick start for that command in full.
 
+**If your `.env` has `HIDE_BRANDING=false`:** the footer comes back after this
+upgrade — that's the fix above, not a regression. Set `HIDE_BRANDING=true` if
+you actually want it hidden.
+
 ## [0.3.4] - 2026-09-24
 
 ### Fixed
