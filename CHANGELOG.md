@@ -187,12 +187,6 @@ anything to 1993 — see the README's Docker quick start for that command in ful
   Confirm button and step badges, secondary text, the footer, form placeholders,
   the Cancel button and the 500-page label (#34).
 
-### Changed
-
-- Both correction emails a host receives after a failed guest send — successful
-  rollback and failed rollback — are now pinned word for word, so a wording
-  change can no longer slip through unnoticed. No behavior changed (#32).
-
 ## [0.3.2] - 2026-09-23
 
 ### Fixed
