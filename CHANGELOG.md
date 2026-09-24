@@ -11,8 +11,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 **If you run mig from `antonshubin/mig:latest` under Watchtower or any other
 auto-updater, it will pull this version on its own — and the effect depends on
 your old setup.** On the old README's `docker run` command or Docker Compose
-snippet, 0.4.0 keeps saving bookings fine, but every re-create — including the
-auto-updater's own — loses them, and destroys your `CANCEL_SECRET` too; **do the
+snippet, 0.4.0 keeps saving bookings fine, but every re-create loses them —
+including the auto-updater's own. Your `CANCEL_SECRET` is safer than that:
+Watchtower and similar tools copy the old container's environment into the new
+one, so an auto-updater re-create keeps it. It's lost only if you run
+`docker rm` yourself and then re-run the old README command, since that command
+generates a fresh secret with `$(openssl rand -base64 32)`. If your updater has
+already re-created the container, the `docker inspect` line in the rescue steps
+below still recovers the secret from the container that's running now; **do the
 rescue steps below before you pin or redeploy anything.** On the old
 `compose.example.yml` with `DATA_PATH` set (bookings on a root-owned host
 mount), every booking instead fails outright with "We couldn't save your
