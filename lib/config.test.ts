@@ -100,9 +100,14 @@ async function runConfigField(
       env,
       clearEnv: true,
       stdout: "piped",
-      stderr: "inherit",
+      stderr: "piped",
     });
-    const { stdout } = await command.output();
+    const { code, stdout, stderr } = await command.output();
+    if (code !== 0) {
+      throw new Error(
+        `child exited ${code}: ${new TextDecoder().decode(stderr)}`,
+      );
+    }
     return JSON.parse(new TextDecoder().decode(stdout));
   });
 }
