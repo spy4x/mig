@@ -116,10 +116,10 @@ mkdir -p ./data
 docker run --user "$(id -u):$(id -g)" ...
 ```
 
-This also assumes rootful Docker — rootless Podman remaps container uids to a
-different host range, so `chown 1993:1993` is meaningless there, and plain
-`--user` alone fails with "Permission denied". On rootless Podman, add
-`--userns=keep-id` too:
+The `chown 1993:1993` step also assumes rootful Docker — rootless Podman remaps
+container uids to a different host range, so `chown 1993:1993` is meaningless
+there, and plain `--user` alone fails with "Permission denied". On rootless
+Podman, add `--userns=keep-id` too:
 
 ```bash
 mkdir -p ./data
