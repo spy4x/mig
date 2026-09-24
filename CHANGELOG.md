@@ -58,9 +58,11 @@ updater, until you've done the upgrade steps below.
   Uncommented and copied into a real `.env` used with the new
   `compose.example.yml` (now mounting `/data`), it would override the image's
   own `DATA_PATH=/data/bookings.json` and point the non-root process at a
-  relative `./data` it has no permission to create inside the container.
-  `lib/config.ts` already defaults to the same path, so nothing needs it set
-  explicitly for a Docker deployment.
+  relative `./data` it has no permission to create inside the container. The
+  image's own `Dockerfile` already sets `ENV DATA_PATH=/data/bookings.json`, so
+  nothing needs it set explicitly for a Docker deployment — `lib/config.ts`'s
+  own default is a different, relative path (`./data/bookings.json`), used only
+  when nothing sets `DATA_PATH` at all, such as a non-Docker deploy.
 - The date note on a hovered time slot now meets 4.5:1 contrast in the light
   theme (#33).
 
