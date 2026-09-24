@@ -165,7 +165,7 @@ services:
       SMTP_USER: "jane@example.com"
       SMTP_PASSWORD: "change-me"
       SMTP_FROM: "Bookings <book@example.com>"
-      CANCEL_SECRET: "change-me"
+      CANCEL_SECRET: "change-me" # replace with the output of: openssl rand -base64 32
       PUBLIC_URL: "https://meet.example.com"
 ```
 
