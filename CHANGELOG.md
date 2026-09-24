@@ -67,21 +67,40 @@ updater, until you've done the upgrade steps below.
 loses existing bookings — read the step for your setup before redeploying.
 
 **If you followed the README's `docker run` command or its Docker Compose
-snippet, or `compose.example.yml` with no `DATA_PATH` in your `.env`:** your
-bookings only ever lived inside the old container, at `/data/bookings.json` —
-the `/app/data` mount was never read from. Without `DATA_PATH` set, the image's
-own `ENV DATA_PATH=/data/bookings.json` (unchanged by this release) applies the
-same way regardless of which of these you followed. Rescue them first, before
-you touch the mount or recreate the container:
+snippet, or `compose.example.yml` with no `DATA_PATH` in your `.env` — whether
+the mount was a host directory or a named volume:** your bookings only ever
+lived inside the old container, at `/data/bookings.json` — the `/app/data`
+mount, host directory or named volume alike, was never read from. Without
+`DATA_PATH` set, the image's own `ENV DATA_PATH=/data/bookings.json` (unchanged
+by this release) applies the same way regardless of which of these you followed.
+Rescue them first, before you touch the mount or recreate the container:
 
 ```bash
-docker stop mig
-docker inspect mig --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^CANCEL_SECRET='
-docker cp mig:/data/bookings.json .
-docker rm mig
-sudo mv bookings.json ./data/bookings.json
+docker stop mig &&
+docker inspect mig --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^CANCEL_SECRET=' &&
+docker cp mig:/data/bookings.json . &&
+docker rm mig &&
+sudo mv bookings.json ./data/bookings.json &&
 sudo chown -R 1993:1993 ./data
 ```
+
+Chained with `&&` on purpose: if any step fails — most importantly `docker cp`,
+which would otherwise still be followed by `docker rm` destroying the only copy
+of the bookings — the rest doesn't run.
+
+If your mount was a named volume (`<volume>:/app/data`) rather than a host
+directory, you have no `./data` to move the retrieved file into or `chown`
+directly. Run the `docker stop`, `docker inspect` (note the secret first),
+`docker cp` and `docker rm` lines above as they are, then replace the last two
+lines with:
+
+```bash
+docker run --rm -v <volume>:/data -v "$(pwd)":/host alpine \
+  sh -c 'mv /host/bookings.json /data/bookings.json && chown -R 1993:1993 /data'
+```
+
+Replace `<volume>` with your volume's name, then follow "Everyone: change the
+mount" below, pointing the mount at `<volume>:/data`.
 
 `docker cp` can't write straight into `./data` — Docker auto-created that
 directory owned by root when the old container first started, since the old
@@ -89,13 +108,16 @@ instructions never had you create it yourself. Copy to the current directory
 first, then move it in. `docker rm mig` clears the stopped container so the next
 `docker run --name mig ...` (or `docker compose up`) doesn't fail with "name
 already in use" — but it also destroys the only copy of the old container's
-`CANCEL_SECRET`, which the old README generated inline and never wrote to a
-file, so the `docker inspect` line above prints it first. Use only the part
-after `CANCEL_SECRET=` as the value — the printed line starts with
-`CANCEL_SECRET=` itself, so pasting the whole thing gives you
-`CANCEL_SECRET=CANCEL_SECRET=...`. Put that value in place of
-`$(openssl rand -base64 32)` when you redeploy, so cancel links already sent by
-email keep working.
+`CANCEL_SECRET`, unless you kept the file it came from. The old README's
+`docker run` command generated it inline with `$(openssl rand -base64 32)` and
+never wrote it anywhere else, so for that setup the `docker inspect` line above
+is the only way to recover it. The old Docker Compose snippet instead wrote it
+in plain text into `compose.yml` itself — check that file first; only rely on
+`docker inspect` if it's gone too. Use only the part after `CANCEL_SECRET=` as
+the value — the printed line starts with `CANCEL_SECRET=` itself, so pasting the
+whole thing gives you `CANCEL_SECRET=CANCEL_SECRET=...`. Put that value in place
+of `$(openssl rand -base64 32)` when you redeploy, so cancel links already sent
+by email keep working.
 
 **Everyone: change the mount.** Wherever your `docker run` command or
 `compose.yml` has `./data:/app/data`, change it to `./data:/data:z` — only the
