@@ -163,9 +163,9 @@ services:
       SMTP_HOST: "smtp.example.com"
       SMTP_PORT: "587"
       SMTP_USER: "jane@example.com"
-      SMTP_PASSWORD: "<REDACTED:SMTP_PASSWORD>"
+      SMTP_PASSWORD: "change-me"
       SMTP_FROM: "Bookings <book@example.com>"
-      CANCEL_SECRET: "<REDACTED:CANCEL_SECRET>"
+      CANCEL_SECRET: "change-me"
       PUBLIC_URL: "https://meet.example.com"
 ```
 
