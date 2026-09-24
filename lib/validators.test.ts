@@ -267,6 +267,41 @@ Deno.test("booking validator rejects a too-short name with the visitor-facing me
   }
 });
 
+// Pins the date regex's end anchor: without it, "2026-10-011" would match
+// the first 10 characters and pass.
+Deno.test("booking validator rejects a date with trailing extra digits", () => {
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    date: "2026-10-011",
+  });
+
+  assertEquals(result.success, false);
+  if (!result.success) {
+    assertEquals(result.error.issues[0]?.message, "Bad date format.");
+  }
+});
+
+// Pins the name minimum length at 2, not 3.
+Deno.test("booking validator: a two-character name is accepted", () => {
+  const result = BookingSchema.safeParse({ ...validBooking, name: "Al" });
+
+  assertEquals(result.success, true);
+});
+
+// Pins that guestTz is trimmed before being returned, not just before
+// validation.
+Deno.test("booking validator: guestTz is trimmed in the returned data", () => {
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    guestTz: "  America/New_York  ",
+  });
+
+  assertEquals(result.success, true);
+  if (result.success) {
+    assertEquals(result.data.guestTz, "America/New_York");
+  }
+});
+
 Deno.test("booking validator rejects control characters", () => {
   assertEquals(
     BookingSchema.safeParse({ ...validBooking, name: "Visitor\nInjected" })
