@@ -383,17 +383,33 @@ Deno.test("config: HIDE_BRANDING absent shows the branding", async () => {
   assertEquals(value, false);
 });
 
-Deno.test("config: an invalid HIDE_BRANDING is named but its value is not echoed", async () => {
-  const marker = "maybe-7f3a";
-  const { code, stderr } = await runConfig({
-    ...VALID_ENV,
-    HIDE_BRANDING: marker,
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "HIDE_BRANDING");
+// Each raw value here doubles as its own marker: it must be rejected
+// verbatim (not just "some invalid string"), so the test can't swap in an
+// unrelated random marker without losing coverage of that exact spelling —
+// "on" in particular guards against a coerceHideBranding accepting it as a
+// synonym for "true". A plain `stderr.includes(raw)` would false-positive
+// on "on", since the fixed preamble "invalid environment configuration"
+// already contains that substring; assertRawValueNotLeaked checks for the
+// value as a whole token (not preceded/followed by an identifier
+// character) instead.
+function assertRawValueNotLeaked(stderr: string, raw: string): void {
+  const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(?<![A-Za-z0-9_])${escaped}(?![A-Za-z0-9_])`);
   assertEquals(
-    stderr.includes(marker),
+    pattern.test(stderr),
     false,
     `stderr echoed the bad value:\n${stderr}`,
   );
-});
+}
+
+for (const raw of ["on", "off", "2", "-1", "truee", "y"]) {
+  Deno.test(`config: HIDE_BRANDING=${JSON.stringify(raw)} is rejected, not echoed`, async () => {
+    const { code, stderr } = await runConfig({
+      ...VALID_ENV,
+      HIDE_BRANDING: raw,
+    });
+    assertEquals(code, 1);
+    assertStringIncludes(stderr, "HIDE_BRANDING");
+    assertRawValueNotLeaked(stderr, raw);
+  });
+}

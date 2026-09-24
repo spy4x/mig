@@ -107,9 +107,10 @@ function parseConfig(): Config {
   // missing/empty one with a message naming the variable.
   // Optional vars (had a `.default()`): substitute the default when
   // the key is absent, coerce the raw string when it's present —
-  // z.coerce.number()/boolean() were literally `Number(x)`/`Boolean(x)`,
-  // so that's what `Number`/`Boolean` below reproduce, warts (e.g.
-  // `Boolean("false") === true`) and all.
+  // z.coerce.number() was literally `Number(x)`, so that's what `Number`
+  // below reproduces. HIDE_BRANDING instead goes through
+  // coerceHideBranding (mig#35): Boolean(x) treated every non-empty
+  // string, including "false" and "0", as true.
   const candidate = {
     HOST_NAME: env.HOST_NAME,
     HOST_EMAIL: env.HOST_EMAIL,
