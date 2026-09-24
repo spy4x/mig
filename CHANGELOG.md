@@ -37,6 +37,9 @@ updater, until you've done the upgrade steps below.
   mounted there inherits that ownership — but an existing bind mount or named
   volume, previously written to as root, is not automatically writable by uid
   1993 any more. See the upgrade note below.
+- Env and booking validation now runs on arktype instead of zod. Visitors see
+  the same accept/reject decisions and the same messages; the install is smaller
+  (#36).
 
 ### Fixed
 
@@ -62,6 +65,20 @@ updater, until you've done the upgrade steps below.
   nothing needs it set explicitly for a Docker deployment — `lib/config.ts`'s
   own default is a different, relative path (`./data/bookings.json`), used only
   when nothing sets `DATA_PATH` at all, such as a non-Docker deploy.
+- **Breaking if `.env` has `HIDE_BRANDING=false`.** `HIDE_BRANDING` is now
+  parsed as a real boolean: `true`/`1`/`yes` (case-insensitive, trimmed) hides
+  the footer, `false`/`0`/`no`/empty/absent shows it, and any other value —
+  including the old `on`, which used to hide it — stops startup with
+  `HIDE_BRANDING: has an invalid value`. Previously, every non-empty string
+  except an exact, case-sensitive `true` hid the footer, including `false`
+  itself, so `.env.example`'s own `HIDE_BRANDING=false` silently hid it for
+  anyone who copied that file. See the upgrade note below (#40).
+
+### Security
+
+- Startup errors now name the bad variable and the rule instead of the value it
+  was given, so a misconfigured `HOST_NAME`, `MEETING_URL`, or other setting no
+  longer echoes into container logs, e.g. `HOST_NAME: is not set` (#36).
 
 **Upgrade note.** Changing only the image, without also changing your mount,
 breaks bookings either way: it silently loses existing ones on the old
