@@ -51,8 +51,9 @@ async function runConfigField(
   const command = new Deno.Command(Deno.execPath(), {
     args: [
       "eval",
-      "--allow-env",
-      "--allow-read",
+      // `deno eval` already runs with every permission — Deno 2.9.5 (CI's
+      // and the Dockerfile's version) rejects `--allow-env`/`--allow-read`
+      // here as unrecognized arguments.
       `const { config } = await import(\`file://\${Deno.cwd()}/lib/config.ts\`); console.log(JSON.stringify(config.${field}))`,
     ],
     cwd: Deno.cwd(),
