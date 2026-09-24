@@ -1,5 +1,6 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import {
+  _internals,
   parseBlockedDates,
   parseWeeklyAvailability,
 } from "../lib/availability.ts";
@@ -66,7 +67,17 @@ Deno.test("parseWeeklyAvailability — end before start throws, naming the posit
   } catch (e) {
     err = (e as Error).message;
   }
-  assertEquals(err, "entry 1: end time is before start time");
+  assertEquals(err, "entry 1: end time must be after start time");
+});
+
+Deno.test("parseWeeklyAvailability — equal start and end throws the same reason", () => {
+  let err = "";
+  try {
+    parseWeeklyAvailability("MON 09:00-09:00");
+  } catch (e) {
+    err = (e as Error).message;
+  }
+  assertEquals(err, "entry 1: end time must be after start time");
 });
 
 Deno.test("parseWeeklyAvailability — bad time throws, naming the position", () => {
@@ -176,4 +187,49 @@ Deno.test("parseBlockedDates — bad range throws, naming the position", () => {
     err,
     'entry 3: invalid range, expected two dates joined with ".."',
   );
+});
+
+// mig#38 round 2: position counting must count every comma-split field,
+// including the ones that are empty after trimming — a parser that first
+// filters out empties and only then indexes would misreport the position
+// here.
+Deno.test("parseWeeklyAvailability — an empty field still counts toward position", () => {
+  let err = "";
+  try {
+    parseWeeklyAvailability("MON 09:00-17:00, ,TUE bad");
+  } catch (e) {
+    err = (e as Error).message;
+  }
+  assertEquals(err.startsWith("entry 3:"), true);
+});
+
+Deno.test("parseWeeklyAvailability — a trailing comma is ignored, not a phantom entry", () => {
+  const a = parseWeeklyAvailability("MON 09:00-17:00,");
+  assertEquals(a.MON, [{ startMin: 540, endMin: 1020 }]);
+});
+
+Deno.test("parseBlockedDates — an empty field still counts toward position", () => {
+  let err = "";
+  try {
+    parseBlockedDates("2026-12-24,,not-a-date");
+  } catch (e) {
+    err = (e as Error).message;
+  }
+  assertEquals(err.startsWith("entry 3:"), true);
+});
+
+Deno.test("parseBlockedDates — a trailing comma is ignored, not a phantom entry", () => {
+  const b = parseBlockedDates("2026-12-24,");
+  assertEquals(b.size, 1);
+  assertEquals(b.has("2026-12-24"), true);
+});
+
+// mig#38 round 2: parseHHMM's malformed-format branch (the `if (!m)`
+// check) is unreachable through the public API — parseAvailabilityEntry's
+// own regex already guarantees the \d{1,2}:\d{2} shape before either time
+// string reaches parseHHMM. Exercised directly via `_internals` so the
+// branch still has coverage instead of being silently dead.
+Deno.test("_internals.parseHHMM — malformed format throws, value-free", () => {
+  const err = assertThrows(() => _internals.parseHHMM("9am"));
+  assertEquals((err as Error).message, "bad time, expected HH:MM");
 });
