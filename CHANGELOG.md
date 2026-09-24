@@ -12,16 +12,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 auto-updater, it will pull this version on its own — and the effect depends on
 your old setup.** On the old README's `docker run` command or Docker Compose
 snippet, 0.4.0 keeps saving bookings fine, but every re-create loses them —
-including the auto-updater's own. Your `CANCEL_SECRET` is safer than that:
-Watchtower and similar tools copy the old container's environment into the new
-one, so an auto-updater re-create keeps it. It's lost only if you run
-`docker rm` yourself and then re-run the old README command, since that command
-generates a fresh secret with `$(openssl rand -base64 32)`. If your updater has
-already re-created the container, the `docker inspect` line in the rescue steps
-below still recovers the secret from the container that's running now; **do the
-rescue steps below before you pin or redeploy anything.** On the old
-`compose.example.yml` with `DATA_PATH` set (bookings on a root-owned host
-mount), every booking instead fails outright with "We couldn't save your
+including the auto-updater's own. (The same is true for `compose.example.yml`
+without `DATA_PATH` set, and for any named-volume variant of these setups —
+covered by the same rescue steps below.) Your `CANCEL_SECRET` is safer than
+that: it's lost the moment you `docker rm` the container yourself, whatever you
+run afterwards — capture it with the `docker inspect` line in the rescue steps
+below before you get there. Watchtower's own re-create never leaves that gap: it
+copies the environment forward into the new container in the same step, so the
+secret survives untouched. If your updater has already re-created the container,
+that `docker inspect` line still recovers the secret from the container that's
+running now; **do the rescue steps below before you pin or redeploy anything.**
+On the old `compose.example.yml` with `DATA_PATH` set (bookings on a root-owned
+host mount), every booking instead fails outright with "We couldn't save your
 booking", while `/health` keeps answering healthy — the container's log shows
 `mig: persist FAILED`. Either way, pin your image to `v0.3.4`, or pause the
 updater, until you've done the upgrade steps below.
