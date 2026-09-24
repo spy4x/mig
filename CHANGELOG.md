@@ -24,6 +24,15 @@ nothing in the container's own state flags the problem. Pin your image to
   mounted there inherits that ownership — but an existing bind mount or named
   volume, previously written to as root, is not automatically writable by uid
   1993 any more. See the upgrade note below.
+- Env parsing and booking validation moved from Zod to arktype. Accept/reject
+  decisions and the messages a visitor sees are unchanged; a startup error for a
+  missing or malformed env var now names the variable without printing its value
+  (#36).
+- `HIDE_BRANDING` is now parsed as a real boolean: `true`, `1` or `yes` hides
+  the footer's "Powered by mig" line, and `false`, `0`, `no`, empty or absent
+  shows it. Before, any non-empty value — including `false`, which
+  `.env.example` ships — hid the line. Anything else now fails startup, naming
+  `HIDE_BRANDING` (#35).
 
 ### Fixed
 
@@ -47,6 +56,14 @@ nothing in the container's own state flags the problem. Pin your image to
   relative `./data` it has no permission to create inside the container.
   `lib/config.ts` already defaults to the same path, so nothing needs it set
   explicitly for a Docker deployment.
+- The date note on a hovered time slot now meets 4.5:1 contrast in the light
+  theme (#33).
+
+**`HIDE_BRANDING` upgrade note.** If your `.env` sets `HIDE_BRANDING=false` —
+`.env.example` ships that value — the "Powered by mig" line and version now come
+back in the footer, because `false` is no longer treated as "hide". A value that
+isn't one of `true`/`1`/`yes`/`false`/`0`/`no`/empty (for example `on`) now
+stops the container at startup instead of silently hiding the footer.
 
 **Upgrade note.** Changing only the image, without also changing your mount,
 loses existing bookings — read the step for your setup before redeploying.
