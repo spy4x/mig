@@ -28,3 +28,6 @@ deno_dir/
 bin/
 _fresh.old/
 _fresh.bak/
+
+# Playwright MCP browser output
+.playwright-mcp/
