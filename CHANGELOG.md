@@ -139,6 +139,28 @@ Docker; rootless Podman remaps container uids to a different host range, so
 there use `--userns=keep-id --user "$(id -u):$(id -g)"` instead of chowning
 anything to 1993 — see the README's Docker quick start for that command in full.
 
+## [0.3.3] - 2026-09-24
+
+### Fixed
+
+- Both correction emails a host receives after a failed guest send — successful
+  rollback and failed rollback — are now pinned word for word by tests, so a
+  wording change can no longer slip through unnoticed (#32).
+- Text across the app now meets the 4.5:1 minimum contrast in both themes: the
+  Confirm button and step badges, secondary text, the footer, form placeholders
+  and the Cancel button (#34).
+
+## [0.3.2] - 2026-09-23
+
+### Fixed
+
+- The owner's calendar invite now shows the visitor's clock alongside the
+  host's, matching the owner email (#26).
+- A failed booking email no longer tells the visitor their own email failed; it
+  now says the booking wasn't created (#26).
+- The correction email sent when the rollback itself fails to save now says so,
+  instead of claiming the booking was removed and the slot is free again (#30).
+
 ## [0.3.1] - 2026-09-23
 
 ### Fixed
@@ -201,7 +223,9 @@ single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
 [Unreleased]: https://github.com/spy4x/mig/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/spy4x/mig/compare/v0.3.1...v0.4.0
+[0.4.0]: https://github.com/spy4x/mig/compare/v0.3.3...v0.4.0
+[0.3.3]: https://github.com/spy4x/mig/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/spy4x/mig/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/spy4x/mig/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/spy4x/mig/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/spy4x/mig/releases/tag/v0.2.0
