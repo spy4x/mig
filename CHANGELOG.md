@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The `HIDE_BRANDING` startup error now lists the accepted values instead of
+  just saying "has an invalid value" (#42).
+
 ## [0.4.0] - 2026-09-24
 
 **If you run mig from `antonshubin/mig:latest` under Watchtower or any other
