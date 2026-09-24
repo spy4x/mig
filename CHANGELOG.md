@@ -23,7 +23,7 @@ rescue steps below before you pin or redeploy anything.** On the old
 `compose.example.yml` with `DATA_PATH` set (bookings on a root-owned host
 mount), every booking instead fails outright with "We couldn't save your
 booking", while `/health` keeps answering healthy — the container's log shows
-`mig: persist FAILED`. Either way, pin your image to `v0.3.3`, or pause the
+`mig: persist FAILED`. Either way, pin your image to `v0.3.4`, or pause the
 updater, until you've done the upgrade steps below.
 
 ### Changed
@@ -60,8 +60,6 @@ updater, until you've done the upgrade steps below.
   nothing needs it set explicitly for a Docker deployment — `lib/config.ts`'s
   own default is a different, relative path (`./data/bookings.json`), used only
   when nothing sets `DATA_PATH` at all, such as a non-Docker deploy.
-- The date note on a hovered time slot now meets 4.5:1 contrast in the light
-  theme (#33).
 
 **Upgrade note.** Changing only the image, without also changing your mount,
 loses existing bookings — read the step for your setup before redeploying.
@@ -164,6 +162,13 @@ Docker; rootless Podman remaps container uids to a different host range, so
 there use `--userns=keep-id --user "$(id -u):$(id -g)"` instead of chowning
 anything to 1993 — see the README's Docker quick start for that command in full.
 
+## [0.3.4] - 2026-09-24
+
+### Fixed
+
+- The date note on a hovered time slot now meets 4.5:1 contrast in the light
+  theme (#37).
+
 ## [0.3.3] - 2026-09-24
 
 ### Fixed
@@ -253,7 +258,8 @@ single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
 [Unreleased]: https://github.com/spy4x/mig/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/spy4x/mig/compare/v0.3.3...v0.4.0
+[0.4.0]: https://github.com/spy4x/mig/compare/v0.3.4...v0.4.0
+[0.3.4]: https://github.com/spy4x/mig/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/spy4x/mig/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/spy4x/mig/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/spy4x/mig/compare/v0.3.0...v0.3.1
