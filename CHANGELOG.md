@@ -9,15 +9,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.4.0] - 2026-09-24
 
 **If you run mig from `antonshubin/mig:latest` under Watchtower or any other
-auto-updater, it will pull this version on its own.** With a root-owned bind
-mount or named volume from before this release, every booking then fails with
-"We couldn't save your booking", while `/health` keeps answering healthy; the
-container's log shows `mig: persist FAILED`. Pin your image to `v0.3.3`, or
-pause the updater, until you've done the upgrade steps below. **If you're on the
-old README's `docker run` setup, do the rescue steps below before you pin or
-redeploy anything** — your bookings and your `CANCEL_SECRET` only exist inside
-the running container, and re-creating it to change the pinned tag destroys
-both.
+auto-updater, it will pull this version on its own — and the effect depends on
+your old setup.** On the old README's `docker run` command or Docker Compose
+snippet, 0.4.0 keeps saving bookings fine, but every re-create — including the
+auto-updater's own — loses them, and destroys your `CANCEL_SECRET` too; **do the
+rescue steps below before you pin or redeploy anything.** On the old
+`compose.example.yml` with `DATA_PATH` set (bookings on a root-owned host
+mount), every booking instead fails outright with "We couldn't save your
+booking", while `/health` keeps answering healthy — the container's log shows
+`mig: persist FAILED`. Either way, pin your image to `v0.3.3`, or pause the
+updater, until you've done the upgrade steps below.
 
 ### Changed
 
