@@ -93,13 +93,18 @@ of the bookings — the rest doesn't run.
 
 If your mount was a named volume (`<volume>:/app/data`) rather than a host
 directory, you have no `./data` to move the retrieved file into or `chown`
-directly. Run the `docker stop`, `docker inspect` (note the secret first),
-`docker cp` and `docker rm` lines above as they are, then replace the last two
-lines with:
+directly, and a helper container that bind-mounts your current directory to hand
+the file over can fail with "Permission denied" on an SELinux-enforcing host,
+since that mount carries no SELinux label. Use this complete block instead of
+the one above — it pipes the file in over standard input instead:
 
 ```bash
-docker run --rm -v <volume>:/data -v "$(pwd)":/host alpine \
-  sh -c 'mv /host/bookings.json /data/bookings.json && chown -R 1993:1993 /data'
+docker stop mig &&
+docker inspect mig --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^CANCEL_SECRET=' &&
+docker cp mig:/data/bookings.json . &&
+docker rm mig &&
+docker run --rm -i -v <volume>:/data alpine \
+  sh -c 'cat > /data/bookings.json && chown -R 1993:1993 /data' < bookings.json
 ```
 
 Replace `<volume>` with your volume's name, then follow "Everyone: change the
