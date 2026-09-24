@@ -8,7 +8,9 @@ import {
   canonicalValidTimeZoneOrNull,
   formatClockAt,
   formatDateLong,
+  formatGridHeader,
   formatShortDateAt,
+  formatSlotDisplay,
   isoDateInTz,
   minToHHMM,
   zonedDateTime,
@@ -23,9 +25,17 @@ interface DateCell {
 interface SlotCell {
   time: string;
   available: boolean;
-  /** Full "HH:MM, City, UTC±N" clock string in the display zone
-   *  (visitor's zone when known, host's otherwise — mig#15). */
-  displayTime?: string;
+  /** "HH:MM" in the display zone (visitor's zone when known, host's
+   *  otherwise — mig#15, mig#48). The grid shows the zone itself once,
+   *  in its header — see `EmbedData.zoneLabel`. */
+  displayHHMM?: string;
+  /** This slot's own full "HH:MM, City, UTC±N" (mig#15, mig#48) — the
+   *  accessible name only, never the visible text. */
+  ariaZoneLabel?: string;
+  /** This slot's own UTC offset, set only when it differs from the
+   *  header's `zoneLabel` — a daylight-saving change landing on one
+   *  of the visible slots (mig#48). */
+  offsetNote?: string;
   /** "Wed 23 Sep" — set only when this slot's visitor-local date
    *  differs from the picked host day (mig#15 review), so a slot that
    *  wraps to the previous or next day still tells the visitor which
@@ -54,6 +64,14 @@ export interface EmbedData {
    *  real zone. An invalid or missing value is `null` and always
    *  falls back to the host's zone rather than an error page. */
   tz: string | null;
+  /** "Berlin, UTC+2" — the display zone, shown once above the slot
+   *  grid instead of on every slot (mig#48). Taken from the FIRST slot
+   *  actually shown, in display order (mig#48 review) — not an
+   *  arbitrary anchor like noon of the host day, which can label the
+   *  header with an offset no visible slot has. `null` when no date is
+   *  picked yet, or the picked day has no slots (there's no grid to
+   *  label). */
+  zoneLabel: string | null;
 }
 
 function parseDateParam(v: string | null): string | null {
@@ -175,6 +193,7 @@ export const handler = define.handlers({
       : null;
 
     let slots: SlotCell[] = [];
+    let gridZoneLabel: string | null = null;
     if (date && !cfg.blockedDates.has(date)) {
       const dayBookings = ctx.state.bookings.forDate(date);
       const dayName = dayNameFromDate(date, cfg.hostTz);
@@ -182,7 +201,9 @@ export const handler = define.handlers({
       const booked = new Set(
         dayBookings.filter((b) => b.status === "active").map((b) => b.time),
       );
-      const withInstant: Array<SlotCell & { instant: Date }> = [];
+      const withInstant: Array<
+        { time: string; available: boolean; instant: Date }
+      > = [];
       for (const r of ranges) {
         for (
           let m = r.startMin;
@@ -191,15 +212,10 @@ export const handler = define.handlers({
         ) {
           const time = minToHHMM(m);
           const instant = zonedDateTime(date, time, cfg.hostTz);
-          const visitorDate = isoDateInTz(instant, displayTz);
           withInstant.push({
             time,
-            instant,
             available: !booked.has(time) && instant >= minStart,
-            displayTime: formatClockAt(instant, displayTz),
-            dateNote: visitorDate !== date
-              ? formatShortDateAt(instant, displayTz)
-              : undefined,
+            instant,
           });
         }
       }
@@ -208,8 +224,30 @@ export const handler = define.handlers({
       // but making the sort explicit means a slot that wraps into the
       // previous or next visitor-local day still renders in true
       // chronological order rather than relying on that coincidence.
+      // This is also the actual display order, so the grid header
+      // (below) is taken from the FIRST slot *after* this sort.
       withInstant.sort((a, b) => a.instant.getTime() - b.instant.getTime());
-      slots = withInstant.map(({ instant: _instant, ...s }) => s);
+
+      const header = formatGridHeader(
+        withInstant.map((s) => s.instant),
+        displayTz,
+      );
+      gridZoneLabel = header?.label ?? null;
+
+      slots = withInstant.map((s) => {
+        const visitorDate = isoDateInTz(s.instant, displayTz);
+        const display = formatSlotDisplay(s.instant, displayTz, header!.offset);
+        return {
+          time: s.time,
+          available: s.available,
+          displayHHMM: display.hhmm,
+          ariaZoneLabel: display.ariaZoneLabel,
+          offsetNote: display.offsetNote,
+          dateNote: visitorDate !== date
+            ? formatShortDateAt(s.instant, displayTz)
+            : undefined,
+        };
+      });
     }
 
     return {
@@ -223,6 +261,7 @@ export const handler = define.handlers({
         monthAnchor,
         error,
         tz,
+        zoneLabel: gridZoneLabel,
       },
     };
   },
@@ -260,6 +299,7 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
     monthAnchor,
     error,
     tz,
+    zoneLabel: gridZoneLabel,
   } = data;
   const cfg = state.config;
   const displayTz = tz ?? cfg.hostTz;
@@ -335,6 +375,7 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
           tz={tz}
           displaySlot={displaySlot}
           slotDateLabel={slotDateLabel}
+          zoneLabel={gridZoneLabel}
         />
       </main>
     </div>

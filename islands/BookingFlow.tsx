@@ -10,7 +10,9 @@ import { pickerLinks } from "../lib/picker-links.ts";
 import {
   formatClockAt,
   formatDateLong,
+  formatGridHeader,
   formatShortDateAt,
+  formatSlotDisplay,
   isoDateInTz,
   zonedDateTime,
 } from "../lib/tz.ts";
@@ -55,7 +57,9 @@ interface DateCell {
 interface SlotCell {
   time: string;
   available: boolean;
-  displayTime?: string;
+  displayHHMM?: string;
+  ariaZoneLabel?: string;
+  offsetNote?: string;
   dateNote?: string;
 }
 
@@ -379,40 +383,58 @@ export default function BookingFlow(props: BookingFlowProps) {
     )
     : null;
 
-  // Re-format every slot's HH:MM string into the full visitor-TZ
-  // clock string for display (mig#15). SSR + `/embed` + pre-hydration
-  // leave `displayTime` unset, so TimeSlots falls back to the
-  // host-local `time` (the authoritative value the server books
-  // against — never swapped). After hydration Preact diffs the text
-  // node and updates in place; the surrounding DOM structure stays
-  // identical.
-  //
-  // Also sorted by instant and labelled with a `dateNote` when a
-  // slot's visitor-local date differs from the picked day (mig#15
-  // review) — the fetched `slots.value` from GET /api/slots is
-  // already host-chronological (and therefore instant-ordered), but
-  // sorting explicitly here — the same as routes/embed/index.tsx —
-  // means a slot that wraps into the previous or next visitor-local
-  // day renders in true chronological order rather than relying on
-  // that coincidence.
+  // Every slot's instant, host-local `time` + `hostTz` (mig#48 review)
+  // — cheap even pre-mount (`zonedDateTime` needs no visitor zone),
+  // and the basis for both the display order and the grid header
+  // below.
+  const slotsWithInstant = date.value
+    ? slots.value.map((s) => ({
+      ...s,
+      instant: zonedDateTime(date.value!, s.time, hostTz),
+    }))
+    : [];
+
+  // Display order: pre-mount this is `slots.value`'s own order (the
+  // route's host-chronological push order, unchanged); post-mount,
+  // sorted by instant, same as routes/embed/index.tsx — a slot whose
+  // visitor-local date wraps into the previous or next day then
+  // renders in true chronological order instead of relying on
+  // server-order coincidence. `formatGridHeader` (mig#48 review) takes
+  // the FIRST of this array — the first slot actually shown — not an
+  // arbitrary anchor like noon of the host day, which can label the
+  // header with an offset no visible slot has.
+  const orderedSlots = (mounted.value && date.value)
+    ? [...slotsWithInstant].sort((a, b) =>
+      a.instant.getTime() - b.instant.getTime()
+    )
+    : slotsWithInstant;
+
+  const header = formatGridHeader(
+    orderedSlots.map((s) => s.instant),
+    displayTz,
+  );
+  const gridZoneLabel = header?.label ?? null;
+
+  // Re-derive every slot's visitor-TZ HH:MM + own offset for display
+  // (mig#15, mig#48). SSR + `/embed` + pre-hydration leave
+  // `displayHHMM` unset, so TimeSlots falls back to the host-local
+  // `time` (the authoritative value the server books against — never
+  // swapped). After hydration Preact diffs the text node and updates
+  // in place; the surrounding DOM structure stays identical.
   const slotsForDisplay = (mounted.value && date.value)
-    ? slots.value
-      .map((s) => {
-        const instant = zonedDateTime(date.value!, s.time, hostTz);
-        const visitorDate = isoDateInTz(instant, displayTz);
-        return {
-          ...s,
-          instant,
-          displayTime:
-            formatClockInTz(date.value!, s.time, hostTz, displayTz) ??
-              s.time,
-          dateNote: visitorDate !== date.value
-            ? formatShortDateAt(instant, displayTz)
-            : undefined,
-        };
-      })
-      .sort((a, b) => a.instant.getTime() - b.instant.getTime())
-      .map(({ instant: _instant, ...s }) => s)
+    ? orderedSlots.map((s) => {
+      const visitorDate = isoDateInTz(s.instant, displayTz);
+      const display = formatSlotDisplay(s.instant, displayTz, header!.offset);
+      return {
+        ...s,
+        displayHHMM: display.hhmm,
+        ariaZoneLabel: display.ariaZoneLabel,
+        offsetNote: display.offsetNote,
+        dateNote: visitorDate !== date.value
+          ? formatShortDateAt(s.instant, displayTz)
+          : undefined,
+      };
+    }).map(({ instant: _instant, ...s }) => s)
     : slots.value;
 
   // ─── Render ──────────────────────────────────────────────────────
@@ -517,6 +539,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                   selectedSlot={null}
                   onSelectSlot={interactive ? onSelectSlot : undefined}
                   tz={links.tz}
+                  zoneLabel={gridZoneLabel}
                 />
               )
               : (

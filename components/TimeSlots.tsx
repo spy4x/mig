@@ -7,13 +7,30 @@
 
   Display TZ: each slot's `time` is stored as host-local HH:MM (the
   authoritative value the server books against). The route/island can
-  pass a `displayTime` per slot — the full "HH:MM, City, UTC±N" clock
-  string the visitor actually sees, in their own zone (mig#15 — every
-  time shown to a person carries its city and offset, not a bare
-  HH:MM). SSR / no-JS leave it unset and the host-local HH:MM renders
+  pass a `displayHHMM` per slot — just the clock time in the visitor's
+  zone. SSR / no-JS leave it unset and the host-local HH:MM renders
   bare (the visitor's zone genuinely isn't known yet in that case — see
   the "Times are shown in the host's timezone" note the caller renders
   alongside).
+
+  One zone label, not twenty (mig#48): every slot used to repeat its
+  full "HH:MM, City, UTC±N" clock string (mig#15 — every time shown to
+  a person carries its city and offset, not a bare HH:MM), so a day
+  with twenty slots repeated the same city and offset twenty times and
+  the one part that actually differs — the time — got lost in the
+  noise. The zone (`zoneLabel` prop, e.g. "Berlin, UTC+2") now renders
+  once, in the grid's header, and each slot shows only its HH:MM. mig#15's
+  rule still holds for the *accessible* name: every slot's own full
+  "HH:MM, City, UTC±N" (`ariaZoneLabel`), plus its `dateNote` when one
+  is shown, goes on its `aria-label` (or, for the selected/booked
+  chips, which render as a plain non-interactive `<span>`, a visually
+  hidden `sr-only` element instead — `aria-label` isn't reliably read
+  on an element with no interactive role) — so a screen reader that
+  jumps straight to a chip still hears the complete time and day. And
+  when a slot's own UTC offset differs from the header's — a
+  daylight-saving change landing on one of the visible slots — the
+  slot also shows its own offset inline (`offsetNote`, e.g.
+  "03:00, UTC+1"), so no time in the grid is ever ambiguous.
 
   Grouping (mig#15 review): slots are grouped into contiguous runs of
   the same period, in the order the (already instant-sorted) array
@@ -39,13 +56,22 @@ import { pickerHref } from "../lib/picker-links.ts";
 interface SlotCell {
   time: string; // host-local HH:MM, authoritative
   available: boolean;
-  /** Optional full "HH:MM, City, UTC±N" clock string in the
-   *  visitor's zone (mig#15). When present, the button renders this
-   *  instead of `time`, and the period bucket is computed from it.
-   *  Falls back to bare `time` (host TZ) when absent — the visitor's
-   *  zone isn't known yet (SSR pass before hydration, or /embed
-   *  before its tz redirect lands). */
-  displayTime?: string;
+  /** "HH:MM" in the visitor's zone (mig#48). When present, the button
+   *  renders this instead of `time`, and the period bucket is
+   *  computed from it. Falls back to bare `time` (host TZ) when
+   *  absent — the visitor's zone isn't known yet (SSR pass before
+   *  hydration, or /embed before its tz redirect lands). */
+  displayHHMM?: string;
+  /** This slot's own full "HH:MM, City, UTC±N" (mig#15, mig#48) —
+   *  used for the button's accessible name only, never the visible
+   *  text, so a screen reader that jumps straight to one button still
+   *  hears the complete time. Set together with `displayHHMM`. */
+  ariaZoneLabel?: string;
+  /** This slot's own UTC offset ("UTC+1"), set only when it differs
+   *  from the grid header's `zoneLabel` — a daylight-saving change
+   *  landing on one of the visible slots (mig#48). Rendered inline
+   *  next to the time so that slot is never ambiguous. */
+  offsetNote?: string;
   /** "Wed 23 Sep" — set only when this slot's visitor-local date
    *  differs from the picked day (mig#15 review). Rendered as a small
    *  second line on the chip. */
@@ -68,6 +94,11 @@ interface TimeSlotsProps {
   /** The visitor's IANA zone, once known (mig#15) — threaded onto
    *  every slot's `<a href>` so /embed's tz query param survives. */
   tz?: string | null;
+  /** "Berlin, UTC+2" (mig#48) — the display zone shown once, above the
+   *  grid, next to `dateLabel`. Every slot's own offset is compared
+   *  against this (see `SlotCell.offsetNote`). Omit/`null` while the
+   *  display zone isn't known yet. */
+  zoneLabel?: string | null;
 }
 
 type Period = "morning" | "afternoon" | "evening";
@@ -97,7 +128,7 @@ interface SlotGroup {
 function groupByConsecutivePeriod(slots: SlotCell[]): SlotGroup[] {
   const groups: SlotGroup[] = [];
   for (const s of slots) {
-    const period = periodFor(s.displayTime ?? s.time);
+    const period = periodFor(s.displayHHMM ?? s.time);
     const last = groups[groups.length - 1];
     if (last && last.period === period) {
       last.slots.push(s);
@@ -109,8 +140,16 @@ function groupByConsecutivePeriod(slots: SlotCell[]): SlotGroup[] {
 }
 
 export function TimeSlots(
-  { date, dateLabel, slots, selectedSlot, onSelectSlot, basePath = "", tz }:
-    TimeSlotsProps,
+  {
+    date,
+    dateLabel,
+    slots,
+    selectedSlot,
+    onSelectSlot,
+    basePath = "",
+    tz,
+    zoneLabel,
+  }: TimeSlotsProps,
 ) {
   if (slots.length === 0) {
     return (
@@ -128,6 +167,7 @@ export function TimeSlots(
     <div class="rounded-2xl border border-line bg-surface-raised overflow-hidden">
       <div class="px-5 py-4 border-b border-line">
         <h3 class="text-sm font-medium text-ink-muted">{dateLabel}</h3>
+        {zoneLabel && <p class="text-xs text-ink-subtle mt-0.5">{zoneLabel}</p>}
       </div>
 
       <div class="divide-y divide-line">
@@ -169,12 +209,30 @@ function SlotButton(
   const base =
     "inline-flex flex-col min-h-10 min-w-[4.5rem] items-center justify-center gap-0 rounded-lg border px-3 py-1.5 text-sm tnum font-medium transition-all duration-(--duration-snappy) focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised";
   // What the user actually sees. Falls back to host-local when the
-  // island hasn't computed a visitor-TZ displayTime yet (SSR + /embed
+  // island hasn't computed a visitor-TZ displayHHMM yet (SSR + /embed
   // + pre-hydration).
-  const shownTime = slot.displayTime ?? slot.time;
-  const content = (
+  const shownTime = slot.displayHHMM ?? slot.time;
+  // Visible text (mig#48): bare HH:MM, plus this slot's own offset
+  // only when it disagrees with the grid header's — a daylight-saving
+  // change landing on this slot. The zone/city stays in the header;
+  // repeating it here would be exactly the noise this issue removed.
+  const visibleTime = slot.offsetNote
+    ? `${shownTime}, ${slot.offsetNote}`
+    : shownTime;
+  // Full accessible name (mig#15, mig#48, mig#48 review): the slot's
+  // own full "HH:MM, City, UTC±N", plus its date note ("Wed 23 Sep")
+  // when one is shown — a screen reader that only reads the
+  // accessible name must still hear which day this slot falls on, not
+  // just the clock. Omitted in the fallback case (no visitor zone
+  // known yet), matching the plain HH:MM the chip already shows.
+  const fullLabel = slot.ariaZoneLabel
+    ? `${shownTime}, ${slot.ariaZoneLabel}${
+      slot.dateNote ? `, ${slot.dateNote}` : ""
+    }`
+    : undefined;
+  const visible = (
     <>
-      <span>{shownTime}</span>
+      <span>{visibleTime}</span>
       {slot.dateNote && (
         <span class="text-[10px] font-normal leading-tight opacity-80">
           {slot.dateNote}
@@ -182,6 +240,21 @@ function SlotButton(
       )}
     </>
   );
+  // Selected/booked chips render as a plain <span> — no interactive
+  // role, so `aria-label` isn't reliably exposed by every screen
+  // reader (mig#48 review). Visually hidden text inside the element
+  // is: `sr-only` carries `fullLabel`, and the visible chip is
+  // `aria-hidden` so the two aren't read twice. `display: contents` on
+  // the hidden wrapper keeps the visible spans as direct flex children
+  // of `base`, so `flex-col`/`gap` still apply as if it weren't there.
+  const spanContent = fullLabel
+    ? (
+      <>
+        <span class="sr-only">{fullLabel}</span>
+        <span aria-hidden="true" class="contents">{visible}</span>
+      </>
+    )
+    : visible;
 
   if (selected) {
     return (
@@ -190,7 +263,7 @@ function SlotButton(
         title="Selected"
         class={`${base} border-brand-500 bg-brand-500 text-white font-semibold shadow-sm cursor-default`}
       >
-        {content}
+        {spanContent}
       </span>
     );
   }
@@ -202,7 +275,7 @@ function SlotButton(
         title="Already booked"
         class={`${base} border-line bg-surface-sunken text-ink-subtle/60 line-through decoration-ink-subtle/40 cursor-not-allowed`}
       >
-        {content}
+        {spanContent}
       </span>
     );
   }
@@ -211,10 +284,11 @@ function SlotButton(
     return (
       <button
         type="button"
+        aria-label={fullLabel}
         onClick={() => onSelect(date, slot.time)}
         class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
       >
-        {content}
+        {visible}
       </button>
     );
   }
@@ -222,9 +296,10 @@ function SlotButton(
   return (
     <a
       href={pickerHref(basePath, { date, slot: slot.time }, tz)}
+      aria-label={fullLabel}
       class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
     >
-      {content}
+      {visible}
     </a>
   );
 }

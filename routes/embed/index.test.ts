@@ -64,8 +64,9 @@ async function rm(path: string) {
 
 async function getEmbedData(
   url: string,
+  cfgOverrides: Partial<Config> = {},
 ): Promise<EmbedData> {
-  const cfg = fakeConfig();
+  const cfg = { ...fakeConfig(), ...cfgOverrides };
   const path = `/tmp/mig-embed-index-test-${crypto.randomUUID()}.json`;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
@@ -142,7 +143,11 @@ Deno.test("mig#15: /embed with a valid tz renders the slot list in the visitor's
   // 09:00 host-local (Ho Chi Minh) is 22:00 the previous day in New York.
   const first = data.slots.find((s: SlotCell) => s.time === "09:00");
   assert(first, "expected the 09:00 host-local slot");
-  assertEquals(first!.displayTime, "22:00, New York, UTC-4");
+  // mig#48: the slot itself only carries the bare time now — the zone
+  // ("New York, UTC-4") renders once, in the grid's header.
+  assertEquals(first!.displayHHMM, "22:00");
+  assertEquals(first!.ariaZoneLabel, "New York, UTC-4");
+  assertEquals(data.zoneLabel, "New York, UTC-4");
   assert(
     data.selectedDateLabel?.includes("October 2026"),
     `expected an October 2026 date label, got "${data.selectedDateLabel}"`,
@@ -203,7 +208,9 @@ Deno.test("mig#15: /embed with no tz param falls back to the host's zone", async
   assertEquals(data.tz, null);
   const first = data.slots.find((s: SlotCell) => s.time === "09:00");
   assert(first, "expected the 09:00 host-local slot");
-  assertEquals(first!.displayTime, "09:00, Ho Chi Minh, UTC+7");
+  assertEquals(first!.displayHHMM, "09:00");
+  assertEquals(first!.ariaZoneLabel, "Ho Chi Minh, UTC+7");
+  assertEquals(data.zoneLabel, "Ho Chi Minh, UTC+7");
 });
 
 Deno.test("mig#15: /embed with an invalid tz falls back to the host's zone", async () => {
@@ -213,7 +220,9 @@ Deno.test("mig#15: /embed with an invalid tz falls back to the host's zone", asy
 
   assertEquals(data.tz, null);
   const first = data.slots.find((s: SlotCell) => s.time === "09:00");
-  assertEquals(first!.displayTime, "09:00, Ho Chi Minh, UTC+7");
+  assertEquals(first!.displayHHMM, "09:00");
+  assertEquals(first!.ariaZoneLabel, "Ho Chi Minh, UTC+7");
+  assertEquals(data.zoneLabel, "Ho Chi Minh, UTC+7");
 });
 
 Deno.test("/embed keeps modern zone names exactly as sent (never a legacy rename)", async () => {
@@ -232,10 +241,9 @@ Deno.test("/embed keeps modern zone names exactly as sent (never a legacy rename
       `http://localhost/embed?date=${TEST_DATE}&tz=${encodeURIComponent(tz)}`,
     );
     assertEquals(data.tz, tz, `expected tz to stay "${tz}"`);
-    const first = data.slots.find((s: SlotCell) => s.time === "09:00");
     assert(
-      first?.displayTime?.includes(city),
-      `expected the 09:00 slot's displayTime to include "${city}", got "${first?.displayTime}"`,
+      data.zoneLabel?.includes(city),
+      `expected the grid header's zoneLabel to include "${city}", got "${data.zoneLabel}"`,
     );
   }
 });
@@ -249,5 +257,145 @@ Deno.test("mig#15: /embed canonicalizes a legacy zone alias in the tz param", as
   );
   assertEquals(data.tz, "Asia/Tokyo");
   const first = data.slots.find((s: SlotCell) => s.time === "09:00");
-  assertEquals(first!.displayTime, "11:00, Tokyo, UTC+9");
+  assertEquals(first!.displayHHMM, "11:00");
+  assertEquals(first!.ariaZoneLabel, "Tokyo, UTC+9");
+  assertEquals(data.zoneLabel, "Tokyo, UTC+9");
+});
+
+// ─── mig#48 review: header comes from the FIRST slot, not host noon ──
+// A Tokyo host (UTC+9, no DST) and a New York visitor (America/New_York)
+// straddle both 2026 US daylight-saving transitions once host hours are
+// converted to the visitor's zone: 8 March 2026 (spring forward, 2am ->
+// 3am EST -> EDT, at 07:00 UTC) and 1 November 2026 (fall back, 2am ->
+// 1am EDT -> EST, at 06:00 UTC). Before this fix, the header was taken
+// from noon of the host day — which can label the header with an
+// offset no visible slot actually has (noon host time had already
+// crossed the transition while the visible slots, earlier in the host
+// day, hadn't).
+
+const TOKYO_HOST_TZ = "Asia/Tokyo";
+const NY_VISITOR_TZ = "America/New_York";
+
+Deno.test("mig#48 review: 8 Mar 2026 (the transition day itself), slots entirely after the spring-forward change — header is the new offset, no slot carries its own", async () => {
+  // This runs ON the transition day itself (2026-03-08, a Sunday) —
+  // not a day after it — so a header still anchored on noon of the
+  // host day would get this wrong: noon host-local (2026-03-08 12:00)
+  // converts to 22:00 the previous evening in New York, still EST
+  // (UTC-5), even though every slot actually shown (17:00-20:00
+  // host-local, all landing at 04:00+ New York) is already EDT
+  // (UTC-4). The header must come from the first slot actually shown,
+  // not noon.
+  const data = await getEmbedData(
+    `http://localhost/embed?date=2026-03-08&tz=${
+      encodeURIComponent(NY_VISITOR_TZ)
+    }`,
+    {
+      hostTz: TOKYO_HOST_TZ,
+      weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
+      bookingHorizonDays: 3650,
+    },
+  );
+  assertEquals(data.zoneLabel, "New York, UTC-4");
+  assert(data.slots.length > 0, "expected slots for the SUN date");
+  for (const s of data.slots) {
+    assertEquals(
+      s.offsetNote,
+      undefined,
+      `expected no slot to carry its own offset, got one on host time ${s.time}`,
+    );
+  }
+});
+
+Deno.test("mig#48 review: 8 Mar 2026, slots straddling the spring-forward change — only the later slots carry their own offset", async () => {
+  // 2026-03-08 (Sunday) 06:00-18:00 host-local straddles the
+  // transition once converted to New York: 06:00-15:00 host is still
+  // 10:00-01:00 EST (UTC-5); 16:00 host onward is 03:00+ EDT (UTC-4).
+  const data = await getEmbedData(
+    `http://localhost/embed?date=2026-03-08&tz=${
+      encodeURIComponent(NY_VISITOR_TZ)
+    }`,
+    {
+      hostTz: TOKYO_HOST_TZ,
+      weeklyAvailability: parseWeeklyAvailability("SUN 06:00-18:00"),
+      bookingHorizonDays: 3650,
+    },
+  );
+  // Header comes from the FIRST slot (06:00 host, UTC-5) — still
+  // standard time, pre-transition.
+  assertEquals(data.zoneLabel, "New York, UTC-5");
+  const before = data.slots.find((s) => s.time === "15:00");
+  const after = data.slots.find((s) => s.time === "16:00");
+  assert(before && after, "expected slots either side of the transition");
+  assertEquals(
+    before!.offsetNote,
+    undefined,
+    "expected the pre-transition slot to agree with the header",
+  );
+  assertEquals(
+    after!.offsetNote,
+    "UTC-4",
+    "expected the post-transition slot to carry its own offset",
+  );
+});
+
+Deno.test("mig#48 review: 1 Nov 2026 (the transition day itself), slots entirely after the fall-back change — header is the new offset, no slot carries its own", async () => {
+  // This runs ON the transition day itself (2026-11-01, a Sunday) —
+  // not a day after it — so a header still anchored on noon of the
+  // host day would get this wrong: noon host-local (2026-11-01 12:00)
+  // converts to 23:00 the previous evening in New York, still EDT
+  // (UTC-4), even though every slot actually shown (17:00-20:00
+  // host-local, all landing at 03:00+ New York) is already EST
+  // (UTC-5). The header must come from the first slot actually shown,
+  // not noon.
+  const data = await getEmbedData(
+    `http://localhost/embed?date=2026-11-01&tz=${
+      encodeURIComponent(NY_VISITOR_TZ)
+    }`,
+    {
+      hostTz: TOKYO_HOST_TZ,
+      weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
+      bookingHorizonDays: 3650,
+    },
+  );
+  assertEquals(data.zoneLabel, "New York, UTC-5");
+  assert(data.slots.length > 0, "expected slots for the SUN date");
+  for (const s of data.slots) {
+    assertEquals(
+      s.offsetNote,
+      undefined,
+      `expected no slot to carry its own offset, got one on host time ${s.time}`,
+    );
+  }
+});
+
+Deno.test("mig#48 review: 1 Nov 2026, slots straddling the fall-back change — only the later slots carry their own offset", async () => {
+  // 2026-11-01 (Sunday) 06:00-20:00 host-local straddles the
+  // transition once converted to New York: 06:00-14:00 host is still
+  // 17:00-01:00 EDT (UTC-4); 15:00 host onward is 01:00+ EST (UTC-5).
+  const data = await getEmbedData(
+    `http://localhost/embed?date=2026-11-01&tz=${
+      encodeURIComponent(NY_VISITOR_TZ)
+    }`,
+    {
+      hostTz: TOKYO_HOST_TZ,
+      weeklyAvailability: parseWeeklyAvailability("SUN 06:00-20:00"),
+      bookingHorizonDays: 3650,
+    },
+  );
+  // Header comes from the FIRST slot (06:00 host, UTC-4) — still
+  // daylight time, pre-transition.
+  assertEquals(data.zoneLabel, "New York, UTC-4");
+  const before = data.slots.find((s) => s.time === "14:00");
+  const after = data.slots.find((s) => s.time === "15:00");
+  assert(before && after, "expected slots either side of the transition");
+  assertEquals(
+    before!.offsetNote,
+    undefined,
+    "expected the pre-transition slot to agree with the header",
+  );
+  assertEquals(
+    after!.offsetNote,
+    "UTC-5",
+    "expected the post-transition slot to carry its own offset",
+  );
 });

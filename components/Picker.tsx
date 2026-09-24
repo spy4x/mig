@@ -35,7 +35,9 @@ interface DateCell {
 interface SlotCell {
   time: string;
   available: boolean;
-  displayTime?: string;
+  displayHHMM?: string;
+  ariaZoneLabel?: string;
+  offsetNote?: string;
   dateNote?: string;
 }
 
@@ -74,6 +76,11 @@ interface PickerProps {
    *  `selectedDateLabel` when omitted (no slot picked yet, or the
    *  caller hasn't computed one — e.g. the standalone baseline test). */
   slotDateLabel?: string | null;
+  /** "Berlin, UTC+2" (mig#48) — the display zone, threaded straight
+   *  into TimeSlots so it renders once, above the slot grid, instead
+   *  of on every slot. Omit/`null` while the display zone isn't known
+   *  yet (host-timezone fallback). */
+  zoneLabel?: string | null;
 }
 
 export function Picker(props: PickerProps) {
@@ -93,6 +100,7 @@ export function Picker(props: PickerProps) {
     tz,
     displaySlot,
     slotDateLabel,
+    zoneLabel,
   } = props;
 
   const slotsByDate: Record<string, number> = {};
@@ -193,6 +201,7 @@ export function Picker(props: PickerProps) {
                   selectedSlot={selectedSlot}
                   basePath={basePath}
                   tz={tz}
+                  zoneLabel={zoneLabel}
                 />
               )
               : (

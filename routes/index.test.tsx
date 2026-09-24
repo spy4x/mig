@@ -34,6 +34,19 @@ function futureWeekday(daysAhead: number, tz: string): string {
   return d;
 }
 
+// mig#48 review: scoped to TimeSlots.tsx's own header element
+// (`<p class="text-xs text-ink-subtle mt-0.5">{zoneLabel}</p>`) —
+// never a whole-page `html.includes(...)`, since the same zone string
+// also appears (correctly) inside every slot's `aria-label`; an
+// `includes` check would keep passing even if the header itself were
+// removed. `null` when the header isn't rendered at all.
+function gridHeaderZoneLabel(html: string): string | null {
+  const m = html.match(
+    /<p class="text-xs text-ink-subtle mt-0\.5">([^<]*)<\/p>/,
+  );
+  return m ? m[1] : null;
+}
+
 function fakeConfig(): Config {
   return {
     hostName: "Jane Doe",
@@ -101,17 +114,29 @@ async function renderIndex(
   }
 }
 
-Deno.test("mig#15: standalone / labels every slot with the host's clock server-side, not bare HH:MM", async () => {
+Deno.test("mig#48: standalone / shows the host's zone once above the grid, and each slot's own labelled clock in its accessible name", async () => {
   const html = await renderIndex(`http://localhost/?date=${TEST_DATE}`);
-  assert(
-    html.includes("09:00, Ho Chi Minh, UTC+7"),
-    "expected the 09:00 slot to render the host's labelled clock",
+  // The zone renders once, in the grid header element itself.
+  assertEquals(
+    gridHeaderZoneLabel(html),
+    "Ho Chi Minh, UTC+7",
+    "expected the grid header element to show the host's zone",
   );
-  // A bare, unlabelled ">09:00<" anywhere would mean the fix regressed
-  // — every slot must carry its city and offset.
-  assertFalse(
+  // The slot's own accessible name still carries the full labelled
+  // clock (mig#15's rule), even though the visible text is now bare.
+  assert(
+    html.includes('aria-label="09:00, Ho Chi Minh, UTC+7"'),
+    "expected the 09:00 slot's accessible name to carry the full clock",
+  );
+  // The visible slot text itself is bare HH:MM now that the zone
+  // lives in the header — a regression back to repeating the zone on
+  // every slot wouldn't be caught by the header assertion above (the
+  // header element itself would be unaffected by that regression);
+  // this catches it instead, since the visible text would then read
+  // "09:00, Ho Chi Minh, UTC+7" rather than bare "09:00".
+  assert(
     />09:00</.test(html),
-    "must not render a bare, unlabelled slot time",
+    "expected the slot's visible text to be bare HH:MM",
   );
 });
 
@@ -217,5 +242,52 @@ Deno.test("mig#18: the host-timezone <noscript> note is hidden when the tz query
   assertFalse(
     html.includes("<noscript>"),
     "the host-timezone note must not render for a visitor with a different tz",
+  );
+});
+
+Deno.test("mig#48 review: the header comes from the FIRST slot, so only a LATER slot whose offset disagrees shows its own inline", async () => {
+  // Europe/Berlin's DST ends 2026-10-25 at 03:00 CEST -> 02:00 CET —
+  // a real transition where the offset itself changes, from UTC+2 to
+  // UTC+1, at 01:00 UTC. The host (Ho Chi Minh, UTC+7, no DST) has an
+  // unusually early Sunday window so the visible grid straddles that
+  // instant once converted to Berlin: 06:00 host-local (the first
+  // slot) lands at 01:00 Berlin (still UTC+2, pre-transition), 08:00
+  // onward lands at 02:00+ Berlin (already UTC+1).
+  const html = await renderIndex(
+    "http://localhost/?date=2026-10-25&tz=Europe/Berlin",
+    {
+      weeklyAvailability: parseWeeklyAvailability("SUN 06:00-10:00"),
+      bookingHorizonDays: 3650,
+    },
+  );
+  // The header comes from the FIRST slot shown (06:00 host, 01:00
+  // Berlin, UTC+2) — not an arbitrary anchor like noon of the host
+  // day, which would land after the transition (UTC+1) even though no
+  // visible slot at that hour has actually made it there yet.
+  assertEquals(
+    gridHeaderZoneLabel(html),
+    "Berlin, UTC+2",
+    "expected the grid header to come from the first slot's own offset",
+  );
+  // The 06:00 host slot (01:00 Berlin, UTC+2) agrees with the header
+  // it defines, so it shows bare HH:MM only.
+  assert(
+    html.includes('aria-label="01:00, Berlin, UTC+2"'),
+    "expected the first slot's accessible name to carry the header's offset",
+  );
+  assert(
+    />01:00</.test(html),
+    "expected the first slot to show bare HH:MM (its own offset matches the header)",
+  );
+  // The 09:00 host slot (03:00 Berlin, UTC+1) disagrees with the
+  // header, so it shows its own offset inline, alongside its full
+  // accessible name.
+  assert(
+    html.includes('aria-label="03:00, Berlin, UTC+1"'),
+    "expected the post-transition slot's accessible name to carry its own offset",
+  );
+  assert(
+    />03:00, UTC\+1</.test(html),
+    "expected the post-transition slot to show its own offset inline",
   );
 });

@@ -170,10 +170,91 @@ export function formatDateLong(
 // canonicalized first, which the doc comment above doesn't actually
 // promise.
 export function formatClockAt(instant: Date, tz: string): string {
-  const hhmm = hhmmInTz(instant, tz);
-  if (!tz.includes("/")) return `${hhmm}, ${zoneCity(tz)}`;
-  if (isEtcZone(tz)) return `${hhmm}, ${zoneOffsetLabel(tz, instant)}`;
-  return `${hhmm}, ${zoneCity(tz)}, ${zoneOffsetLabel(tz, instant)}`;
+  return `${hhmmInTz(instant, tz)}, ${zoneLabel(tz, instant)}`;
+}
+
+// The zone half of formatClockAt's "HH:MM, City, UTC±N" — "City,
+// UTC±N" (or bare "UTC"/a city-less zone's own name when there's no
+// offset to add, or "UTC-5" for an "Etc/*" zone) — split out so a
+// slot grid can show it once, in its header, instead of repeating it
+// next to every slot's time (mig#48). See formatClockAt's doc comment
+// above for the three cases this mirrors.
+export function zoneLabel(tz: string, at: Date): string {
+  if (!tz.includes("/")) return zoneCity(tz);
+  if (isEtcZone(tz)) return zoneOffsetLabel(tz, at);
+  return `${zoneCity(tz)}, ${zoneOffsetLabel(tz, at)}`;
+}
+
+// Fields formatSlotDisplay below returns for one slot in a grid.
+export interface SlotDisplay {
+  hhmm: string;
+  ariaZoneLabel: string;
+  offsetNote?: string;
+}
+
+/**
+ * Per-slot display fields for a slot grid (mig#48): the grid shows the
+ * zone once, in its header (`formatGridHeader` below), and each slot
+ * shows only its own HH:MM — unless the slot's own UTC offset differs
+ * from the header's (a daylight-saving change landing on one of the
+ * visible slots), in which case `offsetNote` is set and the caller
+ * renders it next to the time so that slot is never ambiguous.
+ * `ariaZoneLabel` is always the slot's own full "City, UTC±N" (its own
+ * offset, not the header's) — callers put it in the slot's accessible
+ * name (e.g. `aria-label`) so a screen reader that jumps straight to
+ * one button still hears the complete time, even though the visible
+ * text only shows HH:MM. `headerOffset` is `formatGridHeader(...)
+ * .offset` — the grid's own header, not an independently computed
+ * value, so a slot's own offset is only ever compared against the
+ * offset actually shown above it.
+ */
+export function formatSlotDisplay(
+  instant: Date,
+  tz: string,
+  headerOffset: string,
+): SlotDisplay {
+  const ownOffset = zoneOffsetLabel(tz, instant);
+  return {
+    hhmm: hhmmInTz(instant, tz),
+    ariaZoneLabel: zoneLabel(tz, instant),
+    offsetNote: ownOffset === headerOffset ? undefined : ownOffset,
+  };
+}
+
+// Fields formatGridHeader below returns for a slot grid's header.
+export interface GridHeader {
+  label: string;
+  offset: string;
+}
+
+/**
+ * The slot grid's header zone (mig#48 review): `label` ("Berlin,
+ * UTC+2") and `offset` ("UTC+2") are always taken from the FIRST
+ * instant in `instants` — the first slot actually shown, in display
+ * order — never an arbitrary anchor like noon of the host day. Noon
+ * can label the header with an offset no visible slot actually has:
+ * a Tokyo host's day starts hours before a New York visitor's own
+ * daylight-saving change, so every slot the visitor sees may already
+ * have converted past it while noon (host time) hadn't reached it yet.
+ * Anchoring on the first displayed slot instead means only a *later*
+ * slot whose own offset disagrees with this one ever shows its own
+ * offset inline (`formatSlotDisplay` above) — matching the grid: the
+ * header is whatever the visitor's first slot reads.
+ *
+ * Pass the host's own zone as `tz` for the "visitor zone not known
+ * yet" fallback (SSR pre-hydration, /embed before its tz redirect) —
+ * same rule, anchored on the host's own clock instead of the
+ * visitor's. Returns `null` when `instants` is empty — no slots to
+ * derive a header from (the "No available times" case, handled by the
+ * caller before it ever needs a header).
+ */
+export function formatGridHeader(
+  instants: Date[],
+  tz: string,
+): GridHeader | null {
+  if (instants.length === 0) return null;
+  const first = instants[0];
+  return { label: zoneLabel(tz, first), offset: zoneOffsetLabel(tz, first) };
 }
 
 // Case-insensitive "Etc/" prefix check — see formatClockAt's doc
