@@ -51,6 +51,7 @@ Rescue them first, before you touch the mount or recreate the container:
 
 ```bash
 docker stop mig
+docker inspect mig --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^CANCEL_SECRET='
 docker cp mig:/data/bookings.json .
 docker rm mig
 sudo mv bookings.json ./data/bookings.json
@@ -62,9 +63,11 @@ directory owned by root when the old container first started, since the old
 instructions never had you create it yourself. Copy to the current directory
 first, then move it in. `docker rm mig` clears the stopped container so the next
 `docker run --name mig ...` (or `docker compose up`) doesn't fail with "name
-already in use". Once the file is in place, apply the mount change below, keep
-the same `CANCEL_SECRET` value your old container used so cancel links already
-sent by email keep working, and redeploy.
+already in use" — but it also destroys the only copy of the old container's
+`CANCEL_SECRET`, which the old README generated inline and never wrote to a
+file, so the `docker inspect` line above prints it first. Put the printed value
+in place of `$(openssl rand -base64 32)` when you redeploy, so cancel links
+already sent by email keep working.
 
 **Everyone: change the mount.** Wherever your `docker run` command or
 `compose.yml` has `./data:/app/data`, change it to `./data:/data:z` — only the
