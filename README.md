@@ -39,6 +39,9 @@ admin UI.
 - You need a team scheduler, payments, or calendar sync
 - You need to scale to thousands of bookings per day
 
+![The standalone booking page: pick a date, then a time slot](docs/booking-page.png)
+_The standalone booking page (`/`) — date on the left, time slots on the right._
+
 ## Features
 
 - **One owner, one URL.** No accounts, no login. Owner defined via `HOST_NAME` +
@@ -230,6 +233,10 @@ on both ends. Comma-separated, whitespace tolerant.
 ```
 
 ## Embedding
+
+![The /embed iframe variant: same booking flow, no header or footer chrome](docs/embed.png)
+_The `/embed` variant — the same flow, stripped of header/footer chrome for
+framing._
 
 Drop the booking flow into another page with an iframe:
 
