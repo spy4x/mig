@@ -76,9 +76,12 @@ stops the container at startup instead of silently hiding the footer.
 loses existing bookings — read the step for your setup before redeploying.
 
 **If you followed the README's `docker run` command or its Docker Compose
-snippet** (no `DATA_PATH` set): your bookings only ever lived inside the old
-container, at `/data/bookings.json` — the `/app/data` mount was never read from.
-Rescue them first, before you touch the mount or recreate the container:
+snippet, or `compose.example.yml` with no `DATA_PATH` in your `.env`:** your
+bookings only ever lived inside the old container, at `/data/bookings.json` —
+the `/app/data` mount was never read from. Without `DATA_PATH` set, the image's
+own `ENV DATA_PATH=/data/bookings.json` (unchanged by this release) applies the
+same way regardless of which of these you followed. Rescue them first, before
+you touch the mount or recreate the container:
 
 ```bash
 docker stop mig
@@ -121,6 +124,12 @@ sudo chown -R 1993:1993 ./data
 ```
 
 and redeploy.
+
+**If you used a named volume instead of a bind mount for that setup**
+(`<volume>:/app/data`, `DATA_PATH` still set): move it the same way — change the
+mount to `<volume>:/data`, drop `DATA_PATH`, then chown the volume with the
+`docker run --rm -v ... alpine chown` command below instead of `sudo chown -R`,
+since there's no host path to chown directly.
 
 **If you're on a Docker named volume** (`-v <volume>:/data`) that mig already
 wrote to before this change: it's still owned by root from the old image, so
