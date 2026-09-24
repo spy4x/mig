@@ -11,7 +11,7 @@
   in flight. /embed never mounts islands (issue #11 — a partial iframe
   allow-list must not depend on a script tag loading), so `basePath !==
   ""` renders a plain <button type="submit"> instead: same label, no
-  spinner, no client-side pre-validation. Server-side Zod is already
+  spinner, no client-side pre-validation. Server-side arktype is already
   the trust boundary either way.
 
   Timezone capture works the same way, split by the same island/no-island
@@ -191,7 +191,7 @@ export function BookingForm({
   Same visual contract as the island's idle state (no spinner, no
   client-side pre-validation, no guestTz capture — those all need
   JS). A real <button type="submit"> works with no script at all;
-  the server's Zod validation is the trust boundary regardless.
+  the server's arktype validation is the trust boundary regardless.
 */
 function PlainSubmitButton({ label }: { label: string }) {
   return (

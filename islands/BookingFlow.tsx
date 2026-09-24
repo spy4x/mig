@@ -86,8 +86,8 @@ interface BookingFlowProps {
 }
 
 // ─── Client-side time helpers ────────────────────────────────────────
-// Use lib/tz.ts directly — it's dependency-free (no zod) and already
-// bundled into the client via Calendar's imports.
+// Use lib/tz.ts directly — it has no validation-library dependency and
+// is already bundled into the client via Calendar's imports.
 
 // Compact "Thu, 28 Aug" used in the mobile SummaryBar. Mirrors
 // TimeCard's display so the two stay in lockstep.
@@ -215,8 +215,8 @@ export default function BookingFlow(props: BookingFlowProps) {
   // committing results — if a newer fetch has been kicked off, the
   // older response is discarded. Without this, rapid date picks
   // (A then B with A responding slower than B) leave `slots.value`
-  // showing A's slots while `date.value === B`. Server Zod catches
-  // any actual booking attempt, but the UX is misleading.
+  // showing A's slots while `date.value === B`. Server-side validation
+  // catches any actual booking attempt, but the UX is misleading.
   let slotsReqToken = 0;
 
   async function fetchSlots(forDate: string): Promise<void> {
