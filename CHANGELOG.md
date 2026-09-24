@@ -93,9 +93,12 @@ first, then move it in. `docker rm mig` clears the stopped container so the next
 `docker run --name mig ...` (or `docker compose up`) doesn't fail with "name
 already in use" — but it also destroys the only copy of the old container's
 `CANCEL_SECRET`, which the old README generated inline and never wrote to a
-file, so the `docker inspect` line above prints it first. Put the printed value
-in place of `$(openssl rand -base64 32)` when you redeploy, so cancel links
-already sent by email keep working.
+file, so the `docker inspect` line above prints it first. Use only the part
+after `CANCEL_SECRET=` as the value — the printed line starts with
+`CANCEL_SECRET=` itself, so pasting the whole thing gives you
+`CANCEL_SECRET=CANCEL_SECRET=...`. Put that value in place of
+`$(openssl rand -base64 32)` when you redeploy, so cancel links already sent by
+email keep working.
 
 **Everyone: change the mount.** Wherever your `docker run` command or
 `compose.yml` has `./data:/app/data`, change it to `./data:/data:z` — only the
