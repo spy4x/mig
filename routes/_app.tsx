@@ -1,5 +1,5 @@
 import { define } from "../lib/utils.ts";
-import { themeBootstrapScript } from "../lib/theme.ts";
+import { parseThemeParam, themeBootstrapScript } from "../lib/theme.ts";
 
 // Default root layout. Wraps every page in <html>+<body> with theme
 // bootstrap, meta tags, and the mig favicon.
@@ -14,15 +14,42 @@ import { themeBootstrapScript } from "../lib/theme.ts";
 // intentionally keep this short — full styles arrive via the
 // Vite-bundled stylesheet.
 
+// mig#44 — /embed's forced theme (`?theme=dark|light`) is read straight
+// from the URL here, not threaded in via route state: it has to be
+// resolved before this shared layout renders <html>, and every route
+// already has `url` in its PageProps for free. `auto` (the default,
+// including no param at all, or any other route) keeps today's
+// behaviour untouched: no server-rendered class, no data-theme, and
+// the same client bootstrap script runs. Scoped to `/embed*` — the
+// standalone site has no such query param and must not start
+// honouring one it never advertised.
+function forcedThemeFor(url: URL): "light" | "dark" | null {
+  if (!url.pathname.startsWith("/embed")) return null;
+  const parsed = parseThemeParam(url.searchParams.get("theme"));
+  return parsed === "auto" ? null : parsed;
+}
+
 export default define.page(function App({ Component, state, url }) {
   const cfg = state.config;
   const title = `Book a meeting with ${cfg.hostName} · mig`;
   const description =
     `${cfg.hostName} — ${cfg.slotDurationMin}-minute video call. Pick a time that works for you.`;
   const canonical = new URL(url.pathname, cfg.publicUrl).toString();
+  const forcedTheme = forcedThemeFor(url);
 
   return (
-    <html lang="en" class="h-full antialiased">
+    <html
+      lang="en"
+      class={`h-full antialiased${forcedTheme === "dark" ? " dark" : ""}`}
+      data-theme={forcedTheme ?? undefined}
+      // mig#44 review: the meta color-scheme tag below stays "light
+      // dark" (the page's default supported schemes); this inline
+      // style is what actually pins native UI — scrollbars, form
+      // control and autofill chrome — to the one scheme this document
+      // renders in once a theme is forced, the same way `class="dark"`
+      // pins Tailwind's own tokens.
+      style={forcedTheme ? `color-scheme: ${forcedTheme}` : undefined}
+    >
       <head>
         <meta charset="utf-8" />
         <meta
@@ -82,7 +109,18 @@ html,body{margin:0;background:var(--color-surface);color:var(--color-ink);font-f
              and injected by Fresh's runtime at <link rel="stylesheet"
              href="/assets/styles-…css">. No manual link needed. */
         }
-        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript() }} />
+        {
+          /* mig#44 — skipped when the theme is already forced: the
+             <html> attributes above already applied it server-side,
+             with no flash, and this script would otherwise read
+             localStorage/prefers-color-scheme and overwrite it on the
+             very first paint. */
+        }
+        {forcedTheme === null && (
+          <script
+            dangerouslySetInnerHTML={{ __html: themeBootstrapScript() }}
+          />
+        )}
       </head>
       <body class="h-full min-h-dvh">
         <a

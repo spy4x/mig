@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `/embed?theme=dark|light` forces the embed's theme instead of following the
+  visitor's own OS (an iframe's `prefers-color-scheme` never saw the host page's
+  theme), and every page `/embed` renders now posts its actual content height to
+  the parent via `postMessage`, growing or shrinking as the flow's content does,
+  so the frame can be sized to fit instead of carrying a fixed height that clips
+  a step or leaves an empty band under a shorter one (#44).
+
 ### Changed
 
 - Slot buttons in the time grid show only the time; the timezone (city and UTC

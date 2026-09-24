@@ -27,10 +27,14 @@ interface TimeCardProps {
   /** The visitor's IANA zone, once known (mig#15) — threaded onto the
    *  Change link so /embed's tz query param survives. */
   tz?: string | null;
+  /** /embed's forced theme, once known (mig#44) — threaded onto the
+   *  Change link so /embed's theme query param survives. `null` for
+   *  "auto" (the default), which adds nothing to the link. */
+  theme?: string | null;
 }
 
 export function TimeCard(
-  { date, slot, dateLabel, displaySlot, onClear, basePath = "", tz }:
+  { date, slot, dateLabel, displaySlot, onClear, basePath = "", tz, theme }:
     TimeCardProps,
 ) {
   const shownSlot = displaySlot ?? slot;
@@ -69,7 +73,7 @@ export function TimeCard(
         )
         : (
           <a
-            href={pickerHref(basePath, { date }, tz)}
+            href={pickerHref(basePath, { date }, tz, theme)}
             aria-label="Change time"
             class={changeClass}
           >

@@ -81,6 +81,12 @@ interface PickerProps {
    *  of on every slot. Omit/`null` while the display zone isn't known
    *  yet (host-timezone fallback). */
   zoneLabel?: string | null;
+  /** /embed's forced theme, once known (mig#44) — threaded onto every
+   *  link/form this component renders, and into BookingForm's hidden
+   *  `theme` field, so /embed's `?theme=` query param survives the
+   *  whole flow. `null` for "auto" (the default), which adds nothing
+   *  to any link. */
+  theme?: string | null;
 }
 
 export function Picker(props: PickerProps) {
@@ -101,6 +107,7 @@ export function Picker(props: PickerProps) {
     displaySlot,
     slotDateLabel,
     zoneLabel,
+    theme,
   } = props;
 
   const slotsByDate: Record<string, number> = {};
@@ -151,6 +158,7 @@ export function Picker(props: PickerProps) {
                 dateLabel={selectedDateLabel ?? selectedDate!}
                 basePath={basePath}
                 tz={tz}
+                theme={theme}
               />
             )
             : (
@@ -163,6 +171,7 @@ export function Picker(props: PickerProps) {
                 hostTz={hostTz}
                 basePath={basePath}
                 tz={tz}
+                theme={theme}
               />
             )}
         </div>
@@ -190,6 +199,7 @@ export function Picker(props: PickerProps) {
                   displaySlot={displaySlot ?? undefined}
                   basePath={basePath}
                   tz={tz}
+                  theme={theme}
                 />
               )
               : slots.length > 0
@@ -202,6 +212,7 @@ export function Picker(props: PickerProps) {
                   basePath={basePath}
                   tz={tz}
                   zoneLabel={zoneLabel}
+                  theme={theme}
                 />
               )
               : (
@@ -233,6 +244,7 @@ export function Picker(props: PickerProps) {
               confirmLabel={confirmLabel ?? `Confirm — ${selectedSlot}`}
               basePath={basePath}
               guestTz={tz}
+              theme={theme}
             />
           </div>
         </section>

@@ -16,6 +16,11 @@ import {
   zonedDateTime,
 } from "../../lib/tz.ts";
 import { embedTzRedirectScript } from "../../lib/guest-tz-script.ts";
+import { parseThemeParam } from "../../lib/theme.ts";
+import {
+  HEIGHT_ATTR,
+  heightReportScript,
+} from "../../lib/height-report-script.ts";
 
 interface DateCell {
   date: string;
@@ -72,6 +77,14 @@ export interface EmbedData {
    *  picked yet, or the picked day has no slots (there's no grid to
    *  label). */
   zoneLabel: string | null;
+  /** /embed's forced theme (mig#44), parsed from `?theme=` and
+   *  normalized so "auto" (missing, invalid, or explicitly "auto")
+   *  becomes `null` — the same shape `tz` already has, so it threads
+   *  through `pickerHref` and BookingForm's hidden field the same
+   *  way. `routes/_app.tsx` reads the raw query param itself to apply
+   *  the theme before first paint; this is only for carrying the
+   *  choice forward through the rest of the flow. */
+  theme: "light" | "dark" | null;
 }
 
 function parseDateParam(v: string | null): string | null {
@@ -135,6 +148,12 @@ export const handler = define.handlers({
     // back to `null` (host zone), never an error page.
     const tz = canonicalValidTimeZoneOrNull(url.searchParams.get("tz"));
     const displayTz = tz ?? cfg.hostTz;
+
+    // Forced theme (mig#44) — normalized to null for "auto" so it
+    // threads through pickerHref/BookingForm the same way `tz` does
+    // (see the EmbedData.theme doc comment).
+    const themeParam = parseThemeParam(url.searchParams.get("theme"));
+    const theme = themeParam === "auto" ? null : themeParam;
 
     const minStart = minStartInstant(cfg.minNoticeHours);
     const today = isoDateInTz(new Date(), cfg.hostTz);
@@ -262,6 +281,7 @@ export const handler = define.handlers({
         error,
         tz,
         zoneLabel: gridZoneLabel,
+        theme,
       },
     };
   },
@@ -271,8 +291,12 @@ export const handler = define.handlers({
   Embed variant — used inside an <iframe> on someone else's site.
 
   Differences from /:
-    - No header chrome, no footer, no theme toggle (parent page owns
-      the theme; the iframe inherits its color-scheme automatically).
+    - No header chrome, no footer, no theme toggle (the parent page
+      picks the theme via `?theme=`, not the iframe's own
+      prefers-color-scheme — an iframe's `prefers-color-scheme`
+      follows the *visitor's* OS, not the embedding page, so it never
+      actually matched a dark host page on its own; see mig#44 and
+      routes/_app.tsx).
     - No island: the Picker renders plain <a href> / <form> — every
       link and the booking form action stay under /embed (basePath
       below), so a host that only allows framing /embed never gets
@@ -284,9 +308,16 @@ export const handler = define.handlers({
       script that redirects once to the same URL with the visitor's
       detected zone appended — see lib/guest-tz-script.ts for why a
       query param was chosen over a cookie.
+    - Theme (mig#44): `?theme=dark|light` forces that theme (applied
+      before first paint by routes/_app.tsx); `?theme=auto` or no
+      param keeps today's behaviour. Every link and the confirm form
+      carry the forced theme forward the same way `tz` does — see
+      lib/picker-links.ts and BookingForm's hidden `theme` field.
 
-  Auto-sizing: the parent page should set `style="width:100%;max-width:36rem"`
-  on the iframe and listen to postMessage if they want dynamic height.
+  Auto-sizing (mig#44): every /embed page posts its content height to
+  `window.parent` via `postMessage` (lib/height-report-script.ts) —
+  the parent page listens and sets the iframe's height from it. See
+  the README's Embedding section for the parent-side listener.
 */
 export default define.page<typeof handler>(function Embed({ data, state }) {
   const {
@@ -300,6 +331,7 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
     error,
     tz,
     zoneLabel: gridZoneLabel,
+    theme,
   } = data;
   const cfg = state.config;
   const displayTz = tz ?? cfg.hostTz;
@@ -330,7 +362,13 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
     : null;
 
   return (
-    <div class="min-h-dvh bg-surface text-ink">
+    // data-mig-height (mig#44, HEIGHT_ATTR) marks the element
+    // heightReportScript measures — its own getBoundingClientRect(),
+    // not the document's scrollHeight, so a step that shrinks (e.g.
+    // Change back to the date step) reports a smaller height instead
+    // of a high-water mark. See lib/height-report-script.ts's header
+    // comment for the full reasoning.
+    <div class="bg-surface text-ink" {...{ [HEIGHT_ATTR]: "" }}>
       {
         /* mig#15 — always emitted; the script itself only redirects
            when the browser's detected zone doesn't already match the
@@ -340,6 +378,15 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
       }
       <script
         dangerouslySetInnerHTML={{ __html: embedTzRedirectScript() }}
+      />
+      {
+        /* mig#44 — reports this page's content height to the parent
+           on load and on every resize, so the parent can size the
+           iframe to fit instead of carrying a fixed height that clips
+           the confirm step. See lib/height-report-script.ts. */
+      }
+      <script
+        dangerouslySetInnerHTML={{ __html: heightReportScript() }}
       />
       <main id="main" class="px-4 sm:px-5 py-4 sm:py-5">
         {
@@ -376,6 +423,7 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
           displaySlot={displaySlot}
           slotDateLabel={slotDateLabel}
           zoneLabel={gridZoneLabel}
+          theme={theme}
         />
       </main>
     </div>

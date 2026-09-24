@@ -413,6 +413,215 @@ Deno.test("mig#15 review: a validation failure keeps slot and tz on the redirect
   await rm(path);
 });
 
+// ─── mig#44: theme survives every redirect ────────────────────────────
+
+Deno.test("mig#44: a successful embed booking keeps the forced theme on the redirect", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    fields: validFields(date, "09:00", { theme: "dark" }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "/embed");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  assertEquals(url.pathname, "/embed/confirmed");
+  assertEquals(url.searchParams.get("theme"), "dark");
+  await rm(path);
+});
+
+Deno.test("mig#44: a validation failure keeps the forced theme on the redirect", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    fields: validFields(date, "09:00", { name: "", theme: "light" }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "/embed");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  assertEquals(url.searchParams.get("theme"), "light");
+  await rm(path);
+});
+
+Deno.test("mig#44: a rate-limited redirect keeps the forced theme", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  // max: 1 — same setup as "a rate-limited redirect keeps date and
+  // tz" above: the first submission consumes the only slot in the
+  // window, so the second one is the one that gets rate-limited.
+  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 1 });
+  const fields = validFields(date, "09:00", { theme: "dark" });
+
+  const first = await handleBookingSubmit(
+    stubContext({ config: cfg, bookings, rateLimiter, fields }),
+    "/embed",
+  );
+  assertEquals(first.status, 303);
+
+  const second = await handleBookingSubmit(
+    stubContext({ config: cfg, bookings, rateLimiter, fields }),
+    "/embed",
+  );
+  assertEquals(second.status, 303);
+  const url = new URL(second.headers.get("location")!);
+  assertEquals(url.searchParams.get("theme"), "dark");
+  await rm(path);
+});
+
+Deno.test("mig#44: honeypot redirect keeps the forced theme", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    fields: validFields(date, "09:00", {
+      website: "http://spam.example",
+      theme: "dark",
+    }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "/embed");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  assertEquals(url.searchParams.get("theme"), "dark");
+  await rm(path);
+});
+
+Deno.test("mig#44: no theme field on the form means no theme param on the redirect (standalone)", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    fields: validFields(date, "09:00"),
+  });
+
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  assertEquals(url.searchParams.has("theme"), false);
+  await rm(path);
+});
+
+Deno.test("mig#44: a slot-taken conflict keeps the forced theme on the redirect", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  // Same setup as "a slot-taken conflict drops slot from the redirect"
+  // above: pre-populate the exact slot so Phase 1's conflict check is
+  // the one that fires.
+  await bookings.mutate((draft) => {
+    draft.push({
+      id: "01EXISTING",
+      createdAt: new Date().toISOString(),
+      date,
+      time: "09:00",
+      hostTz: HOST_TZ,
+      guestName: "Someone Else",
+      guestEmail: "else@example.com",
+      cancelTokenHash: "h",
+      status: "active",
+    });
+  });
+  try {
+    const ctx = stubContext({
+      config: cfg,
+      bookings,
+      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      fields: validFields(date, "09:00", { theme: "dark" }),
+    });
+
+    const res = await handleBookingSubmit(ctx, "/embed");
+    assertEquals(res.status, 303);
+    const url = new URL(res.headers.get("location")!);
+    assertEquals(url.searchParams.get("theme"), "dark");
+  } finally {
+    await rm(path);
+  }
+});
+
+Deno.test("mig#44: an email-send failure keeps the forced theme on the rollback redirect", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  setTransportForTesting(failingTransport("SMTP send failed (mig#44 test)"));
+
+  try {
+    const ctx = stubContext({
+      config: cfg,
+      bookings,
+      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      fields: validFields(date, "09:00", { theme: "light" }),
+    });
+
+    const res = await handleBookingSubmit(ctx, "/embed");
+    assertEquals(res.status, 303);
+    const url = new URL(res.headers.get("location")!);
+    assertEquals(url.searchParams.get("theme"), "light");
+  } finally {
+    setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+Deno.test("mig#44: a minimum-notice failure ('That time is no longer available.') keeps the forced theme on the redirect", async () => {
+  // Triggers lib/book.ts's `slotInstant < minStart` branch specifically
+  // — not the conflict, availability, or blocked-date checks below it
+  // — by setting minNoticeHours far longer than how far ahead the
+  // picked date actually is (3 days). date/slot themselves are still
+  // schema-valid and within MON-FRI 09:00-17:00, so this is the first
+  // and only check that fails.
+  const cfg = { ...fakeConfig(), minNoticeHours: 24 * 10 };
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    fields: validFields(date, "09:00", { theme: "dark" }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "/embed");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  assertEquals(
+    url.searchParams.get("err"),
+    "That time is no longer available.",
+  );
+  assertEquals(url.searchParams.get("theme"), "dark");
+  await rm(path);
+});
+
 Deno.test("an availability failure drops slot but keeps date and tz on the redirect", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();

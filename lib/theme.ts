@@ -8,6 +8,18 @@
 // server. `data-theme` is also set on <html> for any consumer that wants
 // to react to it via CSS attribute selectors.
 
+export type ThemeParam = "light" | "dark" | "auto";
+
+/** Parses `/embed`'s `?theme=` query param (mig#44). Anything other
+ *  than exactly `"light"` or `"dark"` — missing, empty, or any other
+ *  string — resolves to `"auto"`, today's default behaviour (stored
+ *  preference, then `prefers-color-scheme`; see `themeBootstrapScript`
+ *  below). The raw value is never reflected back into the page
+ *  unescaped: only this parsed, three-way result is ever used. */
+export function parseThemeParam(raw: string | null): ThemeParam {
+  return raw === "light" || raw === "dark" ? raw : "auto";
+}
+
 export function themeBootstrapScript(): string {
   return `(function(){try{
 var K="mig-theme";
