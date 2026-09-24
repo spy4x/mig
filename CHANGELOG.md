@@ -77,12 +77,12 @@ updater, until you've done the upgrade steps below.
 
 ### Security
 
-- No startup error prints the value it was given any more. `HOST_NAME`,
-  `MEETING_URL` and every other arktype-validated setting already named the bad
-  variable and the rule instead, e.g. `HOST_NAME: is not set`; `HOST_TZ`,
-  `WEEKLY_AVAILABILITY` and `BLOCKED_DATES` were the exceptions and now do the
-  same, plus the position of the bad entry for the two lists and the expected
-  shape, e.g. `HOST_TZ: is not a valid IANA time zone`,
+- No startup error prints the value it was given any more. Up to 0.3.4, a bad
+  setting could echo its value into the container log, for example `THEME`,
+  `HOST_TZ`, a `WEEKLY_AVAILABILITY` entry or a `BLOCKED_DATES` date. Errors now
+  name the variable and the rule, plus the position of the bad entry for the two
+  list settings: `HOST_NAME: is not set`,
+  `HOST_TZ: is not a valid IANA time zone`,
   `WEEKLY_AVAILABILITY: entry 2: unknown day` (#36, #41).
 
 **Upgrade note.** Changing only the image, without also changing your mount,
