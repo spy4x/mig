@@ -22,6 +22,7 @@ import type { State } from "../../lib/utils.ts";
 import type { Config } from "../../lib/types.ts";
 import type { ConfirmedData } from "../../lib/confirmed-data.ts";
 import { Picker } from "../../components/Picker.tsx";
+import { HEIGHT_ATTR } from "../../lib/height-report-script.ts";
 import EmbedPage, { type EmbedData } from "./index.tsx";
 import EmbedConfirmedPage from "./confirmed.tsx";
 import ConfirmedPage from "../confirmed.tsx";
@@ -108,6 +109,7 @@ function embedData(overrides: Partial<EmbedData>): EmbedData {
     error: null,
     tz: null,
     zoneLabel: null,
+    theme: null,
     ...overrides,
   };
 }
@@ -483,6 +485,131 @@ Deno.test("mig#15: no tz known yet (missing or invalid) — links have no tz par
   );
 });
 
+// ─── mig#44: forced theme survives navigation ─────────────────────
+
+Deno.test("mig#44: every picker link carries theme once forced", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slots: SLOTS,
+        theme: "dark",
+      }))}
+    />,
+  );
+  const links = [
+    ...anchors(html).map((a) => a.href),
+    ...formActions(html),
+  ];
+  assert(links.length > 0, "expected at least one link to check");
+  for (const link of links) {
+    assert(
+      link.includes("theme=dark") || link === "/embed/book",
+      `expected "${link}" to carry theme= (form actions never carry query params)`,
+    );
+  }
+});
+
+Deno.test("mig#44: theme=auto adds no theme param to any link — today's URLs don't change", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slots: SLOTS,
+        theme: null, // routes/embed/index.tsx normalizes "auto" to null
+      }))}
+    />,
+  );
+  const links = anchors(html).map((a) => a.href);
+  for (const link of links) {
+    assertFalse(
+      link.includes("theme="),
+      `expected "${link}" to carry no theme param`,
+    );
+  }
+});
+
+Deno.test("mig#44: step 1 (calendar) — date cells and prev/next month links carry theme once forced", () => {
+  // Regression guard for Calendar.tsx specifically: date cells and the
+  // prev/next month arrows are only reachable when no date is picked
+  // yet — the blanket "every picker link" test above always picks a
+  // date, so it never exercises this component's own theme threading
+  // (same reasoning as mig#15's equivalent tz-threading test below).
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({ theme: "dark" }))}
+    />,
+  );
+  const dateLinks = anchors(html).map((a) => a.href).filter((h) =>
+    /[?&]date=/.test(h)
+  );
+  const monthLinks = anchors(html).map((a) => a.href).filter((h) =>
+    /[?&]month=/.test(h)
+  );
+  assert(dateLinks.length > 0, "expected at least one calendar date link");
+  assert(monthLinks.length > 0, "expected at least one month-nav link");
+  for (const link of [...dateLinks, ...monthLinks]) {
+    assert(link.includes("theme=dark"), `expected "${link}" to carry theme=`);
+  }
+});
+
+Deno.test("mig#44: the confirm form carries a hidden theme field once forced", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slot: "09:00",
+        slots: SLOTS,
+        theme: "dark",
+      }))}
+    />,
+  );
+  const inputTag = html.match(/<input[^>]*name="theme"[^>]*>/)?.[0];
+  assert(inputTag, "expected a hidden theme input");
+  assertEquals(attr(inputTag!, "value"), "dark");
+});
+
+Deno.test("mig#44: the confirm form has no hidden theme field when theme is auto", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slot: "09:00",
+        slots: SLOTS,
+        theme: null,
+      }))}
+    />,
+  );
+  assertFalse(html.includes('name="theme"'));
+});
+
+Deno.test("mig#44: /embed/confirmed's 'Book another time' link carries the forced theme", () => {
+  const req = new Request("http://localhost/embed/confirmed?theme=dark");
+  const props = {
+    ...fakePageProps(confirmedData({ mode: "cancelled" })),
+    url: new URL(req.url),
+    req,
+  };
+  const html = renderToString(<EmbedConfirmedPage {...props} />);
+  const back = anchors(html).find((a) => a.href.startsWith("/embed"));
+  assert(back, "expected a link back to /embed");
+  assertEquals(back!.href, "/embed?theme=dark");
+});
+
+Deno.test("mig#44: /embed/confirmed's back link has no theme param when theme is auto", () => {
+  const html = renderToString(
+    <EmbedConfirmedPage
+      {...fakePageProps(confirmedData({ mode: "cancelled" }))}
+    />,
+  );
+  const back = anchors(html).find((a) => a.href.startsWith("/embed"));
+  assertEquals(back?.href, "/embed");
+});
+
 Deno.test("embed picker: month navigation links stay under /embed", () => {
   const html = renderToString(
     <EmbedPage {...fakePageProps(embedData({ monthAnchor: "2027-02-01" }))} />,
@@ -726,6 +853,91 @@ Deno.test("standalone confirmed page's cancelled state keeps its original paddin
   assertFalse(
     html.includes('class="flex-1 grid place-items-center px-4 sm:px-6 py-12"'),
   );
+});
+
+// ─── mig#44 review round 3: height-report wiring ──────────────────────
+// The auto-resize fix depends on exactly one element per /embed page
+// carrying `data-mig-height` (HEIGHT_ATTR) — the element
+// lib/height-report-script.ts measures — and on that element never
+// carrying a class that ties its own height to the iframe's current
+// viewport (`min-h-dvh`/`min-h-screen`/`h-full`), which is what turned
+// the reported height into a high-water mark before this fix (see
+// lib/height-report-script.ts's file header comment). These tests
+// check the actually-rendered markup for both properties, on every
+// /embed and /embed/confirmed state.
+
+function heightMarkedTags(html: string): string[] {
+  const re = new RegExp(`<[a-z0-9]+\\b[^>]*\\b${HEIGHT_ATTR}\\b[^>]*>`, "gi");
+  return html.match(re) ?? [];
+}
+
+const FORBIDDEN_HEIGHT_CLASSES = ["min-h-dvh", "min-h-screen", "h-full"];
+
+function assertHeightWrapper(html: string, label: string) {
+  const tags = heightMarkedTags(html);
+  assertEquals(
+    tags.length,
+    1,
+    `${label}: expected exactly one [${HEIGHT_ATTR}] element, got ${tags.length}`,
+  );
+  assert(
+    html.includes("mig:height"),
+    `${label}: expected the height-report script (posts "mig:height")`,
+  );
+  const cls = attr(tags[0], "class") ?? "";
+  const tokens = cls.split(/\s+/).filter(Boolean);
+  for (const forbidden of FORBIDDEN_HEIGHT_CLASSES) {
+    assertFalse(
+      tokens.includes(forbidden),
+      `${label}: expected the marked wrapper's class list to omit "${forbidden}" (got "${cls}")`,
+    );
+  }
+}
+
+Deno.test("mig#44: /embed date step — one data-mig-height wrapper, height script present, no forced min-height class", () => {
+  const html = renderToString(
+    <EmbedPage {...fakePageProps(embedData({}))} />,
+  );
+  assertHeightWrapper(html, "date step");
+});
+
+Deno.test("mig#44: /embed confirm step — one data-mig-height wrapper, height script present, no forced min-height class", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slot: "09:00",
+        slots: SLOTS,
+      }))}
+    />,
+  );
+  assertHeightWrapper(html, "confirm step");
+});
+
+Deno.test("mig#44: /embed/confirmed booked state — one data-mig-height wrapper, height script present, no forced min-height class", () => {
+  const html = renderToString(
+    <EmbedConfirmedPage {...fakePageProps(confirmedData({}))} />,
+  );
+  assertHeightWrapper(html, "confirmed (booked)");
+});
+
+Deno.test("mig#44: /embed/confirmed cancelled state — one data-mig-height wrapper, height script present, no forced min-height class", () => {
+  const html = renderToString(
+    <EmbedConfirmedPage
+      {...fakePageProps(confirmedData({ mode: "cancelled" }))}
+    />,
+  );
+  assertHeightWrapper(html, "confirmed (cancelled)");
+});
+
+Deno.test("mig#44: /embed/confirmed not-found state — one data-mig-height wrapper, height script present, no forced min-height class", () => {
+  const html = renderToString(
+    <EmbedConfirmedPage
+      {...fakePageProps(confirmedData({ state: "missing", booking: null }))}
+    />,
+  );
+  assertHeightWrapper(html, "confirmed (not-found)");
 });
 
 // ─── Structural guard ────────────────────────────────────────────────

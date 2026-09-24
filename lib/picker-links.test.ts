@@ -49,6 +49,27 @@ Deno.test("pickerHref: omits tz when none is known", () => {
   );
 });
 
+Deno.test("pickerHref: carries a forced theme", () => {
+  assertEquals(
+    pickerHref("/embed", { date: "2026-09-21" }, null, "dark"),
+    "/embed?date=2026-09-21&theme=dark",
+  );
+});
+
+Deno.test("pickerHref: omits theme when auto (null) — today's URLs don't change", () => {
+  assertEquals(
+    pickerHref("/embed", { date: "2026-09-21" }, null, null),
+    "/embed?date=2026-09-21",
+  );
+});
+
+Deno.test("pickerHref: carries both tz and a forced theme", () => {
+  assertEquals(
+    pickerHref("/embed", { date: "2026-09-21" }, "America/New_York", "light"),
+    "/embed?date=2026-09-21&tz=America%2FNew_York&theme=light",
+  );
+});
+
 Deno.test("pickerPushAddress: an address built for a visitor with a known zone carries tz", () => {
   assertEquals(
     pickerPushAddress(

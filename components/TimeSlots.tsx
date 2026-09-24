@@ -99,6 +99,10 @@ interface TimeSlotsProps {
    *  against this (see `SlotCell.offsetNote`). Omit/`null` while the
    *  display zone isn't known yet. */
   zoneLabel?: string | null;
+  /** /embed's forced theme, once known (mig#44) — threaded onto every
+   *  slot's `<a href>` so /embed's theme query param survives. `null`
+   *  for "auto" (the default), which adds nothing to the link. */
+  theme?: string | null;
 }
 
 type Period = "morning" | "afternoon" | "evening";
@@ -149,6 +153,7 @@ export function TimeSlots(
     basePath = "",
     tz,
     zoneLabel,
+    theme,
   }: TimeSlotsProps,
 ) {
   if (slots.length === 0) {
@@ -186,6 +191,7 @@ export function TimeSlots(
                   onSelect={onSelectSlot}
                   basePath={basePath}
                   tz={tz}
+                  theme={theme}
                 />
               ))}
             </div>
@@ -197,13 +203,14 @@ export function TimeSlots(
 }
 
 function SlotButton(
-  { date, slot, selected, onSelect, basePath, tz }: {
+  { date, slot, selected, onSelect, basePath, tz, theme }: {
     date: string;
     slot: SlotCell;
     selected: boolean;
     onSelect?: (date: string, slot: string) => void;
     basePath: string;
     tz?: string | null;
+    theme?: string | null;
   },
 ) {
   const base =
@@ -295,7 +302,7 @@ function SlotButton(
 
   return (
     <a
-      href={pickerHref(basePath, { date, slot: slot.time }, tz)}
+      href={pickerHref(basePath, { date, slot: slot.time }, tz, theme)}
       aria-label={fullLabel}
       class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
     >

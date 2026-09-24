@@ -50,12 +50,13 @@ export async function handleBookingSubmit(
 
   function errRedirect(
     message: string,
-    state?: { date?: string; slot?: string; tz?: string },
+    state?: { date?: string; slot?: string; tz?: string; theme?: string },
   ): Response {
     const params = new URLSearchParams({ err: message });
     if (state?.date) params.set("date", state.date);
     if (state?.slot) params.set("slot", state.slot);
     if (state?.tz) params.set("tz", state.tz);
+    if (state?.theme) params.set("theme", state.theme);
     return Response.redirect(
       new URL(`${formPath(basePath)}?${params.toString()}`, cfg.publicUrl)
         .toString(),
@@ -90,9 +91,17 @@ export async function handleBookingSubmit(
   // straight into the redirect's `Location` header. Capped here, not
   // just left to the redirect target's own route to re-reject, so the
   // header itself never grows past a form value's worth of junk.
+  // theme (mig#44): same raw-passthrough, capped-length treatment as
+  // date/tz — /embed's BookingForm only ever sends "light" or "dark"
+  // (never "auto", which renders no hidden field at all), and
+  // routes/embed/index.tsx re-validates whatever comes back through
+  // lib/theme.ts's parseThemeParam, falling back to "auto" for
+  // anything else — so passing the raw value through here never
+  // bypasses that.
   const redirectDateTz = {
     date: capRedirectField(String(form.get("date") || "") || undefined),
     tz: capRedirectField(String(form.get("guestTz") || "") || undefined),
+    theme: capRedirectField(String(form.get("theme") || "") || undefined),
   };
   const redirectState = {
     ...redirectDateTz,
@@ -128,13 +137,13 @@ export async function handleBookingSubmit(
   if (input.website.trim() !== "") {
     // Redirect to confirmed with a fake id; no email sent, no booking created.
     // Bots think they succeeded and go away.
-    return Response.redirect(
-      new URL(
-        `${basePath}/confirmed?id=fake&token=fake`,
-        cfg.publicUrl,
-      ).toString(),
-      303,
-    );
+    const fakeUrl = new URL(`${basePath}/confirmed`, cfg.publicUrl);
+    fakeUrl.searchParams.set("id", "fake");
+    fakeUrl.searchParams.set("token", "fake");
+    if (redirectDateTz.theme) {
+      fakeUrl.searchParams.set("theme", redirectDateTz.theme);
+    }
+    return Response.redirect(fakeUrl.toString(), 303);
   }
 
   // Sanity: slot must be within availability, not booked, not in the past.
@@ -355,11 +364,11 @@ export async function handleBookingSubmit(
   // (subject to NTFY_MODE in lib/notify.ts).
   await notifyBookingSucceeded(cfg, booking);
 
-  return Response.redirect(
-    new URL(
-      `${basePath}/confirmed?id=${bookingId}&token=${tokenRaw}`,
-      cfg.publicUrl,
-    ).toString(),
-    303,
-  );
+  const successUrl = new URL(`${basePath}/confirmed`, cfg.publicUrl);
+  successUrl.searchParams.set("id", bookingId);
+  successUrl.searchParams.set("token", tokenRaw);
+  if (redirectDateTz.theme) {
+    successUrl.searchParams.set("theme", redirectDateTz.theme);
+  }
+  return Response.redirect(successUrl.toString(), 303);
 }

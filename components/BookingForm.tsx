@@ -55,6 +55,14 @@ interface BookingFormProps {
    *  has no query-param zone and relies on the BookingSubmit island
    *  instead. */
   guestTz?: string | null;
+  /** /embed's forced theme, once known (mig#44) — carried as a hidden
+   *  `theme` field so a redirect back to /embed after a failed
+   *  submission (lib/book.ts's errRedirect) still knows which theme to
+   *  force. `null` for "auto" (the default), which renders no hidden
+   *  field — a request that never named a theme shouldn't gain one on
+   *  its first failure. Ignored on the standalone page (no embed
+   *  theme to carry). */
+  theme?: string | null;
 }
 
 export function BookingForm({
@@ -67,6 +75,7 @@ export function BookingForm({
   confirmLabel,
   basePath = "",
   guestTz,
+  theme,
 }: BookingFormProps) {
   const embed = basePath !== "";
   const action = embed ? `${basePath}/book` : "/api/book";
@@ -88,6 +97,7 @@ export function BookingForm({
       >
         <input type="hidden" name="date" value={date} />
         <input type="hidden" name="slot" value={slot} />
+        {embed && theme && <input type="hidden" name="theme" value={theme} />}
 
         {error && (
           <div

@@ -20,15 +20,24 @@ export function pickerPath(basePath: string): string {
  *  every link the picker renders carries it forward, so /embed stays
  *  in the visitor's timezone across the whole flow without a cookie
  *  (see lib/guest-tz-script.ts for why a query param was chosen over
- *  one). Omit it (or pass null/undefined) before the zone is known. */
+ *  one). Omit it (or pass null/undefined) before the zone is known.
+ *
+ *  `theme` (mig#44) is /embed's forced theme, once known — the
+ *  caller has already resolved `?theme=auto` (the default) to
+ *  `null`, so this only ever writes `"light"` or `"dark"` onto the
+ *  link, keeping a today's-URL, `auto` request unchanged. Threaded
+ *  the same way as `tz`, so the forced theme survives every step of
+ *  the embed flow. */
 export function pickerHref(
   basePath: string,
   params?: Record<string, string>,
   tz?: string | null,
+  theme?: string | null,
 ): string {
   const path = pickerPath(basePath);
   const merged: Record<string, string> = { ...params };
   if (tz) merged.tz = tz;
+  if (theme) merged.theme = theme;
   if (Object.keys(merged).length === 0) return path;
   return `${path}?${new URLSearchParams(merged).toString()}`;
 }

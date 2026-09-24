@@ -26,10 +26,14 @@ interface DateCardProps {
   /** The visitor's IANA zone, once known (mig#15) — threaded onto the
    *  Change link so /embed's tz query param survives. */
   tz?: string | null;
+  /** /embed's forced theme, once known (mig#44) — threaded onto the
+   *  Change link so /embed's theme query param survives. `null` for
+   *  "auto" (the default), which adds nothing to the link. */
+  theme?: string | null;
 }
 
 export function DateCard(
-  { dateLabel, onClear, basePath = "", tz }: DateCardProps,
+  { dateLabel, onClear, basePath = "", tz, theme }: DateCardProps,
 ) {
   // Focus styles live on the outer <button>/<a> (the actual focusable
   // element). Earlier refactor wrapped the inner <span> in an outer
@@ -68,7 +72,7 @@ export function DateCard(
         )
         : (
           <a
-            href={pickerHref(basePath, undefined, tz)}
+            href={pickerHref(basePath, undefined, tz, theme)}
             aria-label="Change date"
             class={changeClass}
           >
