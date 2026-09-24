@@ -58,7 +58,7 @@ async function runConfig(
         "--allow-env",
         "--allow-read",
         "--config",
-        DENO_CONFIG_PATH.pathname,
+        decodeURIComponent(DENO_CONFIG_PATH.pathname),
         CONFIG_SCRIPT_PATH.href,
       ],
       cwd,
@@ -91,7 +91,7 @@ async function runConfigField(
         // (CI's and the Dockerfile's version) rejects
         // `--allow-env`/`--allow-read` here as unrecognized arguments.
         "--config",
-        DENO_CONFIG_PATH.pathname,
+        decodeURIComponent(DENO_CONFIG_PATH.pathname),
         `const { config } = await import(${
           JSON.stringify(CONFIG_SCRIPT_PATH.href)
         }); console.log(JSON.stringify(config.${field}))`,
