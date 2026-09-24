@@ -17,7 +17,8 @@ Deno.test("renders a slot's date note at opacity-80, not opacity-70", () => {
       slots={[{
         time: "09:00",
         available: true,
-        displayTime: "23:00, Auckland, UTC+13",
+        displayHHMM: "23:00",
+        ariaZoneLabel: "Auckland, UTC+13",
         dateNote: "Wed 23 Sep",
       }]}
       onSelectSlot={() => {}}
@@ -46,4 +47,100 @@ Deno.test("renders no date note when the slot's day matches the picked date", ()
   );
 
   assertEquals(html.includes("opacity-80"), false);
+});
+
+// ─── mig#48 review: accessible name includes the date note ──────────
+
+Deno.test("a bookable slot's aria-label ends with its date note", () => {
+  const html = renderToString(
+    <TimeSlots
+      date="2026-09-23"
+      dateLabel="Wednesday, 23 September 2026"
+      slots={[{
+        time: "09:00",
+        available: true,
+        displayHHMM: "23:00",
+        ariaZoneLabel: "Auckland, UTC+13",
+        dateNote: "Wed 23 Sep",
+      }]}
+      onSelectSlot={() => {}}
+    />,
+  );
+
+  assert(
+    html.includes('aria-label="23:00, Auckland, UTC+13, Wed 23 Sep"'),
+    "expected the accessible name to carry the full clock and the date note",
+  );
+});
+
+Deno.test("the selected slot's full time is in visually hidden text, not just aria-label", () => {
+  const html = renderToString(
+    <TimeSlots
+      date="2026-09-23"
+      dateLabel="Wednesday, 23 September 2026"
+      selectedSlot="09:00"
+      slots={[{
+        time: "09:00",
+        available: true,
+        displayHHMM: "23:00",
+        ariaZoneLabel: "Auckland, UTC+13",
+        dateNote: "Wed 23 Sep",
+      }]}
+    />,
+  );
+
+  // aria-label on a plain <span> (no interactive role) isn't reliably
+  // exposed — the full time must be in the DOM as visible-but-hidden
+  // text instead.
+  assertFalse(
+    html.includes("aria-label="),
+    "expected no aria-label on the selected chip (unreliable on a <span>)",
+  );
+  assert(
+    html.includes('class="sr-only"'),
+    "expected a visually hidden element carrying the full time",
+  );
+  assert(
+    /class="sr-only">23:00, Auckland, UTC\+13, Wed 23 Sep</.test(html),
+    "expected the hidden text to carry the full clock and date note",
+  );
+  // The visible chip (bare "23:00" + the date note) must itself be
+  // `aria-hidden`, or a screen reader would read both it and the
+  // `sr-only` text above — announcing the time twice.
+  assert(
+    /aria-hidden="true"[^>]*>\s*<span>23:00<\/span>/.test(html),
+    "expected the visible chip to be aria-hidden (not read twice alongside the sr-only text)",
+  );
+});
+
+Deno.test("a booked (unavailable) slot's full time is in visually hidden text, not just aria-label", () => {
+  const html = renderToString(
+    <TimeSlots
+      date="2026-09-23"
+      dateLabel="Wednesday, 23 September 2026"
+      slots={[{
+        time: "09:00",
+        available: false,
+        displayHHMM: "23:00",
+        ariaZoneLabel: "Auckland, UTC+13",
+      }]}
+      onSelectSlot={() => {}}
+    />,
+  );
+
+  assertFalse(
+    html.includes("aria-label="),
+    "expected no aria-label on the booked chip (unreliable on a <span>)",
+  );
+  assert(
+    /class="sr-only">23:00, Auckland, UTC\+13</.test(html),
+    "expected the hidden text to carry the full clock",
+  );
+  // Same double-announcement guard as the selected chip: the visible
+  // "23:00" must be aria-hidden, since the sr-only text above already
+  // carries the full time.
+  assert(
+    /aria-hidden="true"[^>]*>\s*<span>23:00<\/span>/.test(html),
+    "expected the visible chip to be aria-hidden (not read twice alongside the sr-only text)",
+  );
 });

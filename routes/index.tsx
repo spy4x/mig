@@ -5,7 +5,8 @@ import BookingFlow from "../islands/BookingFlow.tsx";
 import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
 import {
   canonicalValidTimeZoneOrNull,
-  formatClockAt,
+  formatGridHeader,
+  formatSlotDisplay,
   isoDateInTz,
   minToHHMM,
   zonedDateTime,
@@ -16,7 +17,13 @@ interface IndexData {
   slot: string | null;
   dates: Array<{ date: string; slots: number }>;
   slots: Array<
-    { time: string; available: boolean; displayTime?: string }
+    {
+      time: string;
+      available: boolean;
+      displayHHMM?: string;
+      ariaZoneLabel?: string;
+      offsetNote?: string;
+    }
   >;
   error: string | null;
   monthAnchor: string;
@@ -122,7 +129,16 @@ export default define.page(function Index(ctx) {
     return { date: d, slots };
   });
 
-  const slots: IndexData["slots"] = [];
+  // Every slot's instant, host-chronological order (mig#48 review) —
+  // this route doesn't reorder slots across a visitor-local midnight
+  // the way /embed and BookingFlow do (it renders no `dateNote`
+  // without JS, so that reordering has nothing to serve here), so
+  // display order is exactly this push order. `formatGridHeader`
+  // below takes the FIRST of these — the first slot actually shown —
+  // not an arbitrary anchor like noon of the host day, which can
+  // label the header with an offset no visible slot has.
+  const daySlots: Array<{ time: string; available: boolean; instant: Date }> =
+    [];
   if (date && !cfg.blockedDates.has(date)) {
     const dayBookings = ctx.state.bookings.forDate(date);
     const dayName = dayNameFromDate(date, cfg.hostTz);
@@ -138,22 +154,39 @@ export default define.page(function Index(ctx) {
       ) {
         const time = minToHHMM(m);
         const instant = zonedDateTime(date, time, cfg.hostTz);
-        slots.push({
+        daySlots.push({
           time,
           available: !booked.has(time) && instant >= minStart,
-          // Labelled in the display zone (mig#18: the `tz` query
-          // param when known, host zone otherwise) — the same
-          // "HH:MM, City, UTC±N" clock /embed shows. BookingFlow's
-          // hydration replaces this with the browser-detected zone
-          // once mounted; a no-JS visitor, or the pre-hydration first
-          // paint, keeps this one, which is why it's never bare HH:MM
-          // and never silently reverts to the host's zone when the
-          // visitor arrived with a `?tz=` already set.
-          displayTime: formatClockAt(instant, displayTz),
+          instant,
         });
       }
     }
   }
+
+  const header = formatGridHeader(
+    daySlots.map((s) => s.instant),
+    displayTz,
+  );
+
+  // Labelled in the display zone (mig#18: the `tz` query param when
+  // known, host zone otherwise). BookingFlow's hydration replaces this
+  // with the browser-detected zone once mounted; a no-JS visitor, or
+  // the pre-hydration first paint, keeps this one, which is why it
+  // never silently reverts to the host's zone when the visitor arrived
+  // with a `?tz=` already set. Only HH:MM shows on the slot itself —
+  // the zone renders once, in the grid's header (mig#48) — except when
+  // this slot's own offset disagrees with the header's, e.g. a
+  // daylight-saving change landing on it.
+  const slots: IndexData["slots"] = daySlots.map((s) => {
+    const display = formatSlotDisplay(s.instant, displayTz, header!.offset);
+    return {
+      time: s.time,
+      available: s.available,
+      displayHHMM: display.hhmm,
+      ariaZoneLabel: display.ariaZoneLabel,
+      offsetNote: display.offsetNote,
+    };
+  });
 
   // The BookingFlow island computes its own confirm label (host TZ
   // on SSR, visitor TZ after hydration), so the route doesn't need

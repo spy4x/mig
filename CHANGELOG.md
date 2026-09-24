@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Slot buttons in the time grid show only the time; the timezone (city and UTC
+  offset) appears once, above the grid, instead of repeating on every slot
+  (#48).
+
 ## [0.4.1] - 2026-09-24
 
 ### Added

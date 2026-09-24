@@ -5,10 +5,12 @@ import {
   formatClockAt,
   formatClockShortAt,
   formatDateLong,
+  formatGridHeader,
   formatInstantLong,
   formatInstantShort,
   formatOwnerClock,
   formatShortDateAt,
+  formatSlotDisplay,
   formatTimeOfDay,
   validTimeZoneOr,
   zoneCity,
@@ -296,4 +298,50 @@ Deno.test("formatOwnerClock: adds the visitor's date only when it differs from t
     "Tuesday, 6 October 2026 at 09:00, Ho Chi Minh, UTC+7 " +
       "(visitor: Monday, 5 October 2026 at 22:00, New York, UTC-4)",
   );
+});
+
+// ─── formatSlotDisplay (mig#48 review) ────────────────────────────────
+
+Deno.test("formatSlotDisplay: a slot whose own offset matches the header's omits offsetNote", () => {
+  const instant = new Date("2026-10-06T02:00:00Z"); // 09:00 Ho Chi Minh, UTC+7
+  const display = formatSlotDisplay(instant, "Asia/Ho_Chi_Minh", "UTC+7");
+  assertEquals(display.hhmm, "09:00");
+  assertEquals(display.ariaZoneLabel, "Ho Chi Minh, UTC+7");
+  assertEquals(display.offsetNote, undefined);
+});
+
+Deno.test("formatSlotDisplay: a slot whose own offset differs from the header's sets offsetNote", () => {
+  const instant = new Date("2026-10-06T02:00:00Z"); // 09:00 Ho Chi Minh, UTC+7
+  const display = formatSlotDisplay(instant, "Asia/Ho_Chi_Minh", "UTC+8");
+  assertEquals(display.offsetNote, "UTC+7");
+});
+
+Deno.test("formatSlotDisplay: a zone with no city (UTC) still compares by offset", () => {
+  const instant = new Date("2026-10-06T02:00:00Z");
+  const matching = formatSlotDisplay(instant, "UTC", "UTC+0");
+  assertEquals(matching.hhmm, "02:00");
+  assertEquals(matching.ariaZoneLabel, "UTC");
+  assertEquals(matching.offsetNote, undefined);
+  const differing = formatSlotDisplay(instant, "UTC", "UTC+1");
+  assertEquals(differing.offsetNote, "UTC+0");
+});
+
+// ─── formatGridHeader (mig#48 review) ─────────────────────────────────
+
+Deno.test("formatGridHeader: label and offset come from the first instant, even when a later one has a different offset", () => {
+  // America/New_York's DST ends 2026-11-01 at 06:00 UTC (02:00 EDT ->
+  // 01:00 EST) — `first` is 5 minutes before that, still UTC-4;
+  // `later` is 3 hours after, already UTC-5. Taking the LAST instant
+  // instead of the first (a plausible off-by-one) would return UTC-5
+  // here, so this only passes when the FIRST instant actually wins.
+  const first = new Date("2026-11-01T05:00:00Z"); // 01:00 New York, UTC-4
+  const later = new Date("2026-11-01T08:00:00Z"); // 03:00 New York, UTC-5
+  assertEquals(
+    formatGridHeader([first, later], "America/New_York"),
+    { label: "New York, UTC-4", offset: "UTC-4" },
+  );
+});
+
+Deno.test("formatGridHeader: null when there are no instants to derive a header from", () => {
+  assertEquals(formatGridHeader([], "Asia/Ho_Chi_Minh"), null);
 });

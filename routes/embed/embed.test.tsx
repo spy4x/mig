@@ -107,6 +107,7 @@ function embedData(overrides: Partial<EmbedData>): EmbedData {
     monthAnchor: "2027-01-01",
     error: null,
     tz: null,
+    zoneLabel: null,
     ...overrides,
   };
 }
@@ -200,6 +201,55 @@ Deno.test("embed picker: time step — date-card and slot links stay under /embe
   // be present (the booked 09:30 slot renders as a disabled <span>,
   // not a link).
   assert(links.length >= 2, `expected >=2 links, got ${links.length}`);
+});
+
+// mig#48 review: scoped to TimeSlots.tsx's own header element
+// (`<p class="text-xs text-ink-subtle mt-0.5">{zoneLabel}</p>`) — never
+// a whole-page `html.includes(...)`, since the same zone string also
+// appears (correctly) inside every slot's `aria-label`; an `includes`
+// check would keep passing even if the header itself were removed.
+function gridHeaderZoneLabel(html: string): string | null {
+  const m = html.match(
+    /<p class="text-xs text-ink-subtle mt-0\.5">([^<]*)<\/p>/,
+  );
+  return m ? m[1] : null;
+}
+
+Deno.test("embed picker: time step — the grid header element shows the zone once", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        selectedDateLabel: "Monday, 4 January 2027",
+        slots: [
+          {
+            time: "09:00",
+            available: true,
+            displayHHMM: "09:00",
+            ariaZoneLabel: "Berlin, UTC+2",
+          },
+          {
+            time: "09:30",
+            available: false,
+            displayHHMM: "09:30",
+            ariaZoneLabel: "Berlin, UTC+2",
+          },
+        ],
+        zoneLabel: "Berlin, UTC+2",
+      }))}
+    />,
+  );
+  assertEquals(
+    gridHeaderZoneLabel(html),
+    "Berlin, UTC+2",
+    "expected the grid header element to show the zone once",
+  );
+  // Bare HH:MM on the slot itself — the zone lives in the header, not
+  // repeated inline.
+  assert(
+    />09:00</.test(html),
+    "expected the bookable slot's visible text to be bare HH:MM",
+  );
 });
 
 Deno.test("embed picker: confirm step — form posts to /embed/book, captures guestTz without an island", () => {

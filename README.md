@@ -58,14 +58,15 @@ _The standalone booking page (`/`) — date on the left, time slots on the right
 - **Cancellation by link.** Both owner and guest get a cancellable link in their
   email. SHA-256 HMAC of a random token; stateless.
 - **Two clocks, everywhere.** The visitor sees times in their own zone — city
-  and UTC offset next to every time, e.g. `11:00, New York, UTC-4`, with its
-  date converted alongside it — on the slot list, confirm step, confirmation
-  page and cancel page, and in every email they receive. The owner sees the same
-  for the host zone, plus the visitor's clock (and date, when it differs)
-  alongside it in the owner's booking/cancellation emails and the NTFY push, so
-  they always know both the time and where the visitor is. Guest zone is
-  auto-detected in the browser; without JavaScript, times fall back to the
-  host's zone, labelled as such.
+  and UTC offset shown once above the slot list (e.g. `New York, UTC-4`) so each
+  slot itself just reads `11:00`, and next to every other single time, with its
+  date converted alongside it — on the confirm step, confirmation page and
+  cancel page, and in every email they receive. The owner sees the same for the
+  host zone, plus the visitor's clock (and date, when it differs) alongside it
+  in the owner's booking/cancellation emails and the NTFY push, so they always
+  know both the time and where the visitor is. Guest zone is auto-detected in
+  the browser; without JavaScript, times fall back to the host's zone, labelled
+  as such.
 - **Iframe-ready.** `/embed` strips chrome for use inside another page, and
   every step of the booking flow — date, time, confirm, the confirmation page —
   stays under `/embed`. See [Embedding](#embedding).
