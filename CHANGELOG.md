@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-25
+
 ### Added
 
 - `/embed?theme=dark|light` forces the embed's theme instead of following the
@@ -14,6 +16,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the parent via `postMessage`, growing or shrinking as the flow's content does,
   so the frame can be sized to fit instead of carrying a fixed height that clips
   a step or leaves an empty band under a shorter one (#44).
+- The Docker Hub page for `antonshubin/mig` now has an overview; each release
+  copies `docs/dockerhub.md` there (#49).
 
 ### Changed
 
@@ -316,7 +320,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/spy4x/mig/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/spy4x/mig/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/spy4x/mig/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/spy4x/mig/compare/v0.3.3...v0.3.4
