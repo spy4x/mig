@@ -176,7 +176,7 @@ function SlotButton(
     <>
       <span>{shownTime}</span>
       {slot.dateNote && (
-        <span class="text-[10px] font-normal leading-tight opacity-70">
+        <span class="text-[10px] font-normal leading-tight opacity-80">
           {slot.dateNote}
         </span>
       )}
