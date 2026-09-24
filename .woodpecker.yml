@@ -42,3 +42,45 @@ steps:
     when:
       event: tag
       ref: refs/tags/v[0-9]*
+
+  # Copies docs/dockerhub.md into the Docker Hub overview of antonshubin/mig
+  # after a release. Fail-open: the overview is not worth failing a published
+  # release over, so an error prints a warning and the step still passes. The
+  # login token is held in a variable and never printed.
+  dockerhub-overview:
+    image: alpine:3.22
+    environment:
+      DOCKER_USERNAME:
+        from_secret: DOCKER_USERNAME
+      DOCKER_PASSWORD:
+        from_secret: DOCKER_PASSWORD
+    commands:
+      # One `if` chain so every failure, the package install included, lands in
+      # the warning branch. Not `set -e` in a subshell: it is ignored inside
+      # `( ... ) || ...`. The password is read by jq from the environment and
+      # the token goes to curl through a private header file, so neither appears
+      # in a process's arguments.
+      - |
+          set -o pipefail
+          umask 077
+          HDR=$$(mktemp)
+          CURL="curl -fsS --connect-timeout 10 --max-time 30"
+          if apk add --no-cache curl jq >/dev/null \
+            && TOKEN=$$(jq -n '{username: env.DOCKER_USERNAME, password: env.DOCKER_PASSWORD}' \
+              | $$CURL -H 'Content-Type: application/json' -d @- \
+                https://hub.docker.com/v2/users/login | jq -r '.token // empty') \
+            && [ -n "$$TOKEN" ] \
+            && printf 'Authorization: JWT %s\n' "$$TOKEN" > "$$HDR" \
+            && jq -n --rawfile d docs/dockerhub.md '{full_description: $$d}' \
+              | $$CURL -o /dev/null -X PATCH -H @"$$HDR" \
+                -H 'Content-Type: application/json' -d @- \
+                https://hub.docker.com/v2/repositories/antonshubin/mig/
+          then
+            echo "Docker Hub overview updated"
+          else
+            echo "warning: Docker Hub overview not updated"
+          fi
+          rm -f "$$HDR"
+    when:
+      event: tag
+      ref: refs/tags/v[0-9]*
