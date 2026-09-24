@@ -155,12 +155,15 @@ anything to 1993 — see the README's Docker quick start for that command in ful
 
 ### Fixed
 
+- Almost all text now meets the 4.5:1 minimum contrast in both themes: the
+  Confirm button and step badges, secondary text, the footer, form placeholders,
+  the Cancel button and the 500-page label (#34).
+
+### Tests
+
 - Both correction emails a host receives after a failed guest send — successful
-  rollback and failed rollback — are now pinned word for word by tests, so a
-  wording change can no longer slip through unnoticed (#32).
-- Text across the app now meets the 4.5:1 minimum contrast in both themes: the
-  Confirm button and step badges, secondary text, the footer, form placeholders
-  and the Cancel button (#34).
+  rollback and failed rollback — are now pinned word for word, so a wording
+  change can no longer slip through unnoticed. No behavior changed (#32).
 
 ## [0.3.2] - 2026-09-23
 
