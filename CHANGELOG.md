@@ -65,20 +65,25 @@ updater, until you've done the upgrade steps below.
   nothing needs it set explicitly for a Docker deployment — `lib/config.ts`'s
   own default is a different, relative path (`./data/bookings.json`), used only
   when nothing sets `DATA_PATH` at all, such as a non-Docker deploy.
-- **Breaking if `.env` has `HIDE_BRANDING=false`.** `HIDE_BRANDING` is now
-  parsed as a real boolean: `true`/`1`/`yes` (case-insensitive, trimmed) hides
-  the footer, `false`/`0`/`no`/empty/absent shows it, and any other value —
-  including the old `on`, which used to hide it — stops startup with
-  `HIDE_BRANDING: has an invalid value`. Previously, every non-empty string
-  except an exact, case-sensitive `true` hid the footer, including `false`
-  itself, so `.env.example`'s own `HIDE_BRANDING=false` silently hid it for
-  anyone who copied that file. See the upgrade note below (#40).
+- **Check `.env` before upgrading if you set `HIDE_BRANDING`.** `HIDE_BRANDING`
+  is now parsed as a real boolean: `true`/`1`/`yes` (case-insensitive, trimmed)
+  hides the footer, `false`/`0`/`no`/empty/absent shows it. Previously the
+  parser was `Boolean(value)`, so any non-empty string hid the footer — `true`
+  correctly, but also `false`, `0`, and anything else, including
+  `.env.example`'s own `HIDE_BRANDING=false`, which silently hid it for anyone
+  who copied that file. A value outside that accepted list, such as `on` or
+  `hide`, now stops startup with `HIDE_BRANDING: has an invalid value` instead
+  of silently hiding the footer as before. See the upgrade note below (#40).
 
 ### Security
 
-- Startup errors now name the bad variable and the rule instead of the value it
-  was given, so a misconfigured `HOST_NAME`, `MEETING_URL`, or other setting no
-  longer echoes into container logs, e.g. `HOST_NAME: is not set` (#36).
+- No startup error prints the value it was given any more. `HOST_NAME`,
+  `MEETING_URL` and every other arktype-validated setting already named the bad
+  variable and the rule instead, e.g. `HOST_NAME: is not set`; `HOST_TZ`,
+  `WEEKLY_AVAILABILITY` and `BLOCKED_DATES` were the exceptions and now do the
+  same, plus the position of the bad entry for the two lists and the expected
+  shape, e.g. `HOST_TZ: is not a valid IANA time zone`,
+  `WEEKLY_AVAILABILITY: entry 2: unknown day` (#36, #41).
 
 **Upgrade note.** Changing only the image, without also changing your mount,
 breaks bookings either way: it silently loses existing ones on the old
@@ -189,9 +194,11 @@ Docker; rootless Podman remaps container uids to a different host range, so
 there use `--userns=keep-id --user "$(id -u):$(id -g)"` instead of chowning
 anything to 1993 — see the README's Docker quick start for that command in full.
 
-**If your `.env` has `HIDE_BRANDING=false`:** the footer comes back after this
-upgrade — that's the fix above, not a regression. Set `HIDE_BRANDING=true` if
-you actually want it hidden.
+**If your `.env` sets `HIDE_BRANDING`:** `false` (or `0`/`no`/empty) now
+correctly shows the footer again — if you copied `.env.example`'s old
+`HIDE_BRANDING=false`, expect it back; that's the fix above, not a regression.
+Any value other than `true`/`1`/`yes`/`false`/`0`/`no`/empty now stops the
+container at startup, so check `.env` before upgrading.
 
 ## [0.3.4] - 2026-09-24
 
