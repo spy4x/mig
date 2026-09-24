@@ -173,6 +173,8 @@ anything to 1993 — see the README's Docker quick start for that command in ful
   host's, matching the owner email (#26).
 - A failed booking email no longer tells the visitor their own email failed; it
   now says the booking wasn't created (#26).
+- The rollback-failure log no longer says no email was sent when the owner's
+  email actually went out (#26).
 - The correction email sent when the rollback itself fails to save now says so,
   instead of claiming the booking was removed and the slot is free again (#30).
 
