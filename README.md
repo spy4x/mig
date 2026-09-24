@@ -78,7 +78,7 @@ admin UI.
 ```bash
 docker run -d --name mig \
   -p 8080:8080 \
-  -v ./data:/app/data \
+  -v ./data:/data:z \
   -e HOST_NAME="Jane Doe" \
   -e HOST_EMAIL="jane@example.com" \
   -e HOST_TZ="Europe/Berlin" \
@@ -89,12 +89,56 @@ docker run -d --name mig \
   -e SMTP_HOST=smtp.example.com \
   -e SMTP_PORT=587 \
   -e SMTP_USER=jane@example.com \
-  -e SMTP_PASSWORD=<REDACTED:SMTP_PASSWORD> \
+  -e SMTP_PASSWORD='change-me' \
   -e SMTP_FROM="Bookings <book@example.com>" \
   -e CANCEL_SECRET=$(openssl rand -base64 32) \
   -e PUBLIC_URL=https://meet.example.com \
   antonshubin/mig:latest
 ```
+
+The container runs as `deno`, uid/gid 1993 — not root. `./data` must be writable
+by that uid. Create it yourself first — `docker run` would otherwise create a
+missing bind-mount source owned by root, which neither the default user nor
+`--user` below could write to — then make it writable:
+
+```bash
+mkdir -p ./data
+sudo chown 1993:1993 ./data
+```
+
+`chown`ing to a different uid needs root, hence `sudo`; a plain `chown` as your
+own user fails with "Operation not permitted". If you'd rather not use `sudo`
+(on regular, rootful Docker), run the container as your own user instead — this
+works because you created `./data` yourself above, so you already own it:
+
+```bash
+mkdir -p ./data
+docker run --user "$(id -u):$(id -g)" ...
+```
+
+The `chown 1993:1993` step also assumes rootful Docker — rootless Podman remaps
+container uids to a different host range, so `chown 1993:1993` is meaningless
+there, and plain `--user` alone fails with "Permission denied". On rootless
+Podman, add `--userns=keep-id` too:
+
+```bash
+mkdir -p ./data
+podman run --userns=keep-id --user "$(id -u):$(id -g)" ...
+```
+
+A **new, empty** Docker named volume (`-v mig-data:/data` instead of a host
+path) needs neither step — Docker creates it owned by `deno` already, since
+`/data` inside the image is. A named volume already used by mig before this
+change is still owned by root; see the CHANGELOG's 0.4.0 upgrade note for the
+fix.
+
+The `:z` on the bind mount above relabels `./data` for SELinux (Fedora, RHEL and
+derivatives) so the container is allowed to read and write it at all — without
+it, a host with SELinux enforcing rejects the access with the same "Permission
+denied" the uid mismatch above produces, even once the uid/gid ownership is
+correct. It's a no-op, and safe to leave in, on a host that doesn't run SELinux.
+`:z` relabels the _entire_ directory for container access, so only use it on a
+folder that belongs to mig alone — never a home directory, `/srv`, or `/etc`.
 
 ### Docker Compose
 
@@ -107,7 +151,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/app/data
+      - ./data:/data:z
     environment:
       HOST_NAME: "Jane Doe"
       HOST_EMAIL: "jane@example.com"
@@ -119,11 +163,16 @@ services:
       SMTP_HOST: "smtp.example.com"
       SMTP_PORT: "587"
       SMTP_USER: "jane@example.com"
-      SMTP_PASSWORD: "<REDACTED:SMTP_PASSWORD>"
+      SMTP_PASSWORD: "change-me"
       SMTP_FROM: "Bookings <book@example.com>"
-      CANCEL_SECRET: "<REDACTED:CANCEL_SECRET>"
+      CANCEL_SECRET: "change-me" # replace with the output of: openssl rand -base64 32
       PUBLIC_URL: "https://meet.example.com"
 ```
+
+`./data` needs the same non-root fix as the Docker quick start above: create it
+first (`mkdir -p ./data`), then `sudo chown 1993:1993 ./data`, or add a
+`user: "1000:1000"` — your own uid/gid — line to the service instead (only works
+if you created `./data` yourself first, same as above).
 
 See `.env.example` for the full list of env vars.
 
@@ -206,9 +255,13 @@ starting with `/embed` only:
 Content-Security-Policy: frame-ancestors https://your-site.example
 ```
 
-and make sure no `X-Frame-Options: DENY` (or `SAMEORIGIN`) header is applied to
-those paths — `frame-ancestors` supersedes it in modern browsers, but a proxy or
-previous config may still be setting it globally. The rest of the site (`/`,
+That header is the actual requirement. Current browsers (Chromium, Firefox,
+WebKit) follow `frame-ancestors` and ignore `X-Frame-Options` whenever both are
+present on the same response — the CSP Level 2 spec calls for exactly that — so
+an `X-Frame-Options: DENY` or `SAMEORIGIN` a reverse proxy sets globally can
+stay; it won't block the frame as long as `frame-ancestors` is also there on
+`/embed`. Only a browser old enough to lack CSP Level 2 support would still
+honor `X-Frame-Options` and refuse the frame. The rest of the site (`/`,
 `/confirmed`, `/cancel`) can keep denying framing entirely.
 
 `/embed` detects the visitor's timezone with a small inline script (no tracking,

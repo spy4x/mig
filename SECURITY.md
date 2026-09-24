@@ -33,9 +33,10 @@ coordinate disclosure on a timeline that makes sense for the actual exposure.
     keeps its old token hash, and old cancel links become invalid. Owners lose
     the ability to cancel those bookings via link (you'd need to mutate the JSON
     manually or wait them out).
-- [ ] Run the mig container as non-root (default in our Dockerfile).
-- [ ] Mount the bookings JSON file as a read-write volume so it survives
-      container restarts.
+- [ ] Run the mig container as non-root (default in our Dockerfile — the image
+      runs as `deno`, uid/gid 1993).
+- [ ] Mount `/data` as a read-write volume, writable by uid 1993, so bookings
+      survive container restarts (see README's Docker quick start).
 - [ ] Back up the JSON file. It's the only persistent state.
 - [ ] Don't log raw SMTP credentials. mig only logs SMTP errors at startup
       (`mig: SMTP connect failed (host:port): ...`).
