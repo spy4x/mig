@@ -227,6 +227,16 @@ repository on the Woodpecker server.
   the Docker socket is root on the agent host. Approving a fork pull request
   that touches `.woodpecker.yml` hands out that access: read the diff first.
 
+`dockerhub-overview` runs after `release` on the same tags and copies
+`docs/dockerhub.md` into the image's Docker Hub overview, logging in with the
+same two secrets. The overview is a separate file, not the README, because the
+README's relative links and images break on Docker Hub. The step is fail-open:
+if Docker Hub refuses (for example, an access token without the "Read, Write,
+Delete" scope the overview needs), it prints
+`warning: Docker Hub overview not updated` and the release still passes. After a
+release, check `https://hub.docker.com/v2/repositories/antonshubin/mig/`'s
+`full_description` to confirm it took.
+
 Woodpecker substitutes `${VAR}` in the whole file before it parses the YAML,
 including steps that will not run. An empty variable can turn a command into
 invalid YAML: `mig:${CI_COMMIT_TAG} -t` became `mig: -t`, which YAML reads as a
