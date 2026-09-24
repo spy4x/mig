@@ -97,6 +97,8 @@ booking" until you chown the volume too:
 docker run --rm -v <volume>:/data alpine chown -R 1993:1993 /data
 ```
 
+Replace `<volume>` with your volume's name.
+
 A brand-new, empty named volume needs no such step — see `AGENTS.md`.
 
 Two things that apply either way: `:z` relabels the _entire_ directory for
