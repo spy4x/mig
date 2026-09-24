@@ -11,9 +11,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 **If you run mig from `antonshubin/mig:latest` under Watchtower or any other
 auto-updater, it will pull this version on its own.** With a root-owned bind
 mount or named volume from before this release, every booking then fails with
-"We couldn't save your booking" while `/health` keeps answering healthy —
-nothing in the container's own state flags the problem. Pin your image to
-`v0.3.1`, or pause the updater, until you've done the upgrade steps below.
+"We couldn't save your booking", while `/health` keeps answering healthy; the
+container's log shows `mig: persist FAILED`. Pin your image to `v0.3.3`, or
+pause the updater, until you've done the upgrade steps below. **If you're on the
+old README's `docker run` setup, do the rescue steps below before you pin or
+redeploy anything** — your bookings and your `CANCEL_SECRET` only exist inside
+the running container, and re-creating it to change the pinned tag destroys
+both.
 
 ### Changed
 
