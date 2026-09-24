@@ -33,11 +33,11 @@ updater, until you've done the upgrade steps below.
   decisions and the messages a visitor sees are unchanged; a startup error for a
   missing or malformed env var now names the variable without printing its value
   (#36).
-- `HIDE_BRANDING` is now parsed as a real boolean: `true`, `1` or `yes` hides
-  the footer's "Powered by mig" line, and `false`, `0`, `no`, empty or absent
-  shows it. Before, any non-empty value — including `false`, which
-  `.env.example` ships — hid the line. Anything else now fails startup, naming
-  `HIDE_BRANDING` (#35).
+- `HIDE_BRANDING` is now parsed as a real boolean, matched case-insensitively
+  with surrounding whitespace ignored: `true`, `1` or `yes` hides the footer's
+  "Powered by mig" line, and `false`, `0`, `no`, empty or absent shows it.
+  Before, any non-empty value — including `false`, which `.env.example` ships —
+  hid the line. Anything else now fails startup, naming `HIDE_BRANDING` (#35).
 
 ### Fixed
 
