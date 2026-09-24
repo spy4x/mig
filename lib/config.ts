@@ -135,23 +135,19 @@ function parseConfig(): Config {
 
   const validated = ConfigSchema(candidate);
   if (validated instanceof type.errors) {
-    // arktype echoes the actual value in two message shapes — fine for
-    // a length count ("was 5") but not for a type/pattern mismatch,
-    // where the echoed text is the raw env string itself (e.g. a
-    // malformed MEETING_URL carrying a query-string token). Startup
-    // errors go to the container's logs, so name the variable and the
-    // reason, never the value, in either shape:
-    //   - a single failing rule: "... must be a number (was NaN)"
-    //   - two+ rules failing on one field (e.g. SLOT_DURATION_MIN=500.5
-    //     is both non-integer and out of range): "VAR (500.5) must
-    //     be...\n  ◦ an integer\n  ◦ at most 480"
+    // arktype's default `.message` echoes the actual value (e.g.
+    // `... must be a number (was NaN)`, or the raw env string for a
+    // type/pattern mismatch) — never safe for a startup log line.
+    // Stripping the echoed text back out of the rendered message is
+    // fragile (a value containing U+2028 or the literal text
+    // "must be (" can survive a regex strip). Instead, never touch
+    // `.message`: build the line from `path` (the variable name) and
+    // `expected` (arktype's description of the rule that failed —
+    // "a URL string", "at least length 16", "an integer" — which
+    // describes the *rule*, not the value, for every issue code this
+    // schema produces, missing-required-variable included).
     const issues = [...validated]
-      .map((issue) => {
-        const message = issue.message
-          .replace(/ \([^)]*\)(?= must be)/, "")
-          .replace(/ \(was .*\)$/, "");
-        return `  ${issue.path.join(".")}: ${message}`;
-      })
+      .map((issue) => `  ${issue.path.join(".")}: must be ${issue.expected}`)
       .join("\n");
     console.error(`mig: invalid environment configuration:\n${issues}`);
     Deno.exit(1);

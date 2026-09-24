@@ -195,6 +195,64 @@ Deno.test("config: SLOT_DURATION_MIN accepts 480, rejects 481", async () => {
   assertStringIncludes(at481.stderr, "SLOT_DURATION_MIN");
 });
 
+// Pins the CANCEL_SECRET minimum at 16 characters, not 15.
+Deno.test("config: CANCEL_SECRET accepts 16 chars, rejects 15", async () => {
+  const at16 = await runConfig({
+    ...VALID_ENV,
+    CANCEL_SECRET: "a".repeat(16),
+  });
+  assertEquals(at16.code, 0, at16.stderr);
+
+  const at15 = await runConfig({
+    ...VALID_ENV,
+    CANCEL_SECRET: "a".repeat(15),
+  });
+  assertEquals(at15.code, 1);
+  assertStringIncludes(at15.stderr, "CANCEL_SECRET");
+});
+
+// Pins the PORT default at 8080, not 8081.
+Deno.test("config: PORT defaults to 8080 when unset", async () => {
+  const env = { ...VALID_ENV };
+  delete env.PORT;
+  const value = await runConfigField(env, "port");
+  assertEquals(value, 8080);
+});
+
+// mig#36: a startup error must never leak the offending value, even when
+// the value itself contains text shaped like the strip patterns a prior
+// approach used (a line separator, or the literal text a two-rule failure
+// message uses). Each marker below is unique and must never reach stderr.
+Deno.test("config: a MEETING_URL with a line separator is named but not echoed", async () => {
+  const marker = "LINESEP-MARKER-7f3a";
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    MEETING_URL: `not a url ${marker}`,
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "MEETING_URL");
+  assertEquals(
+    stderr.includes(marker),
+    false,
+    `stderr echoed the bad value:\n${stderr}`,
+  );
+});
+
+Deno.test("config: a MEETING_URL containing ') must be (' is named but not echoed", async () => {
+  const marker = "PARENMARKER-9c21";
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    MEETING_URL: `not a url ${marker}) must be (`,
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "MEETING_URL");
+  assertEquals(
+    stderr.includes(marker),
+    false,
+    `stderr echoed the bad value:\n${stderr}`,
+  );
+});
+
 Deno.test("config: MIG_VERSION is trimmed", async () => {
   const value = await runConfigField(
     { ...VALID_ENV, MIG_VERSION: "  1.2.3  " },
