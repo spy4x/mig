@@ -64,10 +64,12 @@ src/
 │   └── ThemeToggle.tsx
 ├── lib/
 │   ├── config.ts            — env parsing + arktype validation
+│   ├── config-issue.ts      — formats one startup error line, never the value
 │   ├── availability.ts      — weekly pattern + blocked-dates parser
 │   ├── bookings.ts          — JSON store + AsyncMutex
 │   ├── tokens.ts            — ULID + HMAC sign/verify
 │   ├── email.ts             — SMTP via nodemailer
+│   ├── email-pattern.ts     — zod 3.25.76's email regex, copied verbatim
 │   ├── ics.ts               — ICS VCALENDAR generator
 │   ├── ratelimit.ts         — in-memory per-IP sliding window
 │   ├── tz.ts                — IANA tz helpers
