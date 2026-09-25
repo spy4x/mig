@@ -142,3 +142,39 @@ Deno.test("BookingsStore — get returns booking by id", async () => {
   assertEquals(s.get("missing"), undefined);
   await rm(path);
 });
+
+// mig#57: before the validator checked the calendar, "2027-02-30" at
+// "10:60" could be stored; it is rolled over on load to what the
+// visitor was told, and a valid record is left exactly as it was.
+Deno.test("BookingsStore — rolls a stored impossible date and time over on load", async () => {
+  const path = await Deno.makeTempFile({ suffix: ".json" });
+  const base = {
+    createdAt: "2026-09-01T10:00:00.000Z",
+    hostTz: "Europe/Berlin",
+    guestName: "Visitor",
+    guestEmail: "visitor@example.com",
+    cancelTokenHash: "h",
+    status: "active" as const,
+  };
+  await Deno.writeTextFile(
+    path,
+    JSON.stringify([
+      { ...base, id: "rolled", date: "2027-02-30", time: "10:60" },
+      { ...base, id: "valid", date: "2027-03-01", time: "09:30" },
+    ]),
+  );
+  try {
+    const store = new BookingsStore({ filePath: path });
+    await store.init();
+    assertEquals(
+      [store.get("rolled")?.date, store.get("rolled")?.time],
+      ["2027-03-02", "11:00"],
+    );
+    assertEquals(
+      [store.get("valid")?.date, store.get("valid")?.time],
+      ["2027-03-01", "09:30"],
+    );
+  } finally {
+    await Deno.remove(path);
+  }
+});
