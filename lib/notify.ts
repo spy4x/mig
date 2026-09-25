@@ -12,7 +12,7 @@
 
 import type { Config } from "./types.ts";
 import type { Booking } from "./types.ts";
-import { formatClockShortAt, formatOwnerClock } from "./tz.ts";
+import { formatClockShortAt, formatOwnerClock } from "./clock.ts";
 
 export type NtfyMode = "all" | "errors" | "booking" | "cancel";
 
@@ -136,7 +136,7 @@ export async function notify(
 // alongside it whenever a valid visitor zone was captured (mig#15: the
 // owner always sees where the visitor is, not just the host's own
 // time). Falls back to the host clock alone when no visitor zone is
-// known. Delegates to lib/tz.ts's formatOwnerClock — the same helper
+// known. Delegates to lib/clock.ts's formatOwnerClock — the same helper
 // the owner's email uses — so the two can't drift.
 function ownerWhenLabel(booking: Booking): string {
   return formatOwnerClock(

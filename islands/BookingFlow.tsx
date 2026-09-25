@@ -7,15 +7,14 @@ import { TimeCard } from "../components/TimeCard.tsx";
 import { BookingForm } from "../components/BookingForm.tsx";
 import { SummaryBar } from "../components/SummaryBar.tsx";
 import { pickerLinks } from "../lib/picker-links.ts";
+import { isoDateInTz, zonedDateTime } from "@spy4x/time/tz";
 import {
   formatClockAt,
-  formatDateLong,
   formatGridHeader,
+  formatHostDateIn,
   formatShortDateAt,
   formatSlotDisplay,
-  isoDateInTz,
-  zonedDateTime,
-} from "../lib/tz.ts";
+} from "../lib/clock.ts";
 
 /*
   BookingFlow — client-driven booking picker.
@@ -90,8 +89,9 @@ interface BookingFlowProps {
 }
 
 // ─── Client-side time helpers ────────────────────────────────────────
-// Use lib/tz.ts directly — it has no validation-library dependency and
-// is already bundled into the client via Calendar's imports.
+// Use @spy4x/time/tz and lib/clock.ts directly — neither has a
+// validation-library dependency, and both are already bundled into the
+// client via Calendar's imports.
 
 // Compact "Thu, 28 Aug" used in the mobile SummaryBar. Mirrors
 // TimeCard's display so the two stay in lockstep.
@@ -350,7 +350,7 @@ export default function BookingFlow(props: BookingFlowProps) {
   const links = pickerLinks(linkTz);
 
   const dateLabel: string | null = date.value
-    ? formatDateLong(date.value, "12:00", hostTz, displayTz)
+    ? formatHostDateIn(date.value, "12:00", hostTz, displayTz)
     : null;
 
   const dateLabelShort: string | null = date.value
@@ -362,7 +362,7 @@ export default function BookingFlow(props: BookingFlowProps) {
   // `dateLabel` above (noon-based) still feeds DateCard, which shows
   // the *picked calendar day*, not a specific time.
   const slotDateLabel: string | null = date.value && slot.value
-    ? formatDateLong(date.value, slot.value, hostTz, displayTz)
+    ? formatHostDateIn(date.value, slot.value, hostTz, displayTz)
     : null;
 
   // Slot clock in visitor TZ ("11:00, New York, UTC-4" — mig#15). The

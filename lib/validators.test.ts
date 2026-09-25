@@ -281,6 +281,35 @@ Deno.test("booking validator rejects a date with trailing extra digits", () => {
   }
 });
 
+// mig#57: @spy4x/time/tz's zonedDateTime throws on a date or time that
+// is not on the calendar, where mig's own copy rolled it over, so the
+// validator refuses one before it can get that far.
+Deno.test("booking validator rejects a date that is not on the calendar", () => {
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    date: "2026-02-30",
+  });
+
+  assertEquals(result.success, false);
+  if (!result.success) {
+    assertEquals(result.error.issues[0]?.message, "That date does not exist.");
+  }
+});
+
+Deno.test("booking validator rejects a time that is not on the clock", () => {
+  for (const slot of ["24:00", "10:60"]) {
+    const result = BookingSchema.safeParse({ ...validBooking, slot });
+
+    assertEquals(result.success, false, slot);
+    if (!result.success) {
+      assertEquals(
+        result.error.issues[0]?.message,
+        "That time does not exist.",
+      );
+    }
+  }
+});
+
 // Pins the name minimum length at 2, not 3.
 Deno.test("booking validator: a two-character name is accepted", () => {
   const result = BookingSchema.safeParse({ ...validBooking, name: "Al" });

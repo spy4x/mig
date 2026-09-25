@@ -4,17 +4,17 @@ import {
   countSlotsForDate,
   getCandidateDates,
 } from "../../lib/availability.ts";
+import { isoDateInTz, minToHHMM, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalValidTimeZoneOrNull,
   formatClockAt,
-  formatDateLong,
   formatGridHeader,
+  formatHostDateIn,
   formatShortDateAt,
   formatSlotDisplay,
-  isoDateInTz,
-  minToHHMM,
-  zonedDateTime,
-} from "../../lib/tz.ts";
+  hostSlotInstant,
+  isCalendarDateTime,
+} from "../../lib/clock.ts";
 import { embedTzRedirectScript } from "../../lib/guest-tz-script.ts";
 import { parseThemeParam } from "../../lib/theme.ts";
 import {
@@ -90,12 +90,14 @@ export interface EmbedData {
 function parseDateParam(v: string | null): string | null {
   if (!v) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  if (!isCalendarDateTime(v)) return null; // "2026-02-31" (mig#57)
   return v;
 }
 
 function parseSlotParam(v: string | null): string | null {
   if (!v) return null;
   if (!/^\d{2}:\d{2}$/.test(v)) return null;
+  if (!isCalendarDateTime("2000-01-01", v)) return null; // "24:00" (mig#57)
   return v;
 }
 
@@ -188,7 +190,7 @@ export const handler = define.handlers({
 
     // Date label for the picked day. Converted into the display zone
     // the same way the standalone island does (both now call
-    // lib/tz.ts's formatDateLong with "12:00" — noon of the
+    // lib/clock.ts's formatHostDateIn with "12:00" — noon of the
     // host-local date, formatted in displayTz): the calendar grid
     // itself stays host-anchored (mig#15 allows this for the month
     // grid), but the single picked day's own label reads correctly in
@@ -208,7 +210,7 @@ export const handler = define.handlers({
     // The selected slot's own date, from its exact instant — see the
     // EmbedData.slotDateLabel doc comment (mig#15 review).
     const slotDateLabel = date && slot
-      ? formatDateLong(date, slot, cfg.hostTz, displayTz)
+      ? formatHostDateIn(date, slot, cfg.hostTz, displayTz)
       : null;
 
     let slots: SlotCell[] = [];
@@ -230,7 +232,9 @@ export const handler = define.handlers({
           m += cfg.slotDurationMin
         ) {
           const time = minToHHMM(m);
-          const instant = zonedDateTime(date, time, cfg.hostTz);
+          // null inside a spring-forward gap: no such slot (mig#57).
+          const instant = hostSlotInstant(date, time, cfg.hostTz);
+          if (!instant) continue;
           withInstant.push({
             time,
             available: !booked.has(time) && instant >= minStart,

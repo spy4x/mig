@@ -1,14 +1,19 @@
-// IANA timezone helpers. All host-side date/time math runs in HOST_TZ;
-// client-side strings are pre-formatted by the browser Intl APIs.
+// mig's own timezone helpers — the ones `@spy4x/time/tz` has no
+// counterpart for. The generic zone math (`zonedDateTime`, `addDays`,
+// `isoDateInTz`, `hhmmInTz`, `formatInstantLong`, ...) lives in
+// `@spy4x/time/tz`; what stays here is mig-specific: canonicalizing an
+// untrusted zone name, the "HH:MM, City, UTC±N" clock every page and
+// email shows, and the host-zone/display-zone pairs a stored booking
+// needs (mig#57).
 
-export function isValidTimeZone(value: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
+import {
+  formatInstantLong,
+  hhmmInTz,
+  isoDateInTz,
+  isValidTimeZone,
+  tzOffsetMinutes,
+  zonedDateTime,
+} from "@spy4x/time/tz";
 
 // Fixes casing and resolves slash-less legacy aliases on a
 // *known-valid* zone — WITHOUT renaming a valid modern zone to a
@@ -86,36 +91,14 @@ export function canonicalValidTimeZoneOrNull(
   return canonicalTimeZone(value);
 }
 
-export function validTimeZoneOr(
+// `@spy4x/time/tz`'s `validTimeZoneOr` only validates; this one also
+// canonicalizes (see canonicalTimeZone above), which the /embed
+// tz-redirect needs to stay stable — hence its own name (mig#57).
+export function canonicalTimeZoneOr(
   value: string | undefined,
   fallback: string,
 ): string {
   return canonicalValidTimeZoneOrNull(value) ?? fallback;
-}
-
-// Format an ISO date (YYYY-MM-DD) and time (HH:MM) interpreted in `tz`
-// as a long human-readable string. Examples:
-//   "Wednesday, 28 August 2026, 10:00"
-export function formatDateTimeLong(
-  date: string,
-  time: string,
-  tz: string,
-): string {
-  const dt = zonedDateTime(date, time, tz);
-  return formatInstantLong(dt, tz);
-}
-
-export function formatInstantLong(dt: Date, tz: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(dt);
 }
 
 // Date-only, e.g. "Wednesday, 2 September 2026". Used on the
@@ -130,8 +113,9 @@ export function formatInstantLong(dt: Date, tz: string): string {
 // formatting it in `displayTz`, is what makes that conversion happen;
 // the previous version built the instant directly in `displayTz` from
 // the host-local wall clock, which is wrong whenever the two zones
-// differ.
-export function formatDateLong(
+// differ. Named formatDateLong before mig#57; renamed because
+// `@spy4x/time/tz`'s formatDateLong takes one zone, not two.
+export function formatHostDateIn(
   date: string,
   time: string,
   hostTz: string,
@@ -334,15 +318,17 @@ export function formatOwnerClock(
 // displayed in `displayTz` — e.g. "11:00, New York, UTC-4". This is
 // `formatClockAt` for the common case of a stored host-local booking
 // time; call `formatClockAt` directly when the instant is already in
-// hand (email.ts, ics.ts, notify.ts compute it once and reuse it).
+// hand (email.ts, invite.ts, notify.ts compute it once and reuse it).
 //
 // mig#15: this used to build the instant IN `displayTz` from the
 // stored (date, time) — which are host-local, not displayTz-local —
 // then format it back in `displayTz`, so it returned the unconverted
 // time no matter what `displayTz` was. Building the instant from
 // `hostTz` first is the fix; folding in the city+offset here is the
-// feature this issue asked for.
-export function formatTimeOfDay(
+// feature this issue asked for. Named formatTimeOfDay before mig#57;
+// renamed because `@spy4x/time/tz`'s formatTimeOfDay returns a bare
+// "HH:MM" in one zone.
+export function formatHostClockIn(
   date: string,
   time: string,
   hostTz: string,
@@ -379,117 +365,37 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-// Short form used in emails subject lines + buttons. Examples:
-//   "Wed 28 Aug, 10:00"
-export function formatDateTimeShort(
+// Whether `date` ("YYYY-MM-DD") and `time` ("HH:MM") name a real
+// calendar date and time of day: "2026-02-30" and "24:00" do not.
+// `@spy4x/time/tz`'s zonedDateTime throws a RangeError on both (mig's
+// own copy used to roll them over into 2 March and the next day's
+// 00:00), so every untrusted date or time is checked here first and
+// refused as bad input instead of reaching it and failing the request
+// (mig#57). UTC has no daylight-saving gap, so this checks the
+// calendar only — see hostSlotInstant for the gap.
+export function isCalendarDateTime(date: string, time = "12:00"): boolean {
+  try {
+    zonedDateTime(date, time, "UTC");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The instant a host-local slot `date` + `time` starts at, or `null`
+// when that wall clock never occurs in `hostTz` — it falls in a
+// spring-forward gap, e.g. 02:30 in Berlin on 2026-03-29, when clocks
+// jump from 02:00 to 03:00. `@spy4x/time/tz`'s zonedDateTime resolves
+// such a time forward (02:30 becomes 03:30), which would turn one
+// offered slot into a second copy of the 03:30 slot; mig offers and
+// accepts neither, so every slot is built through here (mig#57).
+export function hostSlotInstant(
   date: string,
   time: string,
-  tz: string,
-): string {
-  const dt = zonedDateTime(date, time, tz);
-  return formatInstantShort(dt, tz);
-}
-
-export function formatInstantShort(dt: Date, tz: string): string {
-  const fmt = new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  // "Wed, 28 Aug, 10:00" — strip the comma after weekday
-  return fmt.format(dt).replace(/^([^,]+),/, "$1");
-}
-
-// YYYY-MM-DD for today in the given tz.
-export function todayInTz(tz: string): string {
-  return isoDateInTz(new Date(), tz);
-}
-
-// YYYY-MM-DD for a Date object in the given tz.
-export function isoDateInTz(d: Date, tz: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(d);
-  const y = parts.find((p) => p.type === "year")!.value;
-  const m = parts.find((p) => p.type === "month")!.value;
-  const day = parts.find((p) => p.type === "day")!.value;
-  return `${y}-${m}-${day}`;
-}
-
-// HH:MM for a Date object in the given tz.
-export function hhmmInTz(d: Date, tz: string): string {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(d);
-  const h = parts.find((p) => p.type === "hour")!.value;
-  const m = parts.find((p) => p.type === "minute")!.value;
-  return `${h}:${m}`;
-}
-
-// Build a Date that represents wall-clock YYYY-MM-DD HH:MM in the given tz.
-// Returns the corresponding UTC instant. This is the inverse of
-// `formatDateTimeLong`: given a date+time pair, find the UTC ms.
-export function zonedDateTime(date: string, time: string, tz: string): Date {
-  // First guess: treat the wall clock as UTC, then adjust by tz offset.
-  const [y, mo, d] = date.split("-").map(Number);
-  const [h, mi] = time.split(":").map(Number);
-  const naiveUtc = Date.UTC(y, mo - 1, d, h, mi, 0, 0);
-
-  // Find the tz offset at that instant, in minutes.
-  const offsetMin = tzOffsetMinutes(new Date(naiveUtc), tz);
-
-  // The correct UTC instant = naive - offset.
-  return new Date(naiveUtc - offsetMin * 60_000);
-}
-
-// Minutes east of UTC for `tz` at the given instant. Positive east.
-// Uses the standard `Intl.DateTimeFormat` offset trick.
-export function tzOffsetMinutes(d: Date, tz: string): number {
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    timeZoneName: "shortOffset",
-  });
-  const parts = fmt.formatToParts(d);
-  const tzn = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT+0";
-  // Examples: "GMT+1", "GMT-5", "GMT+5:30", "GMT" (=0)
-  const m = tzn.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
-  if (!m) return 0;
-  const sign = m[1] === "-" ? -1 : 1;
-  const hh = parseInt(m[2], 10);
-  const mm = parseInt(m[3] ?? "0", 10);
-  return sign * (hh * 60 + mm);
-}
-
-// Day of week name (Mon..Sun) for a YYYY-MM-DD in tz.
-export function dayOfWeek(date: string, tz: string): string {
-  const dt = zonedDateTime(date, "12:00", tz); // noon avoids DST edges
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    weekday: "short",
-  }).format(dt).toUpperCase();
-}
-
-// Add `n` days to a YYYY-MM-DD string, return new YYYY-MM-DD.
-// Day arithmetic is done in tz to avoid DST drift.
-export function addDays(date: string, n: number, tz: string): string {
-  const dt = zonedDateTime(date, "12:00", tz);
-  dt.setUTCDate(dt.getUTCDate() + n);
-  return isoDateInTz(dt, tz);
-}
-
-// Minutes-since-midnight to "HH:MM" zero-padded.
-export function minToHHMM(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  hostTz: string,
+): Date | null {
+  const instant = zonedDateTime(date, time, hostTz);
+  const exists = isoDateInTz(instant, hostTz) === date &&
+    hhmmInTz(instant, hostTz) === time;
+  return exists ? instant : null;
 }

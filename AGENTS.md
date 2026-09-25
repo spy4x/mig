@@ -77,9 +77,8 @@ src/
 │   ├── tokens.ts            — ULID + HMAC sign/verify
 │   ├── email.ts             — SMTP via nodemailer
 │   ├── email-pattern.ts     — zod 3.25.76's email regex, copied verbatim
-│   ├── ics.ts               — ICS VCALENDAR generator
-│   ├── ratelimit.ts         — in-memory per-IP sliding window
-│   ├── tz.ts                — IANA tz helpers
+│   ├── invite.ts            — booking → .ics invite (writer: @spy4x/time/ics)
+│   ├── clock.ts             — mig's zone labels + canonical zone names
 │   ├── validators.ts        — shared arktype schema for booking submission
 │   ├── book.ts              — POST /api/book + POST /embed/book handler
 │   ├── confirmed-data.ts    — shared /confirmed + /embed/confirmed lookup
@@ -107,7 +106,9 @@ src/
   budget: Fresh (`fresh`, `@fresh/plugin-vite`), Preact (`preact`,
   `preact-render-to-string`, `@preact/signals`), Tailwind (`tailwindcss`,
   `@tailwindcss/vite`), `vite`, `nodemailer`, `arktype`, `@std/assert`,
-  `@std/ulid`. Anything else needs a comment.
+  `@std/ulid`, and the owner's own `@spy4x/time` (zone math, the `.ics` writer)
+  and `@spy4x/platform` (rate limiter), pinned exactly. Anything else needs a
+  comment.
 - **Concurrency:** every mutation goes through `bookings.mutate()` which
   acquires the in-process mutex. Never read-then-write the JSON directly.
 

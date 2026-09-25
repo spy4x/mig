@@ -15,7 +15,8 @@
 
 import { type } from "arktype";
 import { Email } from "./email-pattern.ts";
-import { canonicalTimeZone, isValidTimeZone } from "./tz.ts";
+import { isValidTimeZone } from "@spy4x/time/tz";
+import { canonicalTimeZone, isCalendarDateTime } from "./clock.ts";
 
 function hasHeaderControlCharacters(value: string): boolean {
   return [...value].some((character) => {
@@ -103,12 +104,20 @@ const DateRule = type("string").pipe((s: string, ctx) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
     return ctx.reject({ message: "Bad date format." });
   }
+  // "2026-02-30" has the right shape but no such day (mig#57).
+  if (!isCalendarDateTime(s)) {
+    return ctx.reject({ message: "That date does not exist." });
+  }
   return s;
 });
 
 const SlotRule = type("string").pipe((s: string, ctx) => {
   if (!/^\d{2}:\d{2}$/.test(s)) {
     return ctx.reject({ message: "Bad time format." });
+  }
+  // "24:00" or "10:60" has the right shape but no such time (mig#57).
+  if (!isCalendarDateTime("2000-01-01", s)) {
+    return ctx.reject({ message: "That time does not exist." });
   }
   return s;
 });

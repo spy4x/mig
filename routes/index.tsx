@@ -3,14 +3,14 @@ import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
 import BookingFlow from "../islands/BookingFlow.tsx";
 import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
+import { isoDateInTz, minToHHMM, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalValidTimeZoneOrNull,
   formatGridHeader,
   formatSlotDisplay,
-  isoDateInTz,
-  minToHHMM,
-  zonedDateTime,
-} from "../lib/tz.ts";
+  hostSlotInstant,
+  isCalendarDateTime,
+} from "../lib/clock.ts";
 
 interface IndexData {
   date: string | null;
@@ -32,6 +32,7 @@ interface IndexData {
 function parseDateParam(v: string | null): string | null {
   if (!v) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  if (!isCalendarDateTime(v)) return null; // "2026-02-31" (mig#57)
   const [y, m, d] = v.split("-").map(Number);
   if (y < 1900 || y > 2999 || m < 1 || m > 12 || d < 1 || d > 31) return null;
   return v;
@@ -40,6 +41,7 @@ function parseDateParam(v: string | null): string | null {
 function parseSlotParam(v: string | null): string | null {
   if (!v) return null;
   if (!/^\d{2}:\d{2}$/.test(v)) return null;
+  if (!isCalendarDateTime("2000-01-01", v)) return null; // "24:00" (mig#57)
   const [h, m] = v.split(":").map(Number);
   if (h < 0 || h > 24 || m < 0 || m > 59) return null;
   return v;
@@ -153,7 +155,9 @@ export default define.page(function Index(ctx) {
         m += cfg.slotDurationMin
       ) {
         const time = minToHHMM(m);
-        const instant = zonedDateTime(date, time, cfg.hostTz);
+        // null inside a spring-forward gap: no such slot (mig#57).
+        const instant = hostSlotInstant(date, time, cfg.hostTz);
+        if (!instant) continue;
         daySlots.push({
           time,
           available: !booked.has(time) && instant >= minStart,

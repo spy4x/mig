@@ -13,7 +13,8 @@
 // Range inclusive both ends.
 
 import type { Availability, DayOfWeek } from "./types.ts";
-import { addDays, minToHHMM, zonedDateTime } from "./tz.ts";
+import { addDays, minToHHMM, zonedDateTime } from "@spy4x/time/tz";
+import { hostSlotInstant, isCalendarDateTime } from "./clock.ts";
 
 const DAYS: DayOfWeek[] = [
   "MON",
@@ -232,14 +233,24 @@ function expandDateRange(a: string, b: string, hostTz: string): string[] {
   return out;
 }
 
+// "2026-02-30" has the right shape but no such day. Refused here with
+// the module's own error: in a range it would otherwise reach addDays,
+// whose RangeError the caller reports as a HOST_TZ problem (mig#57).
+function calendarDate(date: string): string {
+  if (!isCalendarDateTime(date)) {
+    throw new FieldSyntaxError("not a real calendar date");
+  }
+  return date;
+}
+
 function parseSingleDate(s: string): string {
   // YYYY-MM-DD
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  if (m) return calendarDate(`${m[1]}-${m[2]}-${m[3]}`);
   // DD.MM.YYYY
   m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (m) {
-    return `${m[3]}-${m[2]}-${m[1]}`;
+    return calendarDate(`${m[3]}-${m[2]}-${m[1]}`);
   }
   throw new FieldSyntaxError("invalid, expected YYYY-MM-DD or DD.MM.YYYY");
 }
@@ -297,7 +308,9 @@ export function getSlotsForDate(
     const lastStart = range.endMin - slotMin;
     for (let m = range.startMin; m <= lastStart; m += slotMin) {
       const time = minToHHMM(m);
-      const instant = zonedDateTime(date, time, hostTz);
+      // null inside a spring-forward gap: no such slot (mig#57).
+      const instant = hostSlotInstant(date, time, hostTz);
+      if (!instant) continue;
       const available = !booked.has(time) && instant >= minStartInstant;
       out.push({ time, available });
     }

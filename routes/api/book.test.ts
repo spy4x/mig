@@ -11,9 +11,9 @@ import type { Context } from "fresh";
 import type { State } from "../../lib/utils.ts";
 import type { Config } from "../../lib/types.ts";
 import { BookingsStore } from "../../lib/bookings.ts";
-import { RateLimiter } from "../../lib/ratelimit.ts";
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../../lib/availability.ts";
-import { addDays, dayOfWeek, isoDateInTz } from "../../lib/tz.ts";
+import { addDays, dayOfWeek, isoDateInTz } from "@spy4x/time/tz";
 import { setTransportForTesting } from "../../lib/email.ts";
 import { handler } from "./book.ts";
 
@@ -91,7 +91,7 @@ Deno.test("POST /api/book: a successful booking redirects to /confirmed, not /em
     state: {
       config: cfg,
       bookings,
-      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     },
   } as unknown as Context<State>;
 

@@ -13,9 +13,9 @@ import type { Context } from "fresh";
 import type { State } from "../lib/utils.ts";
 import type { Config } from "../lib/types.ts";
 import { BookingsStore } from "../lib/bookings.ts";
-import { RateLimiter } from "../lib/ratelimit.ts";
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../lib/availability.ts";
-import { addDays, dayOfWeek, isoDateInTz } from "../lib/tz.ts";
+import { addDays, dayOfWeek, isoDateInTz } from "@spy4x/time/tz";
 import Index from "./index.tsx";
 
 const HOST_TZ = "Asia/Ho_Chi_Minh";
@@ -93,7 +93,7 @@ async function renderIndex(
       state: {
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       },
       params: {},
       config: {},

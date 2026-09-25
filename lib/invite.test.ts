@@ -1,8 +1,9 @@
 import { assertEquals } from "@std/assert";
-import { generateIcs } from "../lib/ics.ts";
-import { newCancelToken } from "../lib/tokens.ts";
-import type { Booking, Config } from "../lib/types.ts";
-import { formatClockLongAt, zonedDateTime } from "../lib/tz.ts";
+import { bookingIcs } from "./invite.ts";
+import { newCancelToken } from "./tokens.ts";
+import type { Booking, Config } from "./types.ts";
+import { zonedDateTime } from "@spy4x/time/tz";
+import { formatClockLongAt } from "./clock.ts";
 
 function makeConfig(): Config {
   return {
@@ -42,7 +43,7 @@ function makeConfig(): Config {
   };
 }
 
-Deno.test("generateIcs — VCALENDAR skeleton + single VEVENT", async () => {
+Deno.test("bookingIcs — VCALENDAR skeleton + single VEVENT", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZBK8M",
@@ -57,7 +58,7 @@ Deno.test("generateIcs — VCALENDAR skeleton + single VEVENT", async () => {
   };
   const { raw } = await newCancelToken("x");
   const cancelUrl = `https://meet.example.com/cancel?id=01HXYZBK8M&t=${raw}`;
-  const ics = generateIcs(b, cfg, cancelUrl);
+  const ics = bookingIcs(b, cfg, cancelUrl);
   const flatIcs = unfold(ics);
 
   assertEquals(ics.includes("BEGIN:VCALENDAR"), true);
@@ -75,7 +76,7 @@ Deno.test("generateIcs — VCALENDAR skeleton + single VEVENT", async () => {
   assertEquals(ics.includes("DTEND:20260828T083000Z"), true);
 
   // DESCRIPTION structure — readable paragraphs separated by blank
-  // lines (which `icsEscape` turns into literal "\n" tokens inside
+  // lines (which the ICS writer turns into literal "\n" tokens inside
   // the single DESCRIPTION value, but they survive the round-trip
   // in any RFC 5545-compliant client). The folding helper prefers
   // word boundaries so labels like "Meeting with Jane Doe" stay
@@ -95,7 +96,7 @@ Deno.test("generateIcs — VCALENDAR skeleton + single VEVENT", async () => {
   assertEquals(ics.includes("Looking forward"), false);
 });
 
-Deno.test("generateIcs — visitor description uses visitor timezone", async () => {
+Deno.test("bookingIcs — visitor description uses visitor timezone", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZBK8M",
@@ -111,7 +112,7 @@ Deno.test("generateIcs — visitor description uses visitor timezone", async () 
   };
   const { raw } = await newCancelToken("x");
   const ics = unfold(
-    generateIcs(b, cfg, `https://example.com/c?t=${raw}`, b.guestTz),
+    bookingIcs(b, cfg, `https://example.com/c?t=${raw}`, b.guestTz),
   );
 
   assertEquals(ics.includes("DTSTART:20260828T080000Z"), true);
@@ -140,7 +141,7 @@ function unfold(ics: string): string {
 // `formatClockLongAt` — the same call `guestText`/`guestHtml` in
 // lib/email.ts make — for a bare zone and an `Etc/*` offset zone, the
 // two cases the hand-built string got wrong.
-Deno.test("generateIcs — UTC description matches the guest email's time string", async () => {
+Deno.test("bookingIcs — UTC description matches the guest email's time string", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZBK8M",
@@ -156,7 +157,7 @@ Deno.test("generateIcs — UTC description matches the guest email's time string
   };
   const { raw } = await newCancelToken("x");
   const ics = unfold(
-    generateIcs(b, cfg, `https://example.com/c?t=${raw}`, b.guestTz),
+    bookingIcs(b, cfg, `https://example.com/c?t=${raw}`, b.guestTz),
   );
 
   // DTSTART is unaffected by the description fix.
@@ -171,7 +172,7 @@ Deno.test("generateIcs — UTC description matches the guest email's time string
   assertEquals(ics.includes("UTC\\, UTC"), false);
 });
 
-Deno.test("generateIcs — Etc/GMT+5 description shows the offset only", async () => {
+Deno.test("bookingIcs — Etc/GMT+5 description shows the offset only", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZBK8M",
@@ -187,7 +188,7 @@ Deno.test("generateIcs — Etc/GMT+5 description shows the offset only", async (
   };
   const { raw } = await newCancelToken("x");
   const ics = unfold(
-    generateIcs(b, cfg, `https://example.com/c?t=${raw}`, b.guestTz),
+    bookingIcs(b, cfg, `https://example.com/c?t=${raw}`, b.guestTz),
   );
 
   assertEquals(ics.includes("DTSTART:20260828T080000Z"), true);
@@ -208,7 +209,7 @@ Deno.test("generateIcs — Etc/GMT+5 description shows the offset only", async (
 // already shows both. Only lib/email.ts's ownerIcs call passes it; the
 // guest's own ics call never does, and the tests above (called without
 // it) already pin that DESCRIPTION stays `formatClockLongAt` alone.
-Deno.test("generateIcs — visitorTz folds the visitor's clock into the description", async () => {
+Deno.test("bookingIcs — visitorTz folds the visitor's clock into the description", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZBK8M",
@@ -224,7 +225,7 @@ Deno.test("generateIcs — visitorTz folds the visitor's clock into the descript
   };
   const { raw } = await newCancelToken("x");
   const ics = unfold(
-    generateIcs(
+    bookingIcs(
       b,
       cfg,
       `https://example.com/c?t=${raw}`,
@@ -246,7 +247,7 @@ Deno.test("generateIcs — visitorTz folds the visitor's clock into the descript
 // generateIcs with a `displayTz` other than `booking.hostTz` must not
 // change what instant the description describes: it always matches
 // DTSTART's real instant, regardless of `displayTz`.
-Deno.test("generateIcs — visitorTz anchors the host clock to the real host zone, even when displayTz differs", async () => {
+Deno.test("bookingIcs — visitorTz anchors the host clock to the real host zone, even when displayTz differs", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZBK8M",
@@ -266,7 +267,7 @@ Deno.test("generateIcs — visitorTz anchors the host clock to the real host zon
   // always passes booking.hostTz), but generateIcs must not depend on
   // that to stay correct.
   const ics = unfold(
-    generateIcs(
+    bookingIcs(
       b,
       cfg,
       `https://example.com/c?t=${raw}`,
@@ -288,7 +289,7 @@ Deno.test("generateIcs — visitorTz anchors the host clock to the real host zon
   assertEquals(ics.includes("Tokyo"), false);
 });
 
-Deno.test("generateIcs — visitorTz omits the visitor clock when no valid zone was captured", async () => {
+Deno.test("bookingIcs — visitorTz omits the visitor clock when no valid zone was captured", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZBK8M",
@@ -303,7 +304,7 @@ Deno.test("generateIcs — visitorTz omits the visitor clock when no valid zone 
   };
   const { raw } = await newCancelToken("x");
   const ics = unfold(
-    generateIcs(
+    bookingIcs(
       b,
       cfg,
       `https://example.com/c?t=${raw}`,
@@ -318,7 +319,7 @@ Deno.test("generateIcs — visitorTz omits the visitor clock when no valid zone 
   assertEquals(ics.includes("visitor:"), false);
 });
 
-Deno.test("generateIcs — description includes guest notes when present", async () => {
+Deno.test("bookingIcs — description includes guest notes when present", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZBK8M",
@@ -333,7 +334,7 @@ Deno.test("generateIcs — description includes guest notes when present", async
     status: "active",
   };
   const { raw } = await newCancelToken("x");
-  const ics = generateIcs(
+  const ics = bookingIcs(
     b,
     cfg,
     `https://meet.example.com/cancel?id=01HXYZBK8M&t=${raw}`,
@@ -350,79 +351,7 @@ Deno.test("generateIcs — description includes guest notes when present", async
   );
 });
 
-Deno.test("generateIcs — normalizes CRLF in guest notes", async () => {
-  const cfg = makeConfig();
-  const b: Booking = {
-    id: "01HXYZ",
-    createdAt: "2026-08-25T16:42:00.000Z",
-    date: "2026-08-28",
-    time: "10:00",
-    hostTz: "UTC",
-    guestName: "Client",
-    guestEmail: "client@example.com",
-    notes: "First line\r\nSecond line\rThird line",
-    cancelTokenHash: "h",
-    status: "active",
-  };
-  const { raw } = await newCancelToken("x");
-  const ics = generateIcs(b, cfg, `https://example.com/c?t=${raw}`);
-
-  assertEquals(
-    unfold(ics).includes("First line\\nSecond line\\nThird line"),
-    true,
-  );
-  assertEquals(ics.replaceAll("\r\n", "").includes("\r"), false);
-});
-
-Deno.test("generateIcs — strips unsupported stored control characters", async () => {
-  const cfg = makeConfig();
-  const b: Booking = {
-    id: "01HXYZ",
-    createdAt: "2026-08-25T16:42:00.000Z",
-    date: "2026-08-28",
-    time: "10:00",
-    hostTz: "UTC",
-    guestName: "Client\u0000Name",
-    guestEmail: "client@example.com",
-    notes: "Note\u0007Text",
-    cancelTokenHash: "h",
-    status: "active",
-  };
-  const { raw } = await newCancelToken("x");
-  const ics = generateIcs(b, cfg, `https://example.com/c?t=${raw}`);
-
-  assertEquals(ics.includes("\u0000"), false);
-  assertEquals(ics.includes("\u0007"), false);
-  assertEquals(unfold(ics).includes("ClientName"), true);
-  assertEquals(unfold(ics).includes("NoteText"), true);
-});
-
-Deno.test("generateIcs — folds every content line to 75 UTF-8 octets", async () => {
-  const cfg = makeConfig();
-  const b: Booking = {
-    id: "01HXYZ",
-    createdAt: "2026-08-25T16:42:00.000Z",
-    date: "2026-08-28",
-    time: "10:00",
-    hostTz: "UTC",
-    guestName: "訪問者訪問者訪問者訪問者訪問者訪問者訪問者訪問者",
-    guestEmail: "client@example.com",
-    cancelTokenHash: "h",
-    status: "active",
-  };
-  const { raw } = await newCancelToken("x");
-  const ics = generateIcs(b, cfg, `https://example.com/c?t=${raw}`);
-  const encoder = new TextEncoder();
-
-  assertEquals(
-    ics.split("\r\n").filter(Boolean).every((line) =>
-      encoder.encode(line).length <= 75
-    ),
-    true,
-  );
-});
-
-Deno.test("generateIcs — empty / whitespace notes are dropped", async () => {
+Deno.test("bookingIcs — empty / whitespace notes are dropped", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZBK8M",
@@ -437,7 +366,7 @@ Deno.test("generateIcs — empty / whitespace notes are dropped", async () => {
     status: "active",
   };
   const { raw } = await newCancelToken("x");
-  const ics = generateIcs(
+  const ics = bookingIcs(
     b,
     cfg,
     `https://meet.example.com/cancel?id=01HXYZBK8M&t=${raw}`,
@@ -447,25 +376,7 @@ Deno.test("generateIcs — empty / whitespace notes are dropped", async () => {
   assertEquals(ics.includes("Looking forward"), false);
 });
 
-Deno.test("generateIcs — quotes commas and semicolons in CN parameters", async () => {
-  const cfg = makeConfig();
-  const b: Booking = {
-    id: "01HXYZ",
-    createdAt: "2026-08-25T16:42:00.000Z",
-    date: "2026-08-28",
-    time: "10:00",
-    hostTz: "UTC",
-    guestName: "Lastname, Firstname; PhD",
-    guestEmail: "client@example.com",
-    cancelTokenHash: "h",
-    status: "active",
-  };
-  const { raw } = await newCancelToken("x");
-  const ics = generateIcs(b, cfg, `https://example.com/c?t=${raw}`);
-  assertEquals(ics.includes('CN="Lastname, Firstname; PhD";RSVP=TRUE'), true);
-});
-
-Deno.test("generateIcs — RFC 6868-encodes CN parameter delimiters", async () => {
+Deno.test("bookingIcs — RFC 6868-encodes CN parameter delimiters", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZ",
@@ -479,7 +390,7 @@ Deno.test("generateIcs — RFC 6868-encodes CN parameter delimiters", async () =
     status: "active",
   };
   const { raw } = await newCancelToken("x");
-  const ics = unfold(generateIcs(b, cfg, `https://example.com/c?t=${raw}`));
+  const ics = unfold(bookingIcs(b, cfg, `https://example.com/c?t=${raw}`));
 
   assertEquals(
     ics.includes('CN="Visitor^\';ROLE=CHAIR^^^nInjected";RSVP=TRUE'),
@@ -487,7 +398,7 @@ Deno.test("generateIcs — RFC 6868-encodes CN parameter delimiters", async () =
   );
 });
 
-Deno.test("generateIcs — cancelled status reflects", async () => {
+Deno.test("bookingIcs — a cancelled booking is a CANCELLED event sent with METHOD:CANCEL", async () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZ",
@@ -501,6 +412,10 @@ Deno.test("generateIcs — cancelled status reflects", async () => {
     status: "cancelled",
   };
   const { raw } = await newCancelToken("x");
-  const ics = generateIcs(b, cfg, `https://example.com/c?t=${raw}`);
+  const ics = bookingIcs(b, cfg, `https://example.com/c?t=${raw}`);
   assertEquals(ics.includes("STATUS:CANCELLED"), true);
+  // mig#57: @spy4x/time/ics pairs a CANCELLED event with METHOD:CANCEL;
+  // mig's own writer sent METHOD:REQUEST whatever the status.
+  assertEquals(ics.includes("METHOD:CANCEL\r\n"), true);
+  assertEquals(ics.includes("METHOD:REQUEST"), false);
 });

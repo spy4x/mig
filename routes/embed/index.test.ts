@@ -10,16 +10,16 @@ import type { Context } from "fresh";
 import type { State } from "../../lib/utils.ts";
 import type { Config } from "../../lib/types.ts";
 import { BookingsStore } from "../../lib/bookings.ts";
-import { RateLimiter } from "../../lib/ratelimit.ts";
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../../lib/availability.ts";
-import { zonedDateTime } from "../../lib/tz.ts";
+import { zonedDateTime } from "@spy4x/time/tz";
 import { handler } from "./index.tsx";
 import type { EmbedData } from "./index.tsx";
 
 type SlotCell = EmbedData["slots"][number];
 
 // Host in Ho Chi Minh (no DST — always UTC+7). October keeps New York
-// unambiguously in EDT (UTC-4) — see lib/tz.test.ts for the same
+// unambiguously in EDT (UTC-4) — see lib/clock.test.ts for the same
 // choice. 2026-10-06 is a Tuesday within MON-FRI 09:00-17:00.
 const HOST_TZ = "Asia/Ho_Chi_Minh";
 const TEST_DATE = "2026-10-06";
@@ -77,7 +77,7 @@ async function getEmbedData(
       state: {
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       },
     } as unknown as Context<State>;
     const res = await handler.GET!(ctx);
@@ -119,7 +119,7 @@ Deno.test("after a conflict, the slot list shows the taken slot disabled", async
       state: {
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       },
     } as unknown as Context<State>;
     const res = await handler.GET!(ctx);
