@@ -337,25 +337,40 @@ Deno.test("mig#57: standalone / offers no slot inside the spring-forward gap", a
   assertFalse(html.includes("slot=02%3A30"), "02:30 does not exist that day");
 });
 
-// mig#57: Dublin kept Dublin Mean Time, UTC-0:25:21, until 1916, and
-// @spy4x/time/tz's zonedDateTime throws for an offset with seconds. The
-// page's own year check lets 1900 through, so the zone check drops it.
-Deno.test("mig#57: standalone / ignores a date the host zone cannot resolve to the minute", async () => {
-  const html = await renderIndex("http://localhost/?date=1900-01-01", {
-    hostTz: "Europe/Dublin",
+// mig#57: Niue ran on UTC-11:19:40 until 1952-10-16. Noon on 1952-10-15
+// resolves, the morning slots do not, and @spy4x/time/tz's zonedDateTime
+// throws for them, so a check of noon alone let this date through to a
+// 500. Every date before 1980 is ignored instead.
+Deno.test("mig#57: standalone / ignores a date before 1980", async () => {
+  const niue = await renderIndex("http://localhost/?date=1952-10-15", {
+    hostTz: "Pacific/Niue",
   });
+  const lastBefore = await renderIndex("http://localhost/?date=1979-12-31");
+  const first = await renderIndex("http://localhost/?date=1980-01-01");
 
-  assertEquals(gridHeaderZoneLabel(html), null);
-  assertFalse(html.includes("1900-01-01"));
+  assertEquals(gridHeaderZoneLabel(niue), null);
+  assertFalse(niue.includes("1952-10-15"));
+  assertEquals(gridHeaderZoneLabel(lastBefore), null);
+  assertEquals(gridHeaderZoneLabel(first), "Ho Chi Minh, UTC+7");
 });
 
-// mig#57: the month grid starts up to six days before the 1st, and
-// Dublin's 1900 offset has seconds, so ?month=1900-01 is dropped and the
-// page shows the current month instead of failing.
-Deno.test("mig#57: standalone / ignores a month the host zone cannot resolve to the minute", async () => {
-  const html = await renderIndex("http://localhost/?month=1900-01", {
+// mig#57: the month grid runs the host zone's math on every day it
+// shows. Dublin kept UTC-0:25:21 until 1916, and Santiago went back to
+// UTC-4:42:45 in July 1916 after six years on UTC-5, so checking the
+// first day of the grid let July 1916 through. Every month before 1980
+// is ignored, and the page shows the current month instead of failing.
+Deno.test("mig#57: standalone / ignores a month before 1980", async () => {
+  const dublin = await renderIndex("http://localhost/?month=1900-01", {
     hostTz: "Europe/Dublin",
   });
+  const santiago = await renderIndex("http://localhost/?month=1916-07", {
+    hostTz: "America/Santiago",
+  });
+  const lastBefore = await renderIndex("http://localhost/?month=1979-12");
+  const first = await renderIndex("http://localhost/?month=1980-01");
 
-  assertFalse(html.includes("January 1900"));
+  assertFalse(dublin.includes("January 1900"));
+  assertFalse(santiago.includes("July 1916"));
+  assertFalse(lastBefore.includes("December 1979"));
+  assert(first.includes("January 1980"), "expected January 1980's grid");
 });

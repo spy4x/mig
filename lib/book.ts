@@ -19,7 +19,7 @@ import {
 import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts";
 import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip";
 import { zonedDateTime } from "@spy4x/time/tz";
-import { hostSlotInstant, isCalendarDateTime } from "./clock.ts";
+import { EARLIEST_DATE, hostSlotInstant } from "./clock.ts";
 import { BookingSchema } from "./validators.ts";
 
 /** "" → "/", "/embed" → "/embed" — where a failed submission redirects
@@ -160,13 +160,11 @@ export async function handleBookingSubmit(
   // land the visitor back on the confirm step for a slot they can't
   // book (mig#15 round 2).
   const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000);
-  // The validator checked the calendar; the host's zone can still have
-  // no minute-exact answer for the date — 1800-06-01 in New York ran on
-  // a local mean time with seconds in its offset (mig#57).
-  if (
-    !isCalendarDateTime(input.date, "12:00", cfg.hostTz) ||
-    !isCalendarDateTime(input.date, input.slot, cfg.hostTz)
-  ) {
+  // The validator checked the calendar. Before EARLIEST_DATE the host's
+  // zone may not resolve the slot to the minute — Phoenix ran on a local
+  // mean time until noon on 1883-11-18 — and the zone math below would
+  // throw (mig#57).
+  if (input.date < EARLIEST_DATE) {
     return errRedirect(
       "That date is not available for booking.",
       redirectDateTz,

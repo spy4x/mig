@@ -87,11 +87,19 @@ Deno.test("mig#57: /api/slots lists no slot inside the spring-forward gap", asyn
   ]);
 });
 
-// mig#57: New York ran on local mean time (UTC-4:56:02) before 1900, and
-// @spy4x/time/tz's zonedDateTime throws for an offset with seconds.
-Deno.test("mig#57: /api/slots answers 400 for a date the host zone cannot resolve to the minute", async () => {
-  const res = await getSlots("1800-06-01", "America/New_York");
+// mig#57: Phoenix ran on UTC-7:28:18 until noon on 1883-11-18, a
+// Sunday. Noon resolves, the 01:00-04:00 slots do not, and
+// @spy4x/time/tz's zonedDateTime throws for them, so a check of noon
+// alone let this date through to a 500. Every date before 1980 is 400.
+Deno.test("mig#57: /api/slots answers 400 for a date before 1980", async () => {
+  const phoenix = await getSlots("1883-11-18", "America/Phoenix");
+  const lastBefore = await getSlots("1979-12-31");
+  const first = await getSlots("1980-01-01");
 
-  assertEquals(res.status, 400);
-  assertEquals(await res.json(), { error: "bad date" });
+  assertEquals(phoenix.status, 400);
+  assertEquals(await phoenix.json(), { error: "bad date" });
+  assertEquals(lastBefore.status, 400);
+  assertEquals(await lastBefore.json(), { error: "bad date" });
+  assertEquals(first.status, 200);
+  assertEquals(await first.json(), { date: "1980-01-01", slots: [] });
 });

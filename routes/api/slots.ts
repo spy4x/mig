@@ -3,15 +3,22 @@
 
 import { define } from "../../lib/utils.ts";
 import { minToHHMM, zonedDateTime } from "@spy4x/time/tz";
-import { hostSlotInstant, isCalendarDateTime } from "../../lib/clock.ts";
+import {
+  EARLIEST_DATE,
+  hostSlotInstant,
+  isCalendarDateTime,
+} from "../../lib/clock.ts";
 
 export const handler = define.handlers({
   GET(ctx) {
     const cfg = ctx.state.config;
     const url = new URL(ctx.req.url);
     const date = url.searchParams.get("date") ?? "";
+    // Before 1980 some zones' offsets had seconds (see EARLIEST_DATE),
+    // and "2026-02-30" is not a date at all (mig#57).
     if (
       !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      date < EARLIEST_DATE ||
       !isCalendarDateTime(date, "12:00", cfg.hostTz)
     ) {
       return new Response(JSON.stringify({ error: "bad date" }), {

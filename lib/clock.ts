@@ -365,6 +365,22 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+// The earliest date mig takes from a link, a form or /api/slots: `/`
+// and `/embed` ignore an earlier `?date=` or `?month=`, /api/slots
+// answers 400 and a booking is refused (mig#57). `@spy4x/time/tz`'s
+// zonedDateTime answers at minute resolution only, so it throws for a
+// UTC offset with seconds: the local mean times many zones kept into
+// the 20th century (New York's was -4:56:02 until 1883, Dublin's
+// -0:25:21 until 1916). Checking one time of day, or the first day a
+// month grid shows, missed some of them: such an offset can cover only
+// the morning of a day (Phoenix, 1883-11-18) or come back years after
+// the zone had left it (Santiago, in 1916). So there is one
+// fixed floor instead. The last offset with seconds in any zone ended
+// on 1972-01-07, when Africa/Monrovia left -0:44:30; 1980 leaves room
+// for the six days a month grid shows before the 1st. Nobody can book
+// a past date, so no visitor needs an earlier one.
+export const EARLIEST_DATE = "1980-01-01";
+
 // Whether `date` ("YYYY-MM-DD") and `time` ("HH:MM") name a real
 // calendar date and time of day: "2026-02-30" and "24:00" do not.
 // `@spy4x/time/tz`'s zonedDateTime throws a RangeError on both (mig's
@@ -372,11 +388,11 @@ function pad2(n: number): string {
 // 00:00), so every untrusted date or time is checked here first and
 // refused as bad input instead of reaching it and failing the request
 // (mig#57). With the default `tz`, UTC, this checks the calendar only.
-// Pass the host's zone wherever the date then goes through its zone
-// math: before 1900 many zones ran on a local mean time whose offset
-// has seconds (New York's was -4:56:02), and zonedDateTime refuses to
-// answer those at minute resolution — 1800-06-01 in New York throws.
-// Neither check covers a spring-forward gap; see hostSlotInstant.
+// With a zone it also refuses a wall clock that zone cannot resolve to
+// the minute — 1800-06-01 in New York. Entry points refuse any date
+// before EARLIEST_DATE first, which covers every such case; the routes
+// still pass the host's zone as a second guard. Neither check covers a
+// spring-forward gap; see hostSlotInstant.
 export function isCalendarDateTime(
   date: string,
   time = "12:00",

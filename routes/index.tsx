@@ -6,6 +6,7 @@ import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
 import { isoDateInTz, minToHHMM, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalValidTimeZoneOrNull,
+  EARLIEST_DATE,
   formatGridHeader,
   formatSlotDisplay,
   hostSlotInstant,
@@ -32,7 +33,9 @@ interface IndexData {
 function parseDateParam(v: string | null, hostTz: string): string | null {
   if (!v) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
-  // "2026-02-31", or 1800-06-01 in a zone on local mean time (mig#57).
+  // Before 1980 some zones' offsets had seconds (see EARLIEST_DATE), and
+  // "2026-02-31" is not a date at all (mig#57).
+  if (v < EARLIEST_DATE) return null;
   if (!isCalendarDateTime(v, "12:00", hostTz)) return null;
   const [y, m, d] = v.split("-").map(Number);
   if (y < 1900 || y > 2999 || m < 1 || m > 12 || d < 1 || d > 31) return null;
@@ -48,21 +51,16 @@ function parseSlotParam(v: string | null): string | null {
   return v;
 }
 
-function parseMonthParam(v: string | null, hostTz: string): string | null {
+function parseMonthParam(v: string | null): string | null {
   if (!v) return null;
   const m = v.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
   if (!m) return null;
   const yyyy = parseInt(m[1], 10);
   const mm = parseInt(m[2], 10);
   if (yyyy < 1900 || yyyy > 2999 || mm < 1 || mm > 12) return null;
-  // The month grid runs addDays in the host's zone from up to six days
-  // before the 1st. Dublin kept a UTC offset with seconds until 1916,
-  // so ?month=1900-01 there made zonedDateTime throw (mig#57). Offsets
-  // with seconds only ever come first, so checking the earliest day
-  // the grid shows covers the rest.
-  const earliest = new Date(Date.UTC(yyyy, mm - 1, 1 - 6))
-    .toISOString().slice(0, 10);
-  if (!isCalendarDateTime(earliest, "12:00", hostTz)) return null;
+  // The month grid runs the host zone's math on every day it shows,
+  // which throws for Dublin's 1900-01 (see EARLIEST_DATE, mig#57).
+  if (`${m[1]}-${m[2]}-01` < EARLIEST_DATE) return null;
   return `${m[1]}-${m[2]}-01`;
 }
 
@@ -94,7 +92,7 @@ export default define.page(function Index(ctx) {
   const date = parseDateParam(url.searchParams.get("date"), cfg.hostTz);
   const slot = parseSlotParam(url.searchParams.get("slot"));
   const error = url.searchParams.get("err");
-  const monthParam = parseMonthParam(url.searchParams.get("month"), cfg.hostTz);
+  const monthParam = parseMonthParam(url.searchParams.get("month"));
 
   // Visitor timezone (mig#18) — read and validated the same way
   // routes/embed/index.tsx does, so a visitor who arrives at "/" with

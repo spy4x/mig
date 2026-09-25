@@ -111,43 +111,69 @@ Deno.test("POST /api/book: a successful booking redirects to /confirmed, not /em
   await rm(path);
 });
 
-// mig#57: before 1900 New York ran on local mean time, UTC-4:56:02, and
-// @spy4x/time/tz's zonedDateTime refuses an offset with seconds rather
-// than answer up to a minute wrong. The date passes the calendar check,
-// so the write path checks it in the host's zone and refuses it.
-Deno.test("POST /api/book: a date the host zone cannot resolve to the minute is refused", async () => {
-  const cfg = { ...fakeConfig(), hostTz: "America/New_York" };
+// Submits one booking for `date` at `slot` and returns the redirect.
+async function submit(
+  date: string,
+  slot: string,
+  hostTz: string,
+  bookings: BookingsStore,
+): Promise<URL> {
+  const body = new URLSearchParams({
+    name: "Visitor",
+    email: "visitor@example.com",
+    notes: "",
+    date,
+    slot,
+    website: "",
+  });
+  const ctx = {
+    req: new Request("http://localhost/api/book", { method: "POST", body }),
+    state: {
+      config: { ...fakeConfig(), hostTz },
+      bookings,
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    },
+  } as unknown as Context<State>;
+  const res = await handler.POST!(ctx);
+  assertEquals(res.status, 303);
+  return new URL(res.headers.get("location")!);
+}
+
+// mig#57: Phoenix ran on local mean time, UTC-7:28:18, until noon on
+// 1883-11-18, and @spy4x/time/tz's zonedDateTime refuses an offset with
+// seconds rather than answer up to a minute wrong. The date passes the
+// calendar check, and its noon resolves, but its 09:00 does not. Every
+// date before 1980 is refused before any zone math runs; 1980-01-01
+// gets as far as the past-time check.
+Deno.test("POST /api/book: a date before 1980 is refused", async () => {
   const path = `/tmp/mig-api-book-test-${crypto.randomUUID()}.json`;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
 
   try {
-    const body = new URLSearchParams({
-      name: "Visitor",
-      email: "visitor@example.com",
-      notes: "",
-      date: "1800-06-01",
-      slot: "09:00",
-      website: "",
-    });
-    const ctx = {
-      req: new Request("http://localhost/api/book", { method: "POST", body }),
-      state: {
-        config: cfg,
-        bookings,
-        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-      },
-    } as unknown as Context<State>;
+    const phoenix = await submit(
+      "1883-11-18",
+      "09:00",
+      "America/Phoenix",
+      bookings,
+    );
+    const lastBefore = await submit("1979-12-31", "09:00", HOST_TZ, bookings);
+    const first = await submit("1980-01-01", "09:00", HOST_TZ, bookings);
 
-    const res = await handler.POST!(ctx);
-    assertEquals(res.status, 303);
-    const location = new URL(res.headers.get("location")!);
-    assertEquals(location.pathname, "/");
+    assertEquals(phoenix.pathname, "/");
     assertEquals(
-      location.searchParams.get("err"),
+      phoenix.searchParams.get("err"),
       "That date is not available for booking.",
     );
-    assertEquals(bookings.forDate("1800-06-01").length, 0);
+    assertEquals(
+      lastBefore.searchParams.get("err"),
+      "That date is not available for booking.",
+    );
+    assertEquals(
+      first.searchParams.get("err"),
+      "That time is no longer available.",
+    );
+    assertEquals(bookings.list().length, 0);
   } finally {
     await rm(path);
   }
