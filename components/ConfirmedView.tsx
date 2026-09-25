@@ -18,12 +18,12 @@
                   link already opens in a new tab on both.
 */
 
+import { isValidTimeZone } from "@spy4x/time/tz";
 import {
-  formatDateLong,
-  formatTimeOfDay,
-  isValidTimeZone,
-  validTimeZoneOr,
-} from "../lib/tz.ts";
+  canonicalTimeZoneOr,
+  formatHostClockIn,
+  formatHostDateIn,
+} from "../lib/clock.ts";
 import { ArrowLeft, ArrowRight, Check, InfoCircle, Minus } from "./icons.tsx";
 import type { ConfirmedBooking, ConfirmedData } from "../lib/confirmed-data.ts";
 
@@ -112,9 +112,9 @@ export function ConfirmedView(props: ConfirmedViewProps) {
   // which built the instant in the wrong zone and silently skipped
   // the conversion.
   const knownGuestTz = !!b.guestTz && isValidTimeZone(b.guestTz);
-  const displayTz = validTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
-  const dateLabel = formatDateLong(b.date, b.time, b.hostTz, displayTz);
-  const timeLabel = formatTimeOfDay(b.date, b.time, b.hostTz, displayTz);
+  const displayTz = canonicalTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
+  const dateLabel = formatHostDateIn(b.date, b.time, b.hostTz, displayTz);
+  const timeLabel = formatHostClockIn(b.date, b.time, b.hostTz, displayTz);
 
   if (mode === "cancelled") {
     return (

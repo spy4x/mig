@@ -13,9 +13,9 @@ import type { Context } from "fresh";
 import type { State } from "../lib/utils.ts";
 import type { Config } from "../lib/types.ts";
 import { BookingsStore } from "../lib/bookings.ts";
-import { RateLimiter } from "../lib/ratelimit.ts";
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../lib/availability.ts";
-import { addDays, dayOfWeek, isoDateInTz } from "../lib/tz.ts";
+import { addDays, dayOfWeek, isoDateInTz } from "@spy4x/time/tz";
 import Index from "./index.tsx";
 
 const HOST_TZ = "Asia/Ho_Chi_Minh";
@@ -93,7 +93,7 @@ async function renderIndex(
       state: {
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       },
       params: {},
       config: {},
@@ -290,4 +290,87 @@ Deno.test("mig#48 review: the header comes from the FIRST slot, so only a LATER 
     />03:00, UTC\+1</.test(html),
     "expected the post-transition slot to show its own offset inline",
   );
+});
+
+// ─── mig#57: dates and times that do not exist ───────────────────────
+
+// @spy4x/time/tz's zonedDateTime throws on "2026-02-31" and "24:00"
+// where mig's own copy rolled them over. The page drops both params,
+// as it does any malformed one, and still renders.
+Deno.test("mig#57: standalone / ignores a date or slot param that is not on the calendar", async () => {
+  const badDate = await renderIndex("http://localhost/?date=2026-02-31");
+  assertEquals(gridHeaderZoneLabel(badDate), null);
+  assertFalse(badDate.includes("2026-02-31"));
+
+  const badSlot = await renderIndex(
+    `http://localhost/?date=${TEST_DATE}&slot=24:00`,
+  );
+  assert(badSlot.includes("slot=09%3A00"), "expected the day's slots");
+  assertFalse(badSlot.includes("24:00"));
+  assertFalse(badSlot.includes("24%3A00"));
+});
+
+// The next day Berlin's clocks jump from 02:00 to 03:00: the last
+// Sunday of March, this year's if it is at least two days ahead, else
+// next year's. Computed, not fixed, because a slot that is past or
+// inside the minimum notice renders without a link.
+function nextSpringForwardSunday(): string {
+  const today = new Date(Date.now() + 2 * 86_400_000).toISOString()
+    .slice(0, 10);
+  for (let year = new Date().getUTCFullYear();; year++) {
+    const march31 = new Date(Date.UTC(year, 2, 31));
+    const sunday = new Date(Date.UTC(year, 2, 31 - march31.getUTCDay()));
+    const iso = sunday.toISOString().slice(0, 10);
+    if (iso > today) return iso;
+  }
+}
+
+Deno.test("mig#57: standalone / offers no slot inside the spring-forward gap", async () => {
+  const date = nextSpringForwardSunday();
+  const html = await renderIndex(`http://localhost/?date=${date}`, {
+    hostTz: "Europe/Berlin",
+    weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
+  });
+
+  assert(html.includes("slot=03%3A00"), "expected the 03:00 slot");
+  assertFalse(html.includes("slot=02%3A00"), "02:00 does not exist that day");
+  assertFalse(html.includes("slot=02%3A30"), "02:30 does not exist that day");
+});
+
+// mig#57: Niue ran on UTC-11:19:40 until 1952-10-16. Noon on 1952-10-15
+// resolves, the morning slots do not, and @spy4x/time/tz's zonedDateTime
+// throws for them, so a check of noon alone let this date through to a
+// 500. Every date before 1980 is ignored instead.
+Deno.test("mig#57: standalone / ignores a date before 1980", async () => {
+  const niue = await renderIndex("http://localhost/?date=1952-10-15", {
+    hostTz: "Pacific/Niue",
+  });
+  const lastBefore = await renderIndex("http://localhost/?date=1979-12-31");
+  const first = await renderIndex("http://localhost/?date=1980-01-01");
+
+  assertEquals(gridHeaderZoneLabel(niue), null);
+  assertFalse(niue.includes("1952-10-15"));
+  assertEquals(gridHeaderZoneLabel(lastBefore), null);
+  assertEquals(gridHeaderZoneLabel(first), "Ho Chi Minh, UTC+7");
+});
+
+// mig#57: the month grid runs the host zone's math on every day it
+// shows. Dublin kept UTC-0:25:21 until 1916, and Santiago went back to
+// UTC-4:42:45 in July 1916 after six years on UTC-5, so checking the
+// first day of the grid let July 1916 through. Every month before 1980
+// is ignored, and the page shows the current month instead of failing.
+Deno.test("mig#57: standalone / ignores a month before 1980", async () => {
+  const dublin = await renderIndex("http://localhost/?month=1900-01", {
+    hostTz: "Europe/Dublin",
+  });
+  const santiago = await renderIndex("http://localhost/?month=1916-07", {
+    hostTz: "America/Santiago",
+  });
+  const lastBefore = await renderIndex("http://localhost/?month=1979-12");
+  const first = await renderIndex("http://localhost/?month=1980-01");
+
+  assertFalse(dublin.includes("January 1900"));
+  assertFalse(santiago.includes("July 1916"));
+  assertFalse(lastBefore.includes("December 1979"));
+  assert(first.includes("January 1980"), "expected January 1980's grid");
 });

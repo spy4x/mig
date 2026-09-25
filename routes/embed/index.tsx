@@ -4,17 +4,18 @@ import {
   countSlotsForDate,
   getCandidateDates,
 } from "../../lib/availability.ts";
+import { isoDateInTz, minToHHMM, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalValidTimeZoneOrNull,
+  EARLIEST_DATE,
   formatClockAt,
-  formatDateLong,
   formatGridHeader,
+  formatHostDateIn,
   formatShortDateAt,
   formatSlotDisplay,
-  isoDateInTz,
-  minToHHMM,
-  zonedDateTime,
-} from "../../lib/tz.ts";
+  hostSlotInstant,
+  isCalendarDateTime,
+} from "../../lib/clock.ts";
 import { embedTzRedirectScript } from "../../lib/guest-tz-script.ts";
 import { parseThemeParam } from "../../lib/theme.ts";
 import {
@@ -87,15 +88,20 @@ export interface EmbedData {
   theme: "light" | "dark" | null;
 }
 
-function parseDateParam(v: string | null): string | null {
+function parseDateParam(v: string | null, hostTz: string): string | null {
   if (!v) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  // Before 1980 some zones' offsets had seconds (see EARLIEST_DATE), and
+  // "2026-02-31" is not a date at all (mig#57).
+  if (v < EARLIEST_DATE) return null;
+  if (!isCalendarDateTime(v, "12:00", hostTz)) return null;
   return v;
 }
 
 function parseSlotParam(v: string | null): string | null {
   if (!v) return null;
   if (!/^\d{2}:\d{2}$/.test(v)) return null;
+  if (!isCalendarDateTime("2000-01-01", v)) return null; // "24:00" (mig#57)
   return v;
 }
 
@@ -106,6 +112,9 @@ function parseMonthParam(v: string | null): string | null {
   const yyyy = parseInt(m[1], 10);
   const mm = parseInt(m[2], 10);
   if (yyyy < 1900 || yyyy > 2999 || mm < 1 || mm > 12) return null;
+  // The month grid runs the host zone's math on every day it shows,
+  // which throws for Dublin's 1900-01 (see EARLIEST_DATE, mig#57).
+  if (`${m[1]}-${m[2]}-01` < EARLIEST_DATE) return null;
   return `${m[1]}-${m[2]}-01`;
 }
 
@@ -135,7 +144,7 @@ export const handler = define.handlers({
   GET(ctx) {
     const cfg = ctx.state.config;
     const url = new URL(ctx.req.url);
-    const date = parseDateParam(url.searchParams.get("date"));
+    const date = parseDateParam(url.searchParams.get("date"), cfg.hostTz);
     const slot = parseSlotParam(url.searchParams.get("slot"));
     const monthParam = parseMonthParam(url.searchParams.get("month"));
     const error = url.searchParams.get("err");
@@ -188,7 +197,7 @@ export const handler = define.handlers({
 
     // Date label for the picked day. Converted into the display zone
     // the same way the standalone island does (both now call
-    // lib/tz.ts's formatDateLong with "12:00" — noon of the
+    // lib/clock.ts's formatHostDateIn with "12:00" — noon of the
     // host-local date, formatted in displayTz): the calendar grid
     // itself stays host-anchored (mig#15 allows this for the month
     // grid), but the single picked day's own label reads correctly in
@@ -208,7 +217,7 @@ export const handler = define.handlers({
     // The selected slot's own date, from its exact instant — see the
     // EmbedData.slotDateLabel doc comment (mig#15 review).
     const slotDateLabel = date && slot
-      ? formatDateLong(date, slot, cfg.hostTz, displayTz)
+      ? formatHostDateIn(date, slot, cfg.hostTz, displayTz)
       : null;
 
     let slots: SlotCell[] = [];
@@ -230,7 +239,9 @@ export const handler = define.handlers({
           m += cfg.slotDurationMin
         ) {
           const time = minToHHMM(m);
-          const instant = zonedDateTime(date, time, cfg.hostTz);
+          // null inside a spring-forward gap: no such slot (mig#57).
+          const instant = hostSlotInstant(date, time, cfg.hostTz);
+          if (!instant) continue;
           withInstant.push({
             time,
             available: !booked.has(time) && instant >= minStart,

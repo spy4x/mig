@@ -11,9 +11,9 @@ import type { Context } from "fresh";
 import type { State } from "../../lib/utils.ts";
 import type { Config } from "../../lib/types.ts";
 import { BookingsStore } from "../../lib/bookings.ts";
-import { RateLimiter } from "../../lib/ratelimit.ts";
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../../lib/availability.ts";
-import { addDays, dayOfWeek, isoDateInTz } from "../../lib/tz.ts";
+import { addDays, dayOfWeek, isoDateInTz } from "@spy4x/time/tz";
 import { setTransportForTesting } from "../../lib/email.ts";
 import { handler } from "./book.ts";
 
@@ -91,7 +91,7 @@ Deno.test("POST /api/book: a successful booking redirects to /confirmed, not /em
     state: {
       config: cfg,
       bookings,
-      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     },
   } as unknown as Context<State>;
 
@@ -109,4 +109,72 @@ Deno.test("POST /api/book: a successful booking redirects to /confirmed, not /em
     location.pathname,
   );
   await rm(path);
+});
+
+// Submits one booking for `date` at `slot` and returns the redirect.
+async function submit(
+  date: string,
+  slot: string,
+  hostTz: string,
+  bookings: BookingsStore,
+): Promise<URL> {
+  const body = new URLSearchParams({
+    name: "Visitor",
+    email: "visitor@example.com",
+    notes: "",
+    date,
+    slot,
+    website: "",
+  });
+  const ctx = {
+    req: new Request("http://localhost/api/book", { method: "POST", body }),
+    state: {
+      config: { ...fakeConfig(), hostTz },
+      bookings,
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    },
+  } as unknown as Context<State>;
+  const res = await handler.POST!(ctx);
+  assertEquals(res.status, 303);
+  return new URL(res.headers.get("location")!);
+}
+
+// mig#57: Phoenix ran on local mean time, UTC-7:28:18, until noon on
+// 1883-11-18, and @spy4x/time/tz's zonedDateTime refuses an offset with
+// seconds rather than answer up to a minute wrong. The date passes the
+// calendar check, and its noon resolves, but its 09:00 does not. Every
+// date before 1980 is refused before any zone math runs; 1980-01-01
+// gets as far as the past-time check.
+Deno.test("POST /api/book: a date before 1980 is refused", async () => {
+  const path = `/tmp/mig-api-book-test-${crypto.randomUUID()}.json`;
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+
+  try {
+    const phoenix = await submit(
+      "1883-11-18",
+      "09:00",
+      "America/Phoenix",
+      bookings,
+    );
+    const lastBefore = await submit("1979-12-31", "09:00", HOST_TZ, bookings);
+    const first = await submit("1980-01-01", "09:00", HOST_TZ, bookings);
+
+    assertEquals(phoenix.pathname, "/");
+    assertEquals(
+      phoenix.searchParams.get("err"),
+      "That date is not available for booking.",
+    );
+    assertEquals(
+      lastBefore.searchParams.get("err"),
+      "That date is not available for booking.",
+    );
+    assertEquals(
+      first.searchParams.get("err"),
+      "That time is no longer available.",
+    );
+    assertEquals(bookings.list().length, 0);
+  } finally {
+    await rm(path);
+  }
 });

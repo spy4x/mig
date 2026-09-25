@@ -11,6 +11,32 @@
 // If we crash mid-rename, the kernel still gives us a complete file.
 
 import type { Booking } from "./types.ts";
+import { isCalendarDateTime } from "./clock.ts";
+
+// Before mig#57 the booking validator checked only the shape of `date`
+// and `slot`, so a hand-made POST could store "2027-02-30" at "10:60",
+// and mig's own zonedDateTime rolled that over: the visitor was told
+// 2 March at 11:00. @spy4x/time/tz's zonedDateTime throws on it
+// instead, which would break /confirmed, /cancel and POST /api/cancel
+// for that booking. So a stored record gets the same roll-over once,
+// when it is loaded, and keeps meaning what the visitor was told. A
+// record whose date or time is not even the right shape, or would roll
+// past year 9999, is left alone.
+export function rollOverStoredWallClock(booking: Booking): Booking {
+  if (isCalendarDateTime(booking.date, booking.time)) return booking;
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(booking.date);
+  const t = /^(\d{2}):(\d{2})$/.exec(booking.time);
+  if (!d || !t) return booking;
+  const rolled = new Date(
+    Date.UTC(+d[1], +d[2] - 1, +d[3], +t[1], +t[2], 0, 0),
+  );
+  if (Number.isNaN(rolled.getTime())) return booking;
+  // "9999-12-32" rolls into year 10000, which toISOString writes as
+  // "+010000-01-01" and no "YYYY-MM-DD" field can hold.
+  if (rolled.getUTCFullYear() > 9999) return booking;
+  const iso = rolled.toISOString();
+  return { ...booking, date: iso.slice(0, 10), time: iso.slice(11, 16) };
+}
 
 export class AsyncMutex {
   private locked = false;
@@ -62,7 +88,7 @@ export class BookingsStore {
       if (!Array.isArray(parsed)) {
         throw new Error("bookings.json must be a JSON array");
       }
-      this.bookings = parsed as Booking[];
+      this.bookings = (parsed as Booking[]).map(rollOverStoredWallClock);
     } catch (e) {
       if (e instanceof Deno.errors.NotFound) {
         this.bookings = [];

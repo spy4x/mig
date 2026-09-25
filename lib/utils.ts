@@ -3,12 +3,12 @@
 import { createDefine } from "fresh";
 import type { BookingsStore } from "./bookings.ts";
 import type { Config } from "./types.ts";
-import type { RateLimiter } from "./ratelimit.ts";
+import type { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 
 export interface State {
   config: Config;
   bookings: BookingsStore;
-  rateLimiter: RateLimiter;
+  rateLimiter: MemoryRateLimiter;
 }
 
 export const define = createDefine<State>();

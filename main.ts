@@ -3,15 +3,15 @@
 import { App, staticFiles } from "fresh";
 import { config } from "./lib/config.ts";
 import { BookingsStore } from "./lib/bookings.ts";
-import { RateLimiter } from "./lib/ratelimit.ts";
+import { createMemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import type { State } from "./lib/utils.ts";
 
 const store = new BookingsStore({ filePath: config.dataPath });
 await store.init();
 
-const rateLimiter = new RateLimiter({
+const rateLimiter = createMemoryRateLimiter({
   windowMs: 5 * 60 * 1000,
-  max: config.rateLimitPer5Min,
+  limit: config.rateLimitPer5Min,
 });
 
 // Self-healthcheck: connects to the listening socket and exits 0 if alive.

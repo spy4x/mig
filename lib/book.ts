@@ -17,8 +17,9 @@ import {
   sendOwnerBookingEmail,
 } from "./email.ts";
 import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts";
-import { clientIp, humanRetry } from "./ratelimit.ts";
-import { zonedDateTime } from "./tz.ts";
+import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip";
+import { zonedDateTime } from "@spy4x/time/tz";
+import { EARLIEST_DATE, hostSlotInstant } from "./clock.ts";
 import { BookingSchema } from "./validators.ts";
 
 /** "" → "/", "/embed" → "/embed" — where a failed submission redirects
@@ -46,7 +47,14 @@ export async function handleBookingSubmit(
   basePath: string,
 ): Promise<Response> {
   const cfg = ctx.state.config;
-  const ip = clientIp(ctx.req);
+  // `true` trusts CF-Connecting-IP, then X-Forwarded-For's first hop,
+  // then X-Real-IP — mig's own order before mig#57 (the ts-libs default,
+  // `false`, would put every visitor in one "0.0.0.0" bucket, since no
+  // socket address is passed). This trusts headers any client can set:
+  // compose.example.yml publishes port 8080 directly, and a client
+  // there picks its own bucket by sending CF-Connecting-IP. See
+  // https://github.com/spy4x/mig/issues/59 for the fix.
+  const ip = clientIp(ctx.req, undefined, true);
 
   function errRedirect(
     message: string,
@@ -110,7 +118,7 @@ export async function handleBookingSubmit(
 
   // Rate limit per IP
   const limit = ctx.state.rateLimiter.check(ip);
-  if (!limit.ok) {
+  if (!limit.allowed) {
     return errRedirect(
       `Too many attempts. Try again in ${humanRetry(limit.retryAfterMs)}.`,
       redirectDateTz,
@@ -152,7 +160,25 @@ export async function handleBookingSubmit(
   // land the visitor back on the confirm step for a slot they can't
   // book (mig#15 round 2).
   const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000);
-  const slotInstant = zonedDateTime(input.date, input.slot, cfg.hostTz);
+  // The validator checked the calendar. Before EARLIEST_DATE the host's
+  // zone may not resolve the slot to the minute — Phoenix ran on a local
+  // mean time until noon on 1883-11-18 — and the zone math below would
+  // throw (mig#57).
+  if (input.date < EARLIEST_DATE) {
+    return errRedirect(
+      "That date is not available for booking.",
+      redirectDateTz,
+    );
+  }
+  const slotInstant = hostSlotInstant(input.date, input.slot, cfg.hostTz);
+  // A spring-forward gap time (mig#57): the host's clock never shows
+  // it, so no slot was offered for it either.
+  if (!slotInstant) {
+    return errRedirect(
+      "That time is outside availability hours.",
+      redirectDateTz,
+    );
+  }
   if (slotInstant < minStart) {
     return errRedirect("That time is no longer available.", redirectDateTz);
   }

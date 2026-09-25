@@ -4,15 +4,14 @@
 import nodemailer from "nodemailer";
 import type { Config } from "./types.ts";
 import type { Booking } from "./types.ts";
-import { generateIcs } from "./ics.ts";
+import { bookingIcs } from "./invite.ts";
+import { isValidTimeZone, zonedDateTime } from "@spy4x/time/tz";
 import {
+  canonicalTimeZoneOr,
   formatClockLongAt,
   formatClockShortAt,
   formatOwnerClock,
-  isValidTimeZone,
-  validTimeZoneOr,
-  zonedDateTime,
-} from "./tz.ts";
+} from "./clock.ts";
 
 // The one line shown instead of an unlabelled host time whenever a
 // recipient's own zone isn't known (mig#15 review) — no other new
@@ -187,10 +186,10 @@ export async function sendBookingCorrectionEmail(
     text: correctionText(config, booking, ownerWhenLong, rolledBack),
     html: correctionHtml(config, booking, ownerWhenLong, rolledBack),
     // No .ics attachment: properly retracting the invite already sent
-    // needs a METHOD:CANCEL companion (same UID, a higher SEQUENCE)
-    // to the METHOD:REQUEST one — generateIcs in lib/ics.ts only ever
-    // emits REQUEST, and adding CANCEL support is new ICS code, out
-    // of scope for this fix. The email body below tells the host to
+    // needs a METHOD:CANCEL companion with the same UID and a higher
+    // SEQUENCE. bookingIcs in lib/invite.ts writes METHOD:CANCEL for a
+    // cancelled booking, but sets no SEQUENCE, so a client may not treat
+    // it as replacing the REQUEST. The email body below tells the host to
     // ignore the earlier invite instead.
   });
 }
@@ -273,12 +272,12 @@ export function buildBookingEmails(
   cancelUrl: string,
 ): RecipientEmails {
   const guestTz = guestTimeZone(booking);
-  const guestIcs = generateIcs(booking, config, cancelUrl, guestTz);
+  const guestIcs = bookingIcs(booking, config, cancelUrl, guestTz);
   // review follow-up: the owner's invite now carries the visitor's
   // clock too, the same way the owner email body already does — see
-  // generateIcs's doc comment. The guest's own ics above passes no
+  // bookingIcs's doc comment. The guest's own ics above passes no
   // `visitorTz`, so its DESCRIPTION is unaffected.
-  const ownerIcs = generateIcs(
+  const ownerIcs = bookingIcs(
     booking,
     config,
     cancelUrl,
@@ -623,7 +622,7 @@ function isKnownTimeZone(tz: string | undefined): boolean {
 }
 
 function guestTimeZone(booking: Booking): string {
-  return validTimeZoneOr(booking.guestTz, booking.hostTz);
+  return canonicalTimeZoneOr(booking.guestTz, booking.hostTz);
 }
 
 function htmlWrap(config: Config, body: string): string {

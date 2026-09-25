@@ -19,7 +19,7 @@
   weekday for the first row). It is never displayed.
 */
 
-import { addDays, isoDateInTz } from "../lib/tz.ts";
+import { addDays, isoDateInTz } from "@spy4x/time/tz";
 import { ChevronLeft, ChevronRight } from "./icons.tsx";
 import { pickerHref } from "../lib/picker-links.ts";
 

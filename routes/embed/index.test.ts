@@ -5,21 +5,22 @@
 // hands to the page: per-slot clock strings, the date label, and the
 // tz-redirect flag.
 
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertFalse } from "@std/assert";
+import { renderToString } from "preact-render-to-string";
 import type { Context } from "fresh";
 import type { State } from "../../lib/utils.ts";
 import type { Config } from "../../lib/types.ts";
 import { BookingsStore } from "../../lib/bookings.ts";
-import { RateLimiter } from "../../lib/ratelimit.ts";
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../../lib/availability.ts";
-import { zonedDateTime } from "../../lib/tz.ts";
-import { handler } from "./index.tsx";
+import { zonedDateTime } from "@spy4x/time/tz";
+import EmbedPage, { handler } from "./index.tsx";
 import type { EmbedData } from "./index.tsx";
 
 type SlotCell = EmbedData["slots"][number];
 
 // Host in Ho Chi Minh (no DST — always UTC+7). October keeps New York
-// unambiguously in EDT (UTC-4) — see lib/tz.test.ts for the same
+// unambiguously in EDT (UTC-4) — see lib/clock.test.ts for the same
 // choice. 2026-10-06 is a Tuesday within MON-FRI 09:00-17:00.
 const HOST_TZ = "Asia/Ho_Chi_Minh";
 const TEST_DATE = "2026-10-06";
@@ -77,7 +78,7 @@ async function getEmbedData(
       state: {
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       },
     } as unknown as Context<State>;
     const res = await handler.GET!(ctx);
@@ -119,7 +120,7 @@ Deno.test("after a conflict, the slot list shows the taken slot disabled", async
       state: {
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       },
     } as unknown as Context<State>;
     const res = await handler.GET!(ctx);
@@ -398,4 +399,96 @@ Deno.test("mig#48 review: 1 Nov 2026, slots straddling the fall-back change — 
     "UTC-5",
     "expected the post-transition slot to carry its own offset",
   );
+});
+
+// ─── mig#57: dates and times that do not exist ───────────────────────
+
+// @spy4x/time/tz's zonedDateTime throws on "2026-02-31" and "24:00"
+// where mig's own copy rolled them over, so /embed drops both params
+// (as it does any malformed one) instead of failing the request.
+Deno.test("mig#57: /embed ignores a date or slot param that is not on the calendar", async () => {
+  const data = await getEmbedData(
+    "http://localhost/embed?date=2026-02-31&slot=24:00",
+  );
+
+  assertEquals(data.date, null);
+  assertEquals(data.slot, null);
+});
+
+// Berlin's clocks jump from 02:00 to 03:00 on 2027-03-28, a Sunday.
+Deno.test("mig#57: /embed offers no slot inside the spring-forward gap", async () => {
+  const data = await getEmbedData("http://localhost/embed?date=2027-03-28", {
+    hostTz: "Europe/Berlin",
+    weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
+  });
+
+  assertEquals(data.slots.map((s) => s.time), [
+    "01:00",
+    "01:30",
+    "03:00",
+    "03:30",
+  ]);
+});
+
+// The handler's data rendered through the page itself: the month grid
+// runs the host zone's math while it renders, not in the handler.
+async function renderEmbed(
+  url: string,
+  cfgOverrides: Partial<Config> = {},
+): Promise<{ data: EmbedData; html: string }> {
+  const data = await getEmbedData(url, cfgOverrides);
+  const config = { ...fakeConfig(), ...cfgOverrides };
+  // deno-lint-ignore no-explicit-any
+  const html = renderToString((EmbedPage as any)({ data, state: { config } }));
+  return { data, html };
+}
+
+// mig#57: Phoenix ran on UTC-7:28:18 until noon on 1883-11-18. Noon
+// resolves, the morning slots and the days before do not, and
+// @spy4x/time/tz's zonedDateTime throws for them, so a check of noon
+// alone let this date through to a 500. Every date before 1980 is
+// ignored instead.
+Deno.test("mig#57: /embed ignores a date before 1980", async () => {
+  const { data, html } = await renderEmbed(
+    "http://localhost/embed?date=1883-11-18",
+    {
+      hostTz: "America/Phoenix",
+      weeklyAvailability: parseWeeklyAvailability("MON-SUN 09:00-17:00"),
+    },
+  );
+  const lastBefore = await renderEmbed(
+    "http://localhost/embed?date=1979-12-31",
+  );
+  const first = await renderEmbed("http://localhost/embed?date=1980-01-01");
+
+  assertEquals(data.date, null);
+  assertEquals(data.slots, []);
+  assertFalse(html.includes("1883"));
+  assertEquals(lastBefore.data.date, null);
+  assertEquals(first.data.date, "1980-01-01");
+});
+
+// mig#57: the month grid runs the host zone's math on every day it
+// shows. Dublin kept UTC-0:25:21 until 1916, and Santiago went back to
+// UTC-4:42:45 in July 1916 after six years on UTC-5. Every month before
+// 1980 is ignored, and the page shows the current month instead.
+Deno.test("mig#57: /embed ignores a month before 1980", async () => {
+  const dublin = await renderEmbed("http://localhost/embed?month=1900-01", {
+    hostTz: "Europe/Dublin",
+  });
+  const santiago = await renderEmbed(
+    "http://localhost/embed?month=1916-07",
+    { hostTz: "America/Santiago" },
+  );
+  const lastBefore = await renderEmbed(
+    "http://localhost/embed?month=1979-12",
+  );
+  const first = await renderEmbed("http://localhost/embed?month=1980-01");
+
+  assertFalse(dublin.data.monthAnchor.startsWith("1900"));
+  assertFalse(dublin.html.includes("January 1900"));
+  assertFalse(santiago.data.monthAnchor.startsWith("1916"));
+  assertFalse(santiago.html.includes("July 1916"));
+  assertFalse(lastBefore.html.includes("December 1979"));
+  assert(first.html.includes("January 1980"), "expected January 1980's grid");
 });

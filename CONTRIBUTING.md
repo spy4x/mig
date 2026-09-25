@@ -47,8 +47,8 @@ conventions.
 
 - Unit tests in `*.test.ts` next to the file under test
 - `deno test -A` runs everything
-- `lib/availability.test.ts`, `lib/bookings.test.ts`, `lib/ics.test.ts`,
-  `lib/ratelimit.test.ts`, `lib/tokens.test.ts` are the starting points.
+- `lib/availability.test.ts`, `lib/bookings.test.ts`, `lib/invite.test.ts`,
+  `lib/clock.test.ts`, `lib/tokens.test.ts` are the starting points.
 
 ## Pull request flow
 

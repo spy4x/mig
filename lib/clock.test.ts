@@ -1,63 +1,21 @@
 import { assertEquals } from "@std/assert";
+import { zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalTimeZone,
+  canonicalTimeZoneOr,
   canonicalValidTimeZoneOrNull,
   formatClockAt,
   formatClockShortAt,
-  formatDateLong,
   formatGridHeader,
-  formatInstantLong,
-  formatInstantShort,
+  formatHostClockIn,
+  formatHostDateIn,
   formatOwnerClock,
   formatShortDateAt,
   formatSlotDisplay,
-  formatTimeOfDay,
-  validTimeZoneOr,
+  isCalendarDateTime,
   zoneCity,
-  zonedDateTime,
   zoneOffsetLabel,
-} from "./tz.ts";
-import { meetingSummary } from "./ics.ts";
-import type { Booking } from "./types.ts";
-
-Deno.test("formats host-local booking instant in visitor timezone", () => {
-  const instant = zonedDateTime("2026-08-28", "10:00", "Europe/Berlin");
-
-  assertEquals(
-    formatInstantShort(instant, "America/New_York"),
-    "Fri 28 Aug 04:00",
-  );
-  assertEquals(
-    formatInstantLong(instant, "America/New_York"),
-    "Friday, 28 August 2026 at 04:00",
-  );
-});
-
-Deno.test("visitor timezone conversion handles date boundaries", () => {
-  const instant = zonedDateTime("2026-08-28", "01:00", "Europe/Berlin");
-
-  assertEquals(
-    formatInstantShort(instant, "America/Los_Angeles"),
-    "Thu 27 Aug 16:00",
-  );
-});
-
-Deno.test("meeting summary falls back from invalid stored visitor timezone", () => {
-  const booking: Booking = {
-    id: "01HXYZ",
-    createdAt: "2026-08-25T16:42:00.000Z",
-    date: "2026-08-28",
-    time: "10:00",
-    hostTz: "Europe/Berlin",
-    guestTz: "Not/A_Timezone",
-    guestName: "Visitor",
-    guestEmail: "visitor@example.com",
-    cancelTokenHash: "hash",
-    status: "active",
-  };
-
-  assertEquals(meetingSummary(booking), "Friday, 28 August 2026 at 10:00");
-});
+} from "./clock.ts";
 
 // ─── mig#15: "HH:MM, City, UTC±N" formatter ──────────────────────────
 // October 2026 is DST-unambiguous for both zones under test: New York
@@ -107,13 +65,13 @@ Deno.test("formatClockAt: HH:MM, City, UTC±N in each zone under test", () => {
   assertEquals(formatClockAt(instant, "UTC"), "02:00, UTC");
 });
 
-Deno.test("formatClockAt: an invalid zone falls back to the host's, via validTimeZoneOr", () => {
+Deno.test("formatClockAt: an invalid zone falls back to the host's, via canonicalTimeZoneOr", () => {
   // The server never formats an invalid zone directly — every caller
-  // resolves it through validTimeZoneOr first (routes/embed/index.tsx,
+  // resolves it through canonicalTimeZoneOr first (routes/embed/index.tsx,
   // ConfirmedView.tsx, routes/cancel.tsx). This pins that the fallback
   // then formats identically to a booking with no guest zone at all.
   const instant = zonedDateTime("2026-10-06", "09:00", "Asia/Ho_Chi_Minh");
-  const resolved = validTimeZoneOr("Not/A_Timezone", "Asia/Ho_Chi_Minh");
+  const resolved = canonicalTimeZoneOr("Not/A_Timezone", "Asia/Ho_Chi_Minh");
   assertEquals(resolved, "Asia/Ho_Chi_Minh");
   assertEquals(
     formatClockAt(instant, resolved),
@@ -121,7 +79,7 @@ Deno.test("formatClockAt: an invalid zone falls back to the host's, via validTim
   );
 });
 
-Deno.test("formatDateLong + formatTimeOfDay convert host-local wall clock into the display zone", () => {
+Deno.test("formatHostDateIn + formatHostClockIn convert host-local wall clock into the display zone", () => {
   // mig#15's exact example: a 09:00 Tuesday slot in Ho Chi Minh is
   // 22:00 Monday in New York — the date moves, not just the time.
   const date = "2026-10-06"; // Tuesday
@@ -130,22 +88,22 @@ Deno.test("formatDateLong + formatTimeOfDay convert host-local wall clock into t
   const displayTz = "America/New_York";
 
   assertEquals(
-    formatDateLong(date, time, hostTz, displayTz),
+    formatHostDateIn(date, time, hostTz, displayTz),
     "Monday, 5 October 2026",
   );
   assertEquals(
-    formatTimeOfDay(date, time, hostTz, displayTz),
+    formatHostClockIn(date, time, hostTz, displayTz),
     "22:00, New York, UTC-4",
   );
 
   // Same zone both sides (the host viewing their own booking) is
   // unaffected — this is the pre-mig#15 behaviour, still correct.
   assertEquals(
-    formatDateLong(date, time, hostTz, hostTz),
+    formatHostDateIn(date, time, hostTz, hostTz),
     "Tuesday, 6 October 2026",
   );
   assertEquals(
-    formatTimeOfDay(date, time, hostTz, hostTz),
+    formatHostClockIn(date, time, hostTz, hostTz),
     "09:00, Ho Chi Minh, UTC+7",
   );
 });
@@ -344,4 +302,21 @@ Deno.test("formatGridHeader: label and offset come from the first instant, even 
 
 Deno.test("formatGridHeader: null when there are no instants to derive a header from", () => {
   assertEquals(formatGridHeader([], "Asia/Ho_Chi_Minh"), null);
+});
+
+// ─── isCalendarDateTime (mig#57) ──────────────────────────────────────
+
+// New York ran on UTC-4:56:02 until 1883. The calendar has 1800-06-01,
+// but @spy4x/time/tz's zonedDateTime has no minute-exact instant for
+// its noon in New York, so the zone-aware check refuses it.
+Deno.test("isCalendarDateTime: with a zone, refuses a wall clock the zone cannot resolve to the minute", () => {
+  assertEquals(isCalendarDateTime("1800-06-01", "12:00"), true);
+  assertEquals(
+    isCalendarDateTime("1800-06-01", "12:00", "America/New_York"),
+    false,
+  );
+  assertEquals(
+    isCalendarDateTime("2026-06-01", "12:00", "America/New_York"),
+    true,
+  );
 });

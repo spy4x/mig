@@ -406,7 +406,7 @@ Deno.test("/embed's own confirm label converts into the visitor's zone, not the 
   // computed inside the page component itself (not passed in via
   // EmbedData), so this has to render the real component with a real
   // date+slot+tz combination that crosses a date boundary — same pair
-  // as lib/tz.test.ts's cross-zone case (09:00 Tuesday Ho Chi Minh =
+  // as lib/clock.test.ts's cross-zone case (09:00 Tuesday Ho Chi Minh =
   // 22:00 Monday New York).
   //
   // mig#15 round 2 fix: the assertion is scoped to the confirm

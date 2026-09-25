@@ -13,9 +13,9 @@ import type { Context } from "fresh";
 import type { State } from "./utils.ts";
 import type { Config } from "./types.ts";
 import { BookingsStore } from "./bookings.ts";
-import { RateLimiter } from "./ratelimit.ts";
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { getSlotsForDate, parseWeeklyAvailability } from "./availability.ts";
-import { addDays, dayOfWeek, isoDateInTz } from "./tz.ts";
+import { addDays, dayOfWeek, isoDateInTz } from "@spy4x/time/tz";
 import { setTransportForTesting } from "./email.ts";
 import { handleBookingSubmit } from "./book.ts";
 
@@ -80,12 +80,17 @@ function stubContext(
   opts: {
     config: Config;
     bookings: BookingsStore;
-    rateLimiter: RateLimiter;
+    rateLimiter: MemoryRateLimiter;
     fields: Record<string, string>;
+    headers?: Record<string, string>;
   },
 ): Context<State> {
   const body = new URLSearchParams(opts.fields);
-  const req = new Request("http://localhost/book", { method: "POST", body });
+  const req = new Request("http://localhost/book", {
+    method: "POST",
+    body,
+    headers: opts.headers,
+  });
   // Context is a class with private fields, so it can't be satisfied
   // structurally — handleBookingSubmit only reads ctx.req and
   // ctx.state, both present here.
@@ -308,7 +313,7 @@ Deno.test('handleBookingSubmit: success under "" redirects to /confirmed', async
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:00"),
   });
 
@@ -329,7 +334,7 @@ Deno.test('handleBookingSubmit: success under "/embed" redirects to /embed/confi
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:30"),
   });
 
@@ -351,7 +356,7 @@ Deno.test('handleBookingSubmit: failure under "" redirects to /?err=', async () 
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     // Empty name fails BookingSchema's min(2) — a real validation
     // failure, not a shortcut around the trust boundary.
     fields: validFields(date, "09:00", { name: "" }),
@@ -373,7 +378,7 @@ Deno.test('handleBookingSubmit: failure under "/embed" redirects to /embed?err='
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:00", { name: "" }),
   });
 
@@ -393,7 +398,7 @@ Deno.test("mig#15 review: a validation failure keeps slot and tz on the redirect
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:00", {
       name: "", // fails validation
       guestTz: "America/New_York",
@@ -424,7 +429,7 @@ Deno.test("mig#44: a successful embed booking keeps the forced theme on the redi
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:00", { theme: "dark" }),
   });
 
@@ -445,7 +450,7 @@ Deno.test("mig#44: a validation failure keeps the forced theme on the redirect",
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:00", { name: "", theme: "light" }),
   });
 
@@ -462,10 +467,10 @@ Deno.test("mig#44: a rate-limited redirect keeps the forced theme", async () => 
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
-  // max: 1 — same setup as "a rate-limited redirect keeps date and
+  // limit: 1 — same setup as "a rate-limited redirect keeps date and
   // tz" above: the first submission consumes the only slot in the
   // window, so the second one is the one that gets rate-limited.
-  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 1 });
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
   const fields = validFields(date, "09:00", { theme: "dark" });
 
   const first = await handleBookingSubmit(
@@ -493,7 +498,7 @@ Deno.test("mig#44: honeypot redirect keeps the forced theme", async () => {
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:00", {
       website: "http://spam.example",
       theme: "dark",
@@ -516,7 +521,7 @@ Deno.test("mig#44: no theme field on the form means no theme param on the redire
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:00"),
   });
 
@@ -553,7 +558,7 @@ Deno.test("mig#44: a slot-taken conflict keeps the forced theme on the redirect"
     const ctx = stubContext({
       config: cfg,
       bookings,
-      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       fields: validFields(date, "09:00", { theme: "dark" }),
     });
 
@@ -578,7 +583,7 @@ Deno.test("mig#44: an email-send failure keeps the forced theme on the rollback 
     const ctx = stubContext({
       config: cfg,
       bookings,
-      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       fields: validFields(date, "09:00", { theme: "light" }),
     });
 
@@ -607,7 +612,7 @@ Deno.test("mig#44: a minimum-notice failure ('That time is no longer available.'
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:00", { theme: "dark" }),
   });
 
@@ -631,7 +636,7 @@ Deno.test("an availability failure drops slot but keeps date and tz on the redir
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     // 08:00 is outside MON-FRI 09:00-17:00 — a real availability
     // failure, past the schema-validation step.
     fields: validFields(date, "08:00", {
@@ -678,7 +683,7 @@ Deno.test("a slot-taken conflict drops slot from the redirect (keeps date and tz
     const ctx = stubContext({
       config: cfg,
       bookings,
-      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       fields: validFields(date, "09:00", { guestTz: "America/New_York" }),
     });
 
@@ -712,9 +717,9 @@ Deno.test("a rate-limited redirect keeps date and tz", async () => {
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
-  // max: 1 — the first submission consumes the only slot in the
+  // limit: 1 — the first submission consumes the only slot in the
   // window, so the second one below is the one that gets rate-limited.
-  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 1 });
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
   const fields = validFields(date, "09:00", { guestTz: "America/New_York" });
 
   const first = await handleBookingSubmit(
@@ -746,10 +751,10 @@ Deno.test("a rate-limited redirect caps an oversized date or tz instead of carry
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
-  // max: 1 — the first submission consumes the only slot in the
+  // limit: 1 — the first submission consumes the only slot in the
   // window, same as the test above, so the second one is the one
   // that's rate-limited and hits the cap.
-  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 1 });
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
   const first = await handleBookingSubmit(
     stubContext({
       config: cfg,
@@ -797,7 +802,7 @@ Deno.test('handleBookingSubmit: honeypot under "" redirects to /confirmed', asyn
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:00", { website: "http://spam.example" }),
   });
 
@@ -818,7 +823,7 @@ Deno.test('handleBookingSubmit: honeypot under "/embed" redirects to /embed/conf
   const ctx = stubContext({
     config: cfg,
     bookings,
-    rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     fields: validFields(date, "09:00", { website: "http://spam.example" }),
   });
 
@@ -844,7 +849,7 @@ Deno.test("a validation-failure redirect caps an oversized slot, like date and t
     const ctx = stubContext({
       config: cfg,
       bookings,
-      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       // An invalid email fails BookingSchema, landing on the
       // `redirectState` branch that carries `slot` along — the one
       // mig#18's reviewer found left uncapped.
@@ -872,7 +877,7 @@ Deno.test("mig#19: the loser of a slot race sends no email and stores no booking
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
-  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 10 });
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 10 });
 
   const sentTo: string[] = [];
   setTransportForTesting(recordingTransport(sentTo));
@@ -1001,7 +1006,7 @@ Deno.test("mig#19: a failed send after a save rolls the booking back and says so
     const ctx = stubContext({
       config: cfg,
       bookings,
-      rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       fields: validFields(date, "09:00"),
     });
 
@@ -1036,7 +1041,7 @@ Deno.test("mig#19: a failed send after a save rolls the booking back and says so
 // to know which recipient's send actually failed.
 Deno.test("a failed owner send and a failed guest send redirect with the same neutral message", async () => {
   const cfg = fakeConfig();
-  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 10 });
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 10 });
   const neutralMessage =
     "Something went wrong, so the booking was not created. Please try again in a moment.";
 
@@ -1106,7 +1111,7 @@ Deno.test("mig#19: a persist failure on the initial save leaves nothing behind a
     "simulated disk write failure (mig#19 test)",
   );
   const date = futureWeekday(3, HOST_TZ);
-  const rateLimiter = new RateLimiter({ windowMs: 300_000, max: 10 });
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 10 });
   const sentTo: string[] = [];
   setTransportForTesting(recordingTransport(sentTo));
 
@@ -1196,7 +1201,7 @@ Deno.test("rollback-failure log says the owner email was sent when the guest sen
       const ctx = stubContext({
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
         fields: validFields(date, "09:00"),
       });
       await handleBookingSubmit(ctx, "");
@@ -1238,7 +1243,7 @@ Deno.test("rollback-failure log says the owner email was not sent when the owner
       const ctx = stubContext({
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
         fields: validFields(date, "09:00"),
       });
       await handleBookingSubmit(ctx, "");
@@ -1280,7 +1285,7 @@ Deno.test("mig#19: a guest-send failure corrects the owner after rolling back", 
       stubContext({
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
         fields: validFields(date, "09:00"),
       }),
       "",
@@ -1347,7 +1352,7 @@ Deno.test("mig#19: an owner-send failure reaches nobody, sends no correction", a
       stubContext({
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
         fields: validFields(date, "09:00"),
       }),
       "",
@@ -1405,7 +1410,7 @@ Deno.test("mig#19: a failed send pushes an NTFY notice that says the booking was
       stubContext({
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
         fields: validFields(date, "09:00"),
       }),
       "",
@@ -1462,7 +1467,7 @@ Deno.test("handleBookingSubmit: a guest-send failure with a working store pushes
       stubContext({
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
         fields: validFields(date, "09:00"),
       }),
       "",
@@ -1529,7 +1534,7 @@ Deno.test("handleBookingSubmit: a guest-send failure where the rollback write al
       stubContext({
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
         fields: validFields(date, "09:00"),
       }),
       "",
@@ -1616,7 +1621,7 @@ Deno.test("mig#27: the correction email does not claim removal when the rollback
       stubContext({
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
         fields: validFields(date, "09:00"),
       }),
       "",
@@ -1688,7 +1693,7 @@ Deno.test("handleBookingSubmit: a failed owner send where the rollback write als
       stubContext({
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
         fields: validFields(date, "09:00"),
       }),
       "",
@@ -1751,7 +1756,7 @@ Deno.test("handleBookingSubmit: the NTFY push for a failed send happens after th
       stubContext({
         config: cfg,
         bookings,
-        rateLimiter: new RateLimiter({ windowMs: 300_000, max: 10 }),
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
         fields: validFields(date, "09:00"),
       }),
       "",
@@ -1775,6 +1780,174 @@ Deno.test("handleBookingSubmit: the NTFY push for a failed send happens after th
     Deno.env.delete("NTFY_TOKEN");
     Deno.env.delete("NTFY_MODE");
     setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+// ─── mig#57: behaviour that changed with the move to ts-libs ─────────
+
+// The limiter is @spy4x/platform's MemoryRateLimiter now; mig still
+// refuses the submission over the limit and names the wait. No other
+// test reaches this branch: the existing "rate-limited redirect" tests
+// resubmit the same slot, which a conflict redirect also satisfies.
+Deno.test("mig#57: a submission over the rate limit is refused with the wait time", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
+
+  try {
+    await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:00"),
+      }),
+      "",
+    );
+    const second = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:30"),
+      }),
+      "",
+    );
+
+    const url = new URL(second.headers.get("location")!);
+    assertEquals(
+      url.searchParams.get("err"),
+      "Too many attempts. Try again in 5 minutes.",
+    );
+    assertEquals(bookings.forDate(date).length, 1);
+  } finally {
+    await rm(path);
+  }
+});
+
+// @spy4x/platform's clientIp ignores every proxy header unless told to
+// trust them; mig always trusted them. Without that trust, every
+// visitor behind the reverse proxy would share one "0.0.0.0" bucket.
+Deno.test("mig#57: visitors with different forwarded addresses are rate-limited separately", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
+
+  try {
+    const first = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:00"),
+        headers: { "x-forwarded-for": "198.51.100.1, 203.0.113.9" },
+      }),
+      "",
+    );
+    const second = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:30"),
+        headers: { "x-forwarded-for": "198.51.100.2, 203.0.113.9" },
+      }),
+      "",
+    );
+
+    assertEquals(locationPath(first).startsWith("/confirmed?"), true);
+    assertEquals(locationPath(second).startsWith("/confirmed?"), true);
+  } finally {
+    await rm(path);
+  }
+});
+
+// mig's own clientIp took X-Forwarded-For's first hop even when it was
+// empty (", 203.0.113.9"), so every such visitor shared one "" bucket;
+// @spy4x/platform's skips an empty hop and falls through to X-Real-IP.
+Deno.test("mig#57: an empty first X-Forwarded-For hop falls through to X-Real-IP", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
+
+  try {
+    const first = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:00"),
+        headers: {
+          "x-forwarded-for": ", 203.0.113.9",
+          "x-real-ip": "198.51.100.1",
+        },
+      }),
+      "",
+    );
+    const second = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:30"),
+        headers: {
+          "x-forwarded-for": ", 203.0.113.9",
+          "x-real-ip": "198.51.100.2",
+        },
+      }),
+      "",
+    );
+
+    assertEquals(locationPath(first).startsWith("/confirmed?"), true);
+    assertEquals(locationPath(second).startsWith("/confirmed?"), true);
+  } finally {
+    await rm(path);
+  }
+});
+
+// @spy4x/time/tz's zonedDateTime resolves Berlin's nonexistent 02:30 on
+// 2027-03-28 (a Sunday; clocks jump 02:00 -> 03:00) to 03:30, so without
+// a guard the write path would book a second 03:30 under the name
+// "02:30". The slot was never offered (lib/availability.test.ts), and a
+// hand-made POST for it is refused the same way.
+Deno.test("mig#57: a slot inside the spring-forward gap is refused", async () => {
+  const cfg = {
+    ...fakeConfig(),
+    weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
+  };
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+
+  try {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+        fields: validFields("2027-03-28", "02:30"),
+      }),
+      "",
+    );
+
+    const url = new URL(res.headers.get("location")!);
+    assertEquals(url.pathname, "/");
+    assertEquals(
+      url.searchParams.get("err"),
+      "That time is outside availability hours.",
+    );
+    assertEquals(bookings.forDate("2027-03-28").length, 0);
+  } finally {
     await rm(path);
   }
 });

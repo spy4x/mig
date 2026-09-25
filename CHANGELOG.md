@@ -14,11 +14,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- mig uses `@spy4x/time` and `@spy4x/platform` for timezone math, the `.ics`
+  invite and the booking rate limiter, instead of its own copies (#57).
 - The README opens with the CI badge, a screenshot of the booking page and a
   one-line `docker run`, and describes mig as a web-standards app that runs on
   Deno in a small Docker image. New screenshots in light and dark, a GIF of the
   booking flow and a picture of the confirmation email replace the two old ones
   (#43).
+- An invite for a cancelled booking is sent as `METHOD:CANCEL`, not
+  `METHOD:REQUEST` (#57).
+- An impossible date or time in a link or form (`2026-02-31`, `24:00`) is
+  ignored on `/` and `/embed`, answered with 400 by `/api/slots`, and refused
+  with an error by the booking form, instead of silently becoming another day
+  (#57). The same applies to any date or month before 1980 (`?date=`,
+  `?month=`). Until 1972 some zones ran on a local mean time whose UTC offset
+  had seconds, such as New York's -4:56:02 before 1883, and the new timezone
+  code does not resolve those. A booking already saved with an impossible date
+  is read as the date the visitor was told.
+
+### Fixed
+
+- A booking near a daylight-saving change starts at the right time. Before, a
+  slot within one UTC offset of the change was off by an hour, in the invite and
+  everywhere else it was shown: for example, an Auckland host's 15:00 slot on
+  the day before clocks go back (#57).
+- On the day clocks spring forward, the slots that fall in the skipped hour
+  (02:00 and 02:30 in Berlin) are no longer offered, and a booking for one is
+  refused. Before, they duplicated the slots an hour earlier (#57).
+
+### Upgrade notes
+
+- An impossible date in `BLOCKED_DATES`, such as `2026-02-30`, now stops mig at
+  startup with `entry N: not a real calendar date`. Under
+  `restart: unless-stopped` that is a restart loop, so check `BLOCKED_DATES`
+  before you upgrade.
 
 ## [0.5.0] - 2026-09-25
 

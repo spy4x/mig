@@ -2,13 +2,13 @@ import { define } from "../lib/utils.ts";
 import { verifyCancelToken } from "../lib/tokens.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
+import { isValidTimeZone } from "@spy4x/time/tz";
 import {
+  canonicalTimeZoneOr,
   formatClockShortAt,
-  formatDateLong,
-  formatTimeOfDay,
-  isValidTimeZone,
-  validTimeZoneOr,
-} from "../lib/tz.ts";
+  formatHostClockIn,
+  formatHostDateIn,
+} from "../lib/clock.ts";
 import { InfoCircle } from "../components/icons.tsx";
 
 interface CancelData {
@@ -135,7 +135,7 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
     // zone (mig#15 round 2), unrelated to either party's.
     const cancelKnownGuestTz = !!data.guestTz && isValidTimeZone(data.guestTz);
     const cancelDisplayTz = data.hostTz
-      ? validTimeZoneOr(data.guestTz ?? undefined, data.hostTz)
+      ? canonicalTimeZoneOr(data.guestTz ?? undefined, data.hostTz)
       : null;
     const cancelledAtLabel = data.cancelledAt && cancelDisplayTz
       ? formatClockShortAt(new Date(data.cancelledAt), cancelDisplayTz)
@@ -214,11 +214,11 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
   // back to host TZ for older bookings without guestTz, or for
   // invalid values. Both helpers need `b.hostTz` (the zone `b.date`/
   // `b.time` are actually stored in) as well as `displayTz` — see
-  // lib/tz.ts, mig#15.
+  // lib/clock.ts, mig#15.
   const knownGuestTz = !!b.guestTz && isValidTimeZone(b.guestTz);
-  const displayTz = validTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
-  const whenDate = formatDateLong(b.date, b.time, b.hostTz, displayTz);
-  const whenTime = formatTimeOfDay(b.date, b.time, b.hostTz, displayTz);
+  const displayTz = canonicalTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
+  const whenDate = formatHostDateIn(b.date, b.time, b.hostTz, displayTz);
+  const whenTime = formatHostClockIn(b.date, b.time, b.hostTz, displayTz);
 
   return (
     <div class="min-h-dvh flex flex-col">
