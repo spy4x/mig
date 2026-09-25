@@ -26,9 +26,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - An impossible date or time in a link or form (`2026-02-31`, `24:00`) is
   ignored on `/` and `/embed`, answered with 400 by `/api/slots`, and refused
   with an error by the booking form, instead of silently becoming another day
-  (#57). The same applies to a date the host's zone has no minute-exact time
-  for, such as 1800 in New York, which ran on local mean time. A booking already
-  saved with such a date is read as the date the visitor was told.
+  (#57). The same applies to any date or month before 1980 (`?date=`,
+  `?month=`). Until 1972 some zones ran on a local mean time whose UTC offset
+  had seconds, such as New York's -4:56:02 before 1883, and the new timezone
+  code does not resolve those. A booking already saved with an impossible date
+  is read as the date the visitor was told.
 
 ### Fixed
 
