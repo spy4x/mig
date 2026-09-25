@@ -186,10 +186,10 @@ export async function sendBookingCorrectionEmail(
     text: correctionText(config, booking, ownerWhenLong, rolledBack),
     html: correctionHtml(config, booking, ownerWhenLong, rolledBack),
     // No .ics attachment: properly retracting the invite already sent
-    // needs a METHOD:CANCEL companion (same UID, a higher SEQUENCE)
-    // to the METHOD:REQUEST one — bookingIcs in lib/invite.ts only ever
-    // emits REQUEST, and adding CANCEL support is new ICS code, out
-    // of scope for this fix. The email body below tells the host to
+    // needs a METHOD:CANCEL companion with the same UID and a higher
+    // SEQUENCE. bookingIcs in lib/invite.ts writes METHOD:CANCEL for a
+    // cancelled booking, but sets no SEQUENCE, so a client may not treat
+    // it as replacing the REQUEST. The email body below tells the host to
     // ignore the earlier invite instead.
   });
 }
