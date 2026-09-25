@@ -12,6 +12,7 @@ import {
   formatOwnerClock,
   formatShortDateAt,
   formatSlotDisplay,
+  isCalendarDateTime,
   zoneCity,
   zoneOffsetLabel,
 } from "./clock.ts";
@@ -301,4 +302,21 @@ Deno.test("formatGridHeader: label and offset come from the first instant, even 
 
 Deno.test("formatGridHeader: null when there are no instants to derive a header from", () => {
   assertEquals(formatGridHeader([], "Asia/Ho_Chi_Minh"), null);
+});
+
+// ─── isCalendarDateTime (mig#57) ──────────────────────────────────────
+
+// New York ran on UTC-4:56:02 until 1883. The calendar has 1800-06-01,
+// but @spy4x/time/tz's zonedDateTime has no minute-exact instant for
+// its noon in New York, so the zone-aware check refuses it.
+Deno.test("isCalendarDateTime: with a zone, refuses a wall clock the zone cannot resolve to the minute", () => {
+  assertEquals(isCalendarDateTime("1800-06-01", "12:00"), true);
+  assertEquals(
+    isCalendarDateTime("1800-06-01", "12:00", "America/New_York"),
+    false,
+  );
+  assertEquals(
+    isCalendarDateTime("2026-06-01", "12:00", "America/New_York"),
+    true,
+  );
 });
