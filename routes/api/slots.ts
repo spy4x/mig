@@ -10,7 +10,10 @@ export const handler = define.handlers({
     const cfg = ctx.state.config;
     const url = new URL(ctx.req.url);
     const date = url.searchParams.get("date") ?? "";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isCalendarDateTime(date)) {
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !isCalendarDateTime(date, "12:00", cfg.hostTz)
+    ) {
       return new Response(JSON.stringify({ error: "bad date" }), {
         status: 400,
         headers: { "content-type": "application/json" },

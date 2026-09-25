@@ -428,3 +428,15 @@ Deno.test("mig#57: /embed offers no slot inside the spring-forward gap", async (
     "03:30",
   ]);
 });
+
+// mig#57: New York ran on local mean time (UTC-4:56:02) before 1900, and
+// @spy4x/time/tz's zonedDateTime throws for an offset with seconds.
+// /embed drops the date instead of failing the request.
+Deno.test("mig#57: /embed ignores a date the host zone cannot resolve to the minute", async () => {
+  const data = await getEmbedData("http://localhost/embed?date=1800-06-01", {
+    hostTz: "America/New_York",
+  });
+
+  assertEquals(data.date, null);
+  assertEquals(data.slots, []);
+});

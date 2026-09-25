@@ -310,9 +310,24 @@ Deno.test("mig#57: standalone / ignores a date or slot param that is not on the 
   assertFalse(badSlot.includes("24%3A00"));
 });
 
-// Berlin's clocks jump from 02:00 to 03:00 on 2027-03-28, a Sunday.
+// The next day Berlin's clocks jump from 02:00 to 03:00: the last
+// Sunday of March, this year's if it is at least two days ahead, else
+// next year's. Computed, not fixed, because a slot that is past or
+// inside the minimum notice renders without a link.
+function nextSpringForwardSunday(): string {
+  const today = new Date(Date.now() + 2 * 86_400_000).toISOString()
+    .slice(0, 10);
+  for (let year = new Date().getUTCFullYear();; year++) {
+    const march31 = new Date(Date.UTC(year, 2, 31));
+    const sunday = new Date(Date.UTC(year, 2, 31 - march31.getUTCDay()));
+    const iso = sunday.toISOString().slice(0, 10);
+    if (iso > today) return iso;
+  }
+}
+
 Deno.test("mig#57: standalone / offers no slot inside the spring-forward gap", async () => {
-  const html = await renderIndex("http://localhost/?date=2027-03-28", {
+  const date = nextSpringForwardSunday();
+  const html = await renderIndex(`http://localhost/?date=${date}`, {
     hostTz: "Europe/Berlin",
     weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
   });
@@ -320,4 +335,27 @@ Deno.test("mig#57: standalone / offers no slot inside the spring-forward gap", a
   assert(html.includes("slot=03%3A00"), "expected the 03:00 slot");
   assertFalse(html.includes("slot=02%3A00"), "02:00 does not exist that day");
   assertFalse(html.includes("slot=02%3A30"), "02:30 does not exist that day");
+});
+
+// mig#57: Dublin kept Dublin Mean Time, UTC-0:25:21, until 1916, and
+// @spy4x/time/tz's zonedDateTime throws for an offset with seconds. The
+// page's own year check lets 1900 through, so the zone check drops it.
+Deno.test("mig#57: standalone / ignores a date the host zone cannot resolve to the minute", async () => {
+  const html = await renderIndex("http://localhost/?date=1900-01-01", {
+    hostTz: "Europe/Dublin",
+  });
+
+  assertEquals(gridHeaderZoneLabel(html), null);
+  assertFalse(html.includes("1900-01-01"));
+});
+
+// mig#57: the month grid starts up to six days before the 1st, and
+// Dublin's 1900 offset has seconds, so ?month=1900-01 is dropped and the
+// page shows the current month instead of failing.
+Deno.test("mig#57: standalone / ignores a month the host zone cannot resolve to the minute", async () => {
+  const html = await renderIndex("http://localhost/?month=1900-01", {
+    hostTz: "Europe/Dublin",
+  });
+
+  assertFalse(html.includes("January 1900"));
 });

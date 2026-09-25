@@ -87,10 +87,11 @@ export interface EmbedData {
   theme: "light" | "dark" | null;
 }
 
-function parseDateParam(v: string | null): string | null {
+function parseDateParam(v: string | null, hostTz: string): string | null {
   if (!v) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
-  if (!isCalendarDateTime(v)) return null; // "2026-02-31" (mig#57)
+  // "2026-02-31", or 1800-06-01 in a zone on local mean time (mig#57).
+  if (!isCalendarDateTime(v, "12:00", hostTz)) return null;
   return v;
 }
 
@@ -137,7 +138,7 @@ export const handler = define.handlers({
   GET(ctx) {
     const cfg = ctx.state.config;
     const url = new URL(ctx.req.url);
-    const date = parseDateParam(url.searchParams.get("date"));
+    const date = parseDateParam(url.searchParams.get("date"), cfg.hostTz);
     const slot = parseSlotParam(url.searchParams.get("slot"));
     const monthParam = parseMonthParam(url.searchParams.get("month"));
     const error = url.searchParams.get("err");

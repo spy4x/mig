@@ -371,11 +371,19 @@ function pad2(n: number): string {
 // own copy used to roll them over into 2 March and the next day's
 // 00:00), so every untrusted date or time is checked here first and
 // refused as bad input instead of reaching it and failing the request
-// (mig#57). UTC has no daylight-saving gap, so this checks the
-// calendar only — see hostSlotInstant for the gap.
-export function isCalendarDateTime(date: string, time = "12:00"): boolean {
+// (mig#57). With the default `tz`, UTC, this checks the calendar only.
+// Pass the host's zone wherever the date then goes through its zone
+// math: before 1900 many zones ran on a local mean time whose offset
+// has seconds (New York's was -4:56:02), and zonedDateTime refuses to
+// answer those at minute resolution — 1800-06-01 in New York throws.
+// Neither check covers a spring-forward gap; see hostSlotInstant.
+export function isCalendarDateTime(
+  date: string,
+  time = "12:00",
+  tz = "UTC",
+): boolean {
   try {
-    zonedDateTime(date, time, "UTC");
+    zonedDateTime(date, time, tz);
     return true;
   } catch {
     return false;

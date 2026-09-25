@@ -29,10 +29,11 @@ interface IndexData {
   monthAnchor: string;
 }
 
-function parseDateParam(v: string | null): string | null {
+function parseDateParam(v: string | null, hostTz: string): string | null {
   if (!v) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
-  if (!isCalendarDateTime(v)) return null; // "2026-02-31" (mig#57)
+  // "2026-02-31", or 1800-06-01 in a zone on local mean time (mig#57).
+  if (!isCalendarDateTime(v, "12:00", hostTz)) return null;
   const [y, m, d] = v.split("-").map(Number);
   if (y < 1900 || y > 2999 || m < 1 || m > 12 || d < 1 || d > 31) return null;
   return v;
@@ -47,13 +48,21 @@ function parseSlotParam(v: string | null): string | null {
   return v;
 }
 
-function parseMonthParam(v: string | null): string | null {
+function parseMonthParam(v: string | null, hostTz: string): string | null {
   if (!v) return null;
   const m = v.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
   if (!m) return null;
   const yyyy = parseInt(m[1], 10);
   const mm = parseInt(m[2], 10);
   if (yyyy < 1900 || yyyy > 2999 || mm < 1 || mm > 12) return null;
+  // The month grid runs addDays in the host's zone from up to six days
+  // before the 1st. Dublin kept a UTC offset with seconds until 1916,
+  // so ?month=1900-01 there made zonedDateTime throw (mig#57). Offsets
+  // with seconds only ever come first, so checking the earliest day
+  // the grid shows covers the rest.
+  const earliest = new Date(Date.UTC(yyyy, mm - 1, 1 - 6))
+    .toISOString().slice(0, 10);
+  if (!isCalendarDateTime(earliest, "12:00", hostTz)) return null;
   return `${m[1]}-${m[2]}-01`;
 }
 
@@ -82,10 +91,10 @@ function dayNameFromDate(
 export default define.page(function Index(ctx) {
   const cfg = ctx.state.config;
   const url = new URL(ctx.req.url);
-  const date = parseDateParam(url.searchParams.get("date"));
+  const date = parseDateParam(url.searchParams.get("date"), cfg.hostTz);
   const slot = parseSlotParam(url.searchParams.get("slot"));
   const error = url.searchParams.get("err");
-  const monthParam = parseMonthParam(url.searchParams.get("month"));
+  const monthParam = parseMonthParam(url.searchParams.get("month"), cfg.hostTz);
 
   // Visitor timezone (mig#18) — read and validated the same way
   // routes/embed/index.tsx does, so a visitor who arrives at "/" with

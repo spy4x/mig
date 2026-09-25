@@ -39,7 +39,10 @@ function fakeConfig(): Config {
   };
 }
 
-async function getSlots(date: string): Promise<Response> {
+async function getSlots(
+  date: string,
+  hostTz = "Europe/Berlin",
+): Promise<Response> {
   const path = `/tmp/mig-slots-test-${crypto.randomUUID()}.json`;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
@@ -47,7 +50,7 @@ async function getSlots(date: string): Promise<Response> {
     const ctx = {
       req: new Request(`http://localhost/api/slots?date=${date}`),
       state: {
-        config: fakeConfig(),
+        config: { ...fakeConfig(), hostTz },
         bookings,
         rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
       },
@@ -82,4 +85,13 @@ Deno.test("mig#57: /api/slots lists no slot inside the spring-forward gap", asyn
     "03:00",
     "03:30",
   ]);
+});
+
+// mig#57: New York ran on local mean time (UTC-4:56:02) before 1900, and
+// @spy4x/time/tz's zonedDateTime throws for an offset with seconds.
+Deno.test("mig#57: /api/slots answers 400 for a date the host zone cannot resolve to the minute", async () => {
+  const res = await getSlots("1800-06-01", "America/New_York");
+
+  assertEquals(res.status, 400);
+  assertEquals(await res.json(), { error: "bad date" });
 });

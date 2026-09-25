@@ -19,7 +19,7 @@ import {
 import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts";
 import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip";
 import { zonedDateTime } from "@spy4x/time/tz";
-import { hostSlotInstant } from "./clock.ts";
+import { hostSlotInstant, isCalendarDateTime } from "./clock.ts";
 import { BookingSchema } from "./validators.ts";
 
 /** "" → "/", "/embed" → "/embed" — where a failed submission redirects
@@ -48,10 +48,12 @@ export async function handleBookingSubmit(
 ): Promise<Response> {
   const cfg = ctx.state.config;
   // `true` trusts CF-Connecting-IP, then X-Forwarded-For's first hop,
-  // then X-Real-IP — mig's own order before mig#57. The ts-libs
-  // default (`false`) ignores every proxy header, which behind the
-  // reverse proxy mig is deployed behind would put every visitor in
-  // one shared bucket.
+  // then X-Real-IP — mig's own order before mig#57 (the ts-libs default,
+  // `false`, would put every visitor in one "0.0.0.0" bucket, since no
+  // socket address is passed). This trusts headers any client can set:
+  // compose.example.yml publishes port 8080 directly, and a client
+  // there picks its own bucket by sending CF-Connecting-IP. See
+  // https://github.com/spy4x/mig/issues/59 for the fix.
   const ip = clientIp(ctx.req, undefined, true);
 
   function errRedirect(
@@ -158,6 +160,18 @@ export async function handleBookingSubmit(
   // land the visitor back on the confirm step for a slot they can't
   // book (mig#15 round 2).
   const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000);
+  // The validator checked the calendar; the host's zone can still have
+  // no minute-exact answer for the date — 1800-06-01 in New York ran on
+  // a local mean time with seconds in its offset (mig#57).
+  if (
+    !isCalendarDateTime(input.date, "12:00", cfg.hostTz) ||
+    !isCalendarDateTime(input.date, input.slot, cfg.hostTz)
+  ) {
+    return errRedirect(
+      "That date is not available for booking.",
+      redirectDateTz,
+    );
+  }
   const slotInstant = hostSlotInstant(input.date, input.slot, cfg.hostTz);
   // A spring-forward gap time (mig#57): the host's clock never shows
   // it, so no slot was offered for it either.
