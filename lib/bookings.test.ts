@@ -1,5 +1,9 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { AsyncMutex, BookingsStore } from "../lib/bookings.ts";
+import {
+  AsyncMutex,
+  BookingsStore,
+  rollOverStoredWallClock,
+} from "../lib/bookings.ts";
 import type { Booking } from "../lib/types.ts";
 
 function tmpPath(): string {
@@ -177,4 +181,15 @@ Deno.test("BookingsStore — rolls a stored impossible date and time over on loa
   } finally {
     await Deno.remove(path);
   }
+});
+
+// mig#57: rolling "9999-12-32" over lands in year 10000, which
+// toISOString writes as "+010000-01-01T10:00", so slicing it gave the
+// date "+010000-01" and the time "01T10". Such a record stays as stored.
+Deno.test("rollOverStoredWallClock — leaves a record that would roll past year 9999 unchanged", () => {
+  const pastYear = makeBooking({ date: "9999-12-32", time: "10:00" });
+  const pastMidnight = makeBooking({ date: "9999-12-31", time: "24:00" });
+
+  assertEquals(rollOverStoredWallClock(pastYear), pastYear);
+  assertEquals(rollOverStoredWallClock(pastMidnight), pastMidnight);
 });

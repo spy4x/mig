@@ -20,7 +20,8 @@ import { isCalendarDateTime } from "./clock.ts";
 // instead, which would break /confirmed, /cancel and POST /api/cancel
 // for that booking. So a stored record gets the same roll-over once,
 // when it is loaded, and keeps meaning what the visitor was told. A
-// record whose date or time is not even the right shape is left alone.
+// record whose date or time is not even the right shape, or would roll
+// past year 9999, is left alone.
 export function rollOverStoredWallClock(booking: Booking): Booking {
   if (isCalendarDateTime(booking.date, booking.time)) return booking;
   const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(booking.date);
@@ -30,6 +31,9 @@ export function rollOverStoredWallClock(booking: Booking): Booking {
     Date.UTC(+d[1], +d[2] - 1, +d[3], +t[1], +t[2], 0, 0),
   );
   if (Number.isNaN(rolled.getTime())) return booking;
+  // "9999-12-32" rolls into year 10000, which toISOString writes as
+  // "+010000-01-01" and no "YYYY-MM-DD" field can hold.
+  if (rolled.getUTCFullYear() > 9999) return booking;
   const iso = rolled.toISOString();
   return { ...booking, date: iso.slice(0, 10), time: iso.slice(11, 16) };
 }
