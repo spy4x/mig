@@ -1786,6 +1786,49 @@ Deno.test("handleBookingSubmit: the NTFY push for a failed send happens after th
 
 // ─── mig#57: behaviour that changed with the move to ts-libs ─────────
 
+// The limiter is @spy4x/platform's MemoryRateLimiter now; mig still
+// refuses the submission over the limit and names the wait. No other
+// test reaches this branch: the existing "rate-limited redirect" tests
+// resubmit the same slot, which a conflict redirect also satisfies.
+Deno.test("mig#57: a submission over the rate limit is refused with the wait time", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
+
+  try {
+    await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:00"),
+      }),
+      "",
+    );
+    const second = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:30"),
+      }),
+      "",
+    );
+
+    const url = new URL(second.headers.get("location")!);
+    assertEquals(
+      url.searchParams.get("err"),
+      "Too many attempts. Try again in 5 minutes.",
+    );
+    assertEquals(bookings.forDate(date).length, 1);
+  } finally {
+    await rm(path);
+  }
+});
+
 // @spy4x/platform's clientIp ignores every proxy header unless told to
 // trust them; mig always trusted them. Without that trust, every
 // visitor behind the reverse proxy would share one "0.0.0.0" bucket.
@@ -1826,10 +1869,10 @@ Deno.test("mig#57: visitors with different forwarded addresses are rate-limited 
   }
 });
 
-// mig's own clientIp returned an empty key for a blank CF-Connecting-IP,
-// so every such visitor shared one bucket; @spy4x/platform's falls
-// through to the next header.
-Deno.test("mig#57: a blank CF-Connecting-IP falls through to X-Forwarded-For", async () => {
+// mig's own clientIp took X-Forwarded-For's first hop even when it was
+// empty (", 203.0.113.9"), so every such visitor shared one "" bucket;
+// @spy4x/platform's skips an empty hop and falls through to X-Real-IP.
+Deno.test("mig#57: an empty first X-Forwarded-For hop falls through to X-Real-IP", async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });
@@ -1844,7 +1887,10 @@ Deno.test("mig#57: a blank CF-Connecting-IP falls through to X-Forwarded-For", a
         bookings,
         rateLimiter,
         fields: validFields(date, "09:00"),
-        headers: { "cf-connecting-ip": " ", "x-forwarded-for": "198.51.100.1" },
+        headers: {
+          "x-forwarded-for": ", 203.0.113.9",
+          "x-real-ip": "198.51.100.1",
+        },
       }),
       "",
     );
@@ -1854,7 +1900,10 @@ Deno.test("mig#57: a blank CF-Connecting-IP falls through to X-Forwarded-For", a
         bookings,
         rateLimiter,
         fields: validFields(date, "09:30"),
-        headers: { "cf-connecting-ip": " ", "x-forwarded-for": "198.51.100.2" },
+        headers: {
+          "x-forwarded-for": ", 203.0.113.9",
+          "x-real-ip": "198.51.100.2",
+        },
       }),
       "",
     );

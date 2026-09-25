@@ -298,13 +298,16 @@ Deno.test("mig#48 review: the header comes from the FIRST slot, so only a LATER 
 // where mig's own copy rolled them over. The page drops both params,
 // as it does any malformed one, and still renders.
 Deno.test("mig#57: standalone / ignores a date or slot param that is not on the calendar", async () => {
-  const html = await renderIndex(
-    "http://localhost/?date=2026-02-31&slot=24:00",
-  );
+  const badDate = await renderIndex("http://localhost/?date=2026-02-31");
+  assertEquals(gridHeaderZoneLabel(badDate), null);
+  assertFalse(badDate.includes("2026-02-31"));
 
-  assertEquals(gridHeaderZoneLabel(html), null);
-  assertFalse(html.includes("2026-02-31"));
-  assertFalse(html.includes("24:00"));
+  const badSlot = await renderIndex(
+    `http://localhost/?date=${TEST_DATE}&slot=24:00`,
+  );
+  assert(badSlot.includes("slot=09%3A00"), "expected the day's slots");
+  assertFalse(badSlot.includes("24:00"));
+  assertFalse(badSlot.includes("24%3A00"));
 });
 
 // Berlin's clocks jump from 02:00 to 03:00 on 2027-03-28, a Sunday.
