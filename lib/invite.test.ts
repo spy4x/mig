@@ -419,3 +419,49 @@ Deno.test("bookingIcs — a cancelled booking is a CANCELLED event sent with MET
   assertEquals(ics.includes("METHOD:CANCEL\r\n"), true);
   assertEquals(ics.includes("METHOD:REQUEST"), false);
 });
+
+// mig#57: DTSTART comes from @spy4x/time/tz's zonedDateTime now. mig's
+// own copy read the zone's offset at the wrong instant near a
+// daylight-saving change: an Auckland host's 15:00 slot on 2026-04-04
+// (NZDT, UTC+13, the day before clocks go back) came out an hour late,
+// at 03:00Z instead of 02:00Z.
+Deno.test("bookingIcs — DTSTART of an afternoon slot the day before DST ends is the real instant", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZ",
+    createdAt: "2026-03-25T16:42:00.000Z",
+    date: "2026-04-04",
+    time: "15:00",
+    hostTz: "Pacific/Auckland",
+    guestName: "Client",
+    guestEmail: "client@example.com",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = bookingIcs(b, cfg, `https://example.com/c?t=${raw}`);
+
+  assertEquals(ics.includes("DTSTART:20260404T020000Z\r\n"), true);
+});
+
+// mig#57: 02:30 happens twice in Berlin on 2026-10-25. @spy4x/time/tz
+// picks the first (summer time, 00:30Z); mig's own copy picked the
+// second (winter time, 01:30Z).
+Deno.test("bookingIcs — a slot in the repeated fall-back hour starts at its first occurrence", async () => {
+  const cfg = makeConfig();
+  const b: Booking = {
+    id: "01HXYZ",
+    createdAt: "2026-10-01T16:42:00.000Z",
+    date: "2026-10-25",
+    time: "02:30",
+    hostTz: "Europe/Berlin",
+    guestName: "Client",
+    guestEmail: "client@example.com",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const { raw } = await newCancelToken("x");
+  const ics = bookingIcs(b, cfg, `https://example.com/c?t=${raw}`);
+
+  assertEquals(ics.includes("DTSTART:20261025T003000Z\r\n"), true);
+});

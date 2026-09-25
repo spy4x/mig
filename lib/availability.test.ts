@@ -1,6 +1,7 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   _internals,
+  getSlotsForDate,
   parseBlockedDates,
   parseWeeklyAvailability,
 } from "../lib/availability.ts";
@@ -266,4 +267,36 @@ Deno.test("parseBlockedDates — a trailing comma is ignored, not a phantom entr
 Deno.test("_internals.parseHHMM — malformed format throws, value-free", () => {
   const err = assertThrows(() => _internals.parseHHMM("9am"));
   assertEquals((err as Error).message, "bad time, expected HH:MM");
+});
+
+// mig#57: @spy4x/time/tz's zonedDateTime moves a spring-forward gap
+// time forward (Berlin's 02:30 on 2027-03-28 becomes 03:30), so a
+// 02:00 or 02:30 slot would duplicate the real 03:00 and 03:30 ones.
+// 2027-03-28 is a Sunday; Berlin's clocks jump from 02:00 to 03:00.
+Deno.test("getSlotsForDate — a slot inside the spring-forward gap is not offered", () => {
+  const slots = getSlotsForDate(
+    "2027-03-28",
+    parseWeeklyAvailability("SUN 01:00-04:00"),
+    30,
+    [],
+    "Europe/Berlin",
+    new Date(0),
+  );
+
+  assertEquals(slots.map((s) => s.time), ["01:00", "01:30", "03:00", "03:30"]);
+});
+
+// mig#57: "2026-02-30" used to be kept as a blocked date that could
+// never match (single) or reported as a HOST_TZ problem (range, via
+// addDays' RangeError); both now name the entry.
+Deno.test("parseBlockedDates — a date that is not on the calendar throws, naming the position", () => {
+  for (const value of ["2026-02-30", "30.02.2026", "2026-02-27..2026-02-30"]) {
+    let err = "";
+    try {
+      parseBlockedDates(`2026-12-24,${value}`, "Europe/Berlin");
+    } catch (e) {
+      err = (e as Error).message;
+    }
+    assertEquals(err, "entry 2: not a real calendar date", value);
+  }
 });

@@ -291,3 +291,30 @@ Deno.test("mig#48 review: the header comes from the FIRST slot, so only a LATER 
     "expected the post-transition slot to show its own offset inline",
   );
 });
+
+// ─── mig#57: dates and times that do not exist ───────────────────────
+
+// @spy4x/time/tz's zonedDateTime throws on "2026-02-31" and "24:00"
+// where mig's own copy rolled them over. The page drops both params,
+// as it does any malformed one, and still renders.
+Deno.test("mig#57: standalone / ignores a date or slot param that is not on the calendar", async () => {
+  const html = await renderIndex(
+    "http://localhost/?date=2026-02-31&slot=24:00",
+  );
+
+  assertEquals(gridHeaderZoneLabel(html), null);
+  assertFalse(html.includes("2026-02-31"));
+  assertFalse(html.includes("24:00"));
+});
+
+// Berlin's clocks jump from 02:00 to 03:00 on 2027-03-28, a Sunday.
+Deno.test("mig#57: standalone / offers no slot inside the spring-forward gap", async () => {
+  const html = await renderIndex("http://localhost/?date=2027-03-28", {
+    hostTz: "Europe/Berlin",
+    weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
+  });
+
+  assert(html.includes("slot=03%3A00"), "expected the 03:00 slot");
+  assertFalse(html.includes("slot=02%3A00"), "02:00 does not exist that day");
+  assertFalse(html.includes("slot=02%3A30"), "02:30 does not exist that day");
+});

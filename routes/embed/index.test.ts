@@ -399,3 +399,32 @@ Deno.test("mig#48 review: 1 Nov 2026, slots straddling the fall-back change — 
     "expected the post-transition slot to carry its own offset",
   );
 });
+
+// ─── mig#57: dates and times that do not exist ───────────────────────
+
+// @spy4x/time/tz's zonedDateTime throws on "2026-02-31" and "24:00"
+// where mig's own copy rolled them over, so /embed drops both params
+// (as it does any malformed one) instead of failing the request.
+Deno.test("mig#57: /embed ignores a date or slot param that is not on the calendar", async () => {
+  const data = await getEmbedData(
+    "http://localhost/embed?date=2026-02-31&slot=24:00",
+  );
+
+  assertEquals(data.date, null);
+  assertEquals(data.slot, null);
+});
+
+// Berlin's clocks jump from 02:00 to 03:00 on 2027-03-28, a Sunday.
+Deno.test("mig#57: /embed offers no slot inside the spring-forward gap", async () => {
+  const data = await getEmbedData("http://localhost/embed?date=2027-03-28", {
+    hostTz: "Europe/Berlin",
+    weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
+  });
+
+  assertEquals(data.slots.map((s) => s.time), [
+    "01:00",
+    "01:30",
+    "03:00",
+    "03:30",
+  ]);
+});

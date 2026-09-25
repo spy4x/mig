@@ -82,10 +82,15 @@ function stubContext(
     bookings: BookingsStore;
     rateLimiter: MemoryRateLimiter;
     fields: Record<string, string>;
+    headers?: Record<string, string>;
   },
 ): Context<State> {
   const body = new URLSearchParams(opts.fields);
-  const req = new Request("http://localhost/book", { method: "POST", body });
+  const req = new Request("http://localhost/book", {
+    method: "POST",
+    body,
+    headers: opts.headers,
+  });
   // Context is a class with private fields, so it can't be satisfied
   // structurally — handleBookingSubmit only reads ctx.req and
   // ctx.state, both present here.
@@ -1775,6 +1780,125 @@ Deno.test("handleBookingSubmit: the NTFY push for a failed send happens after th
     Deno.env.delete("NTFY_TOKEN");
     Deno.env.delete("NTFY_MODE");
     setTransportForTesting(defaultTransport());
+    await rm(path);
+  }
+});
+
+// ─── mig#57: behaviour that changed with the move to ts-libs ─────────
+
+// @spy4x/platform's clientIp ignores every proxy header unless told to
+// trust them; mig always trusted them. Without that trust, every
+// visitor behind the reverse proxy would share one "0.0.0.0" bucket.
+Deno.test("mig#57: visitors with different forwarded addresses are rate-limited separately", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
+
+  try {
+    const first = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:00"),
+        headers: { "x-forwarded-for": "198.51.100.1, 203.0.113.9" },
+      }),
+      "",
+    );
+    const second = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:30"),
+        headers: { "x-forwarded-for": "198.51.100.2, 203.0.113.9" },
+      }),
+      "",
+    );
+
+    assertEquals(locationPath(first).startsWith("/confirmed?"), true);
+    assertEquals(locationPath(second).startsWith("/confirmed?"), true);
+  } finally {
+    await rm(path);
+  }
+});
+
+// mig's own clientIp returned an empty key for a blank CF-Connecting-IP,
+// so every such visitor shared one bucket; @spy4x/platform's falls
+// through to the next header.
+Deno.test("mig#57: a blank CF-Connecting-IP falls through to X-Forwarded-For", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
+
+  try {
+    const first = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:00"),
+        headers: { "cf-connecting-ip": " ", "x-forwarded-for": "198.51.100.1" },
+      }),
+      "",
+    );
+    const second = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter,
+        fields: validFields(date, "09:30"),
+        headers: { "cf-connecting-ip": " ", "x-forwarded-for": "198.51.100.2" },
+      }),
+      "",
+    );
+
+    assertEquals(locationPath(first).startsWith("/confirmed?"), true);
+    assertEquals(locationPath(second).startsWith("/confirmed?"), true);
+  } finally {
+    await rm(path);
+  }
+});
+
+// @spy4x/time/tz's zonedDateTime resolves Berlin's nonexistent 02:30 on
+// 2027-03-28 (a Sunday; clocks jump 02:00 -> 03:00) to 03:30, so without
+// a guard the write path would book a second 03:30 under the name
+// "02:30". The slot was never offered (lib/availability.test.ts), and a
+// hand-made POST for it is refused the same way.
+Deno.test("mig#57: a slot inside the spring-forward gap is refused", async () => {
+  const cfg = {
+    ...fakeConfig(),
+    weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
+  };
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+
+  try {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+        fields: validFields("2027-03-28", "02:30"),
+      }),
+      "",
+    );
+
+    const url = new URL(res.headers.get("location")!);
+    assertEquals(url.pathname, "/");
+    assertEquals(
+      url.searchParams.get("err"),
+      "That time is outside availability hours.",
+    );
+    assertEquals(bookings.forDate("2027-03-28").length, 0);
+  } finally {
     await rm(path);
   }
 });
