@@ -119,3 +119,29 @@ Deno.test("pickerLinks: pushAddress carries no tz when none is bound", () => {
     "/?date=2026-09-28&slot=09%3A00",
   );
 });
+
+Deno.test("pickerPushAddress: an /embed address stays under /embed and keeps the forced theme", () => {
+  assertEquals(
+    pickerPushAddress(
+      { date: "2026-09-28", slot: "09:00" },
+      "Europe/Berlin",
+      "/embed",
+      "dark",
+    ),
+    "/embed?date=2026-09-28&slot=09%3A00&tz=Europe%2FBerlin&theme=dark",
+  );
+});
+
+Deno.test("pickerPushAddress: a bare /embed address is just /embed", () => {
+  assertEquals(pickerPushAddress({ date: null }, null, "/embed"), "/embed");
+});
+
+Deno.test("pickerLinks: pushAddress carries the bound basePath and theme", () => {
+  const links = pickerLinks("Europe/Berlin", "/embed", "light");
+  assertEquals(links.basePath, "/embed");
+  assertEquals(links.theme, "light");
+  assertEquals(
+    links.pushAddress({ date: "2026-09-28" }),
+    "/embed?date=2026-09-28&tz=Europe%2FBerlin&theme=light",
+  );
+});

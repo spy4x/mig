@@ -2,8 +2,9 @@
 // list renders, not just at submit. These tests call the route's GET
 // handler directly (same pattern as routes/embed/book.test.ts) with a
 // real Request carrying a `tz` query param, and check the data it
-// hands to the page: per-slot clock strings, the date label, and the
-// tz-redirect flag.
+// hands to the page (per-slot clock strings) and the labels the page
+// renders from it (the picked day, the grid header's zone, the time
+// card's date).
 
 import { assert, assertEquals, assertFalse } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
@@ -63,7 +64,7 @@ async function rm(path: string) {
   }
 }
 
-async function getEmbedData(
+async function handlerData(
   url: string,
   cfgOverrides: Partial<Config> = {},
 ): Promise<EmbedData> {
@@ -90,6 +91,49 @@ async function getEmbedData(
   } finally {
     await rm(path);
   }
+}
+
+/** The labels BookingFlow renders from the handler's data, read back
+ *  from the page: the date card's day, the grid header's zone and the
+ *  time card's date. `null` when that element isn't on the page. */
+interface RenderedLabels {
+  selectedDateLabel: string | null;
+  zoneLabel: string | null;
+  slotDateLabel: string | null;
+}
+
+function renderedLabels(html: string): RenderedLabels {
+  return {
+    selectedDateLabel: html.match(
+      /<p class="text-sm font-medium text-ink truncate tnum">([^<]*)<\/p>/,
+    )?.[1] ?? null,
+    zoneLabel:
+      html.match(/<p class="text-xs text-ink-subtle mt-0\.5">([^<]*)<\/p>/)
+        ?.[1] ?? null,
+    slotDateLabel: html.match(/· ([^<]+)</)?.[1] ?? null,
+  };
+}
+
+// The handler's data rendered through the page itself: the month grid
+// runs the host zone's math while it renders, not in the handler.
+async function renderEmbed(
+  url: string,
+  cfgOverrides: Partial<Config> = {},
+): Promise<{ data: EmbedData; html: string }> {
+  const data = await handlerData(url, cfgOverrides);
+  const config = { ...fakeConfig(), ...cfgOverrides };
+  // deno-lint-ignore no-explicit-any
+  const html = renderToString((EmbedPage as any)({ data, state: { config } }));
+  return { data, html };
+}
+
+/** The handler's data plus the labels the page renders from it. */
+async function getEmbedData(
+  url: string,
+  cfgOverrides: Partial<Config> = {},
+): Promise<EmbedData & RenderedLabels> {
+  const { data, html } = await renderEmbed(url, cfgOverrides);
+  return { ...data, ...renderedLabels(html) };
 }
 
 Deno.test("after a conflict, the slot list shows the taken slot disabled", async () => {
@@ -434,19 +478,6 @@ Deno.test("mig#57: /embed offers no slot inside the spring-forward gap", async (
     "03:30",
   ]);
 });
-
-// The handler's data rendered through the page itself: the month grid
-// runs the host zone's math while it renders, not in the handler.
-async function renderEmbed(
-  url: string,
-  cfgOverrides: Partial<Config> = {},
-): Promise<{ data: EmbedData; html: string }> {
-  const data = await getEmbedData(url, cfgOverrides);
-  const config = { ...fakeConfig(), ...cfgOverrides };
-  // deno-lint-ignore no-explicit-any
-  const html = renderToString((EmbedPage as any)({ data, state: { config } }));
-  return { data, html };
-}
 
 // mig#57: Phoenix ran on UTC-7:28:18 until noon on 1883-11-18. Noon
 // resolves, the morning slots and the days before do not, and

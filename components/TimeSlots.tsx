@@ -271,8 +271,7 @@ function SlotButton(
   const base =
     "inline-flex flex-col min-h-10 min-w-[4.5rem] items-center justify-center gap-0 rounded-lg border px-3 py-1.5 text-sm tnum font-medium transition-all duration-(--duration-snappy) focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised";
   // What the user actually sees. Falls back to host-local when the
-  // island hasn't computed a visitor-TZ displayHHMM yet (SSR + /embed
-  // + pre-hydration).
+  // route or island hasn't computed a visitor-TZ displayHHMM.
   const shownTime = slot.displayHHMM ?? slot.time;
   // Visible text (mig#48): bare HH:MM, plus this slot's own offset
   // only when it disagrees with the grid header's — a daylight-saving

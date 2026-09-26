@@ -11,7 +11,8 @@
     "compile": "vite build && deno compile -A --no-check --unstable-temporal --include _fresh --exclude node_modules --output mig binary.ts",
     "smoke:binary": "deno run -A scripts/smoke-binary.ts",
     "typecheck": "deno check",
-    "screenshots": "deno run -A --node-modules-dir=none --no-lock scripts/screenshots.ts"
+    "screenshots": "deno run -A --node-modules-dir=none --no-lock scripts/screenshots.ts",
+    "embed:check": "deno run -A --node-modules-dir=none --no-lock scripts/embed-check.ts"
   },
   "lint": {
     "rules": {

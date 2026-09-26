@@ -34,6 +34,12 @@ stay; it won't block the frame as long as `frame-ancestors` is also there on
 honor `X-Frame-Options` and refuse the frame. The rest of the site (`/`,
 `/confirmed`, `/cancel`) can keep denying framing entirely.
 
+With JavaScript, choosing a day or a time inside the frame updates it in place,
+without a page load, and the address it keeps stays under `/embed` too. The
+script for that and the day's times (`/api/slots`) load from mig's own origin as
+ordinary requests, which framing rules don't cover. Without JavaScript, every
+step is a plain link or form post and booking still works.
+
 ## Theme
 
 An iframe's `prefers-color-scheme` follows the _visitor's_ OS, not the page

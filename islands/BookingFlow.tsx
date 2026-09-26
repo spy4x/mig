@@ -29,15 +29,23 @@ import {
       after hydration, so the confirm-button label matches what the
       user expects to see.
 
-  No-JS / /embed fallback: when this island is not hydrated (or is
-  not mounted at all, as on `/embed`), the same SSR markup with
-  `<a href>` links still works — the components accept `onSelect`
-  callbacks, and when those are absent they render `<a href>`.
+  No-JS fallback: when this island is not hydrated, the same SSR
+  markup with `<a href>` links still works — the components accept
+  `onSelect` callbacks, and when those are absent they render
+  `<a href>`.
+
+  Both pages mount it (mig#85): `/` with the default `basePath` "",
+  and `/embed` with `basePath` "/embed" and its forced `theme`, so
+  every link, pushed address and form action stays under /embed
+  (issue #11) and carries `?theme=` (mig#44). /embed's height script
+  (lib/height-report-script.ts) observes the wrapper with a
+  ResizeObserver, so each step the island renders reports its new
+  height without a page load.
 
   Server-side first paint: the route still passes the same initial
   props (`dates`, `slots`, `selectedDate`, etc.) it always did.
   Fresh 2 renders this island server-side with those initial values,
-  so the first paint is identical to what the old Picker produced.
+  so the first paint is the same markup a plain server render gives.
   Hydration then attaches the signal handlers — no SSR markup
   mismatch.
 
@@ -86,6 +94,13 @@ interface BookingFlowProps {
    *  building the date from noon instead of the slot's own instant)
    *  left every existing test green (mig#18 round 4 review). */
   tz: string | null;
+  /** "" for the standalone page (default), "/embed" for the iframe
+   *  variant (mig#85) — threaded into every link, pushed address and
+   *  the form action so the flow never leaves /embed (issue #11). */
+  basePath?: string;
+  /** /embed's forced theme (mig#44), `null` for "auto". Carried on
+   *  every link, pushed address and the form's hidden `theme` field. */
+  theme?: string | null;
 }
 
 // ─── Client-side time helpers ────────────────────────────────────────
@@ -141,6 +156,8 @@ function formatConfirmLabelWithClock(
 
 export default function BookingFlow(props: BookingFlowProps) {
   const hostTz = props.hostTz;
+  const basePath = props.basePath ?? "";
+  const embed = basePath !== "";
 
   // Signal-based state. Each signal is read inline below — Preact
   // re-renders the component when any signal changes.
@@ -154,8 +171,8 @@ export default function BookingFlow(props: BookingFlowProps) {
   // date/time labels in the visitor's local TZ.
   const guestTz = useSignal<string>("");
   // True once the island has mounted. Used to gate visitor-TZ
-  // re-formatting (so SSR markup stays host-local for crawlers +
-  // no-JS clients — same labels the SSR Picker always showed).
+  // re-formatting (so SSR markup keeps the route's labels for
+  // crawlers + no-JS clients — the same labels the server render has).
   const mounted = useSignal(false);
   // Inline error from server-side validation (?err=…). Mirrors the
   // SSR error prop, but dismissible so a stale error doesn't haunt
@@ -329,7 +346,7 @@ export default function BookingFlow(props: BookingFlowProps) {
   // (`links.pushAddress`) — see lib/picker-links.ts's pickerLinks doc
   // comment for why binding `linkTz` once here, instead of passing it
   // separately to each, is the point.
-  const links = pickerLinks(linkTz);
+  const links = pickerLinks(linkTz, basePath, props.theme ?? null);
 
   // The selected slot's own date, from its exact instant, not noon of
   // the host day (mig#15 review) — feeds TimeCard specifically.
@@ -405,11 +422,11 @@ export default function BookingFlow(props: BookingFlowProps) {
   const dateLabelShort: string | null = day?.short ?? null;
 
   // Re-derive every slot's visitor-TZ HH:MM + own offset for display
-  // (mig#15, mig#48). SSR + `/embed` + pre-hydration leave
-  // `displayHHMM` unset, so TimeSlots falls back to the host-local
-  // `time` (the authoritative value the server books against — never
-  // swapped). After hydration Preact diffs the text node and updates
-  // in place; the surrounding DOM structure stays identical.
+  // (mig#15, mig#48). Before mount the route's own `displayHHMM` is
+  // used, or TimeSlots falls back to the host-local `time` (the
+  // authoritative value the server books against — never swapped).
+  // After hydration Preact diffs the text node and updates in place;
+  // the surrounding DOM structure stays identical.
   const slotsForDisplay = (mounted.value && date.value)
     ? orderedSlots.map((s) => {
       const visitorDate = isoDateInTz(s.instant, displayTz);
@@ -471,7 +488,9 @@ export default function BookingFlow(props: BookingFlowProps) {
                 date={date.value!}
                 dateLabel={dateLabel ?? date.value!}
                 onClear={interactive ? clearDate : undefined}
+                basePath={links.basePath}
                 tz={links.tz}
+                theme={links.theme}
               />
             )
             : (
@@ -484,7 +503,9 @@ export default function BookingFlow(props: BookingFlowProps) {
                 hostTz={hostTz}
                 onSelectDate={interactive ? onSelectDate : undefined}
                 onSelectMonth={interactive ? onSelectMonth : undefined}
+                basePath={links.basePath}
                 tz={links.tz}
+                theme={links.theme}
               />
             )}
         </div>
@@ -510,7 +531,9 @@ export default function BookingFlow(props: BookingFlowProps) {
                   dateLabel={slotDateLabel ?? dateLabel ?? date.value!}
                   displaySlot={slotLabelVisitorTz ?? undefined}
                   onClear={interactive ? clearSlot : undefined}
+                  basePath={links.basePath}
                   tz={links.tz}
+                  theme={links.theme}
                 />
               )
               : loading.value
@@ -527,8 +550,10 @@ export default function BookingFlow(props: BookingFlowProps) {
                   slots={slotsForDisplay}
                   selectedSlot={null}
                   onSelectSlot={interactive ? onSelectSlot : undefined}
+                  basePath={links.basePath}
                   tz={links.tz}
                   zoneLabel={gridZoneLabel}
+                  theme={links.theme}
                 />
               )
               : (
@@ -558,6 +583,9 @@ export default function BookingFlow(props: BookingFlowProps) {
               hostName={props.hostName}
               error={null}
               confirmLabel={confirmLabel ?? `Confirm — ${slot.value}`}
+              basePath={links.basePath}
+              guestTz={links.tz}
+              theme={links.theme}
             />
           </div>
         </section>
@@ -567,14 +595,18 @@ export default function BookingFlow(props: BookingFlowProps) {
         /* Mobile sticky CTA — appears only between date-pick and
           slot-pick (SummaryBar handles `state === "date"` by hiding
           itself on step 3 already). Renders inside the island so the
-          date label updates to visitor TZ after hydration. */
+          date label updates to visitor TZ after hydration. Not on
+          /embed (mig#85): the iframe grows to its content, so a bar
+          fixed to the frame's bottom would cover the last slots. */
       }
-      <SummaryBar
-        state={hasSlot ? "slot" : hasDate ? "date" : "none"}
-        date={date.value}
-        dateLabel={dateLabelShort ?? dateLabel}
-        slot={slotLabelVisitorTz ?? slot.value}
-      />
+      {!embed && (
+        <SummaryBar
+          state={hasSlot ? "slot" : hasDate ? "date" : "none"}
+          date={date.value}
+          dateLabel={dateLabelShort ?? dateLabel}
+          slot={slotLabelVisitorTz ?? slot.value}
+        />
+      )}
     </div>
   );
 }

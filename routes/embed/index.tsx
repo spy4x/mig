@@ -1,5 +1,5 @@
 import { define } from "../../lib/utils.ts";
-import { Picker } from "../../components/Picker.tsx";
+import BookingFlow from "../../islands/BookingFlow.tsx";
 import { gridDay } from "../../components/TimeSlots.tsx";
 import {
   countSlotsForDate,
@@ -9,9 +9,7 @@ import { isoDateInTz, minToHHMM, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalValidTimeZoneOrNull,
   EARLIEST_DATE,
-  formatClockAt,
   formatGridHeader,
-  formatHostDateIn,
   formatShortDateAt,
   formatSlotDisplay,
   hostSlotInstant,
@@ -54,14 +52,9 @@ export interface EmbedData {
   date: string | null;
   slot: string | null;
   dates: DateCell[];
-  selectedDateLabel: string | null;
-  /** The selected slot's own date, built from its exact instant, not
-   *  noon of the host day (mig#15 review) — e.g. "Wednesday, 23
-   *  September 2026" for a 09:00 Thursday Ho Chi Minh slot shown to a
-   *  New York visitor as 22:00 Wednesday. Feeds TimeCard specifically;
-   *  `selectedDateLabel` (the picked day, mig#50) still feeds
-   *  DateCard, which shows the *picked day*, not a specific time. */
-  slotDateLabel: string | null;
+  /** Sorted by instant, each labelled in the display zone. BookingFlow
+   *  derives the day label, the grid header and the time card's date
+   *  from these, the same way it does on `/`. */
   slots: SlotCell[];
   monthAnchor: string;
   error: string | null;
@@ -71,18 +64,10 @@ export interface EmbedData {
    *  real zone. An invalid or missing value is `null` and always
    *  falls back to the host's zone rather than an error page. */
   tz: string | null;
-  /** "Berlin, UTC+2" — the display zone, shown once above the slot
-   *  grid instead of on every slot (mig#48). Taken from the FIRST slot
-   *  actually shown, in display order (mig#48 review) — not an
-   *  arbitrary anchor like noon of the host day, which can label the
-   *  header with an offset no visible slot has. `null` when no date is
-   *  picked yet, or the picked day has no slots (there's no grid to
-   *  label). */
-  zoneLabel: string | null;
   /** /embed's forced theme (mig#44), parsed from `?theme=` and
    *  normalized so "auto" (missing, invalid, or explicitly "auto")
    *  becomes `null` — the same shape `tz` already has, so it threads
-   *  through `pickerHref` and BookingForm's hidden field the same
+   *  through BookingFlow's links and BookingForm's hidden field the same
    *  way. `routes/_app.tsx` reads the raw query param itself to apply
    *  the theme before first paint; this is only for carrying the
    *  choice forward through the rest of the flow. */
@@ -152,15 +137,14 @@ export const handler = define.handlers({
 
     // Visitor timezone (mig#15) — the slot list has to render in the
     // visitor's zone from the first paint, not just at submit, and
-    // /embed mounts no island to do that client-side after the fact
-    // (issue #11). Canonicalized + validated the same way `guestTz` is
-    // on submit (lib/validators.ts): an invalid or missing value falls
+    // without JavaScript BookingFlow never re-labels it client-side.
+    // Canonicalized + validated the same way `guestTz` is on submit (lib/validators.ts): an invalid or missing value falls
     // back to `null` (host zone), never an error page.
     const tz = canonicalValidTimeZoneOrNull(url.searchParams.get("tz"));
     const displayTz = tz ?? cfg.hostTz;
 
     // Forced theme (mig#44) — normalized to null for "auto" so it
-    // threads through pickerHref/BookingForm the same way `tz` does
+    // threads through BookingFlow the same way `tz` does
     // (see the EmbedData.theme doc comment).
     const themeParam = parseThemeParam(url.searchParams.get("theme"));
     const theme = themeParam === "auto" ? null : themeParam;
@@ -196,21 +180,7 @@ export const handler = define.handlers({
       return { date: d, slots };
     });
 
-    // The selected slot's own date, from its exact instant — see the
-    // EmbedData.slotDateLabel doc comment (mig#15 review).
-    const slotDateLabel = date && slot
-      ? formatHostDateIn(date, slot, cfg.hostTz, displayTz)
-      : null;
-
     let slots: SlotCell[] = [];
-    let gridZoneLabel: string | null = null;
-    // Date label for the picked day, in the display zone (mig#50): the
-    // clicked date when a slot falls on it, else the first slot's day,
-    // and the clicked date when there is no slot — see gridDay, which
-    // the standalone island uses too.
-    let selectedDateLabel: string | null = date
-      ? gridDay([], date, displayTz).long
-      : null;
     if (date && !cfg.blockedDates.has(date)) {
       const dayBookings = ctx.state.bookings.forDate(date);
       const dayName = dayNameFromDate(date, cfg.hostTz);
@@ -244,16 +214,15 @@ export const handler = define.handlers({
       // previous or next visitor-local day still renders in true
       // chronological order rather than relying on that coincidence.
       // This is also the actual display order, so the grid header
-      // (below) is taken from the FIRST slot *after* this sort.
+      // offset (below, and BookingFlow's own header) is taken from the
+      // FIRST slot *after* this sort.
       withInstant.sort((a, b) => a.instant.getTime() - b.instant.getTime());
 
       const header = formatGridHeader(
         withInstant.map((s) => s.instant),
         displayTz,
       );
-      gridZoneLabel = header?.label ?? null;
       const day = gridDay(withInstant.map((s) => s.instant), date, displayTz);
-      selectedDateLabel = day.long;
 
       slots = withInstant.map((s) => {
         const visitorDate = isoDateInTz(s.instant, displayTz);
@@ -276,13 +245,10 @@ export const handler = define.handlers({
         date,
         slot,
         dates,
-        selectedDateLabel,
-        slotDateLabel,
         slots,
         monthAnchor,
         error,
         tz,
-        zoneLabel: gridZoneLabel,
         theme,
       },
     };
@@ -299,13 +265,18 @@ export const handler = define.handlers({
       follows the *visitor's* OS, not the embedding page, so it never
       actually matched a dark host page on its own; see mig#44 and
       routes/_app.tsx).
-    - No island: the Picker renders plain <a href> / <form> — every
-      link and the booking form action stay under /embed (basePath
-      below), so a host that only allows framing /embed never gets
-      navigated out of it (issue #11).
+    - The same BookingFlow island as / (mig#85), with basePath
+      "/embed": once hydrated, picking a day or a time changes the
+      view without a page load. Before hydration, or without
+      JavaScript, it renders plain <a href> / <form> — every link,
+      pushed address and the booking form action stay under /embed,
+      so a host that only allows framing /embed never gets navigated
+      out of it (issue #11). The island's script and /api/slots load
+      from mig's own origin as subresources, which `frame-ancestors`
+      doesn't govern.
     - Tighter padding — embedders get a smaller drop-in.
     - Same booking flow, same URL contract, offset by /embed.
-    - Timezone (mig#15): every link the Picker renders carries `?tz=`
+    - Timezone (mig#15): every link the flow renders carries `?tz=`
       once known, and the very first load (no `tz` yet) emits a tiny
       script that redirects once to the same URL with the visitor's
       detected zone appended — see lib/guest-tz-script.ts for why a
@@ -315,53 +286,18 @@ export const handler = define.handlers({
       param keeps today's behaviour. Every link and the confirm form
       carry the forced theme forward the same way `tz` does — see
       lib/picker-links.ts and BookingForm's hidden `theme` field.
+    - No mobile summary bar: it's fixed to the frame's bottom, and the
+      frame grows to its content, so it would cover the last slots.
 
   Auto-sizing (mig#44): every /embed page posts its content height to
   `window.parent` via `postMessage` (lib/height-report-script.ts) —
-  the parent page listens and sets the iframe's height from it. See
-  docs/embedding.md for the parent-side listener.
+  the parent page listens and sets the iframe's height from it. Its
+  ResizeObserver also catches every step BookingFlow renders without a
+  page load. See docs/embedding.md for the parent-side listener.
 */
 export default define.page<typeof handler>(function Embed({ data, state }) {
-  const {
-    date,
-    slot,
-    dates,
-    selectedDateLabel,
-    slotDateLabel,
-    slots,
-    monthAnchor,
-    error,
-    tz,
-    zoneLabel: gridZoneLabel,
-    theme,
-  } = data;
+  const { date, slot, dates, slots, monthAnchor, error, tz, theme } = data;
   const cfg = state.config;
-  const displayTz = tz ?? cfg.hostTz;
-
-  // Pre-compute the confirm label for the picker, in the display zone.
-  const confirmLabel = (() => {
-    if (!date || !slot) return null;
-    const dt = zonedDateTime(date, slot, cfg.hostTz);
-    const weekday = new Intl.DateTimeFormat("en-GB", {
-      timeZone: displayTz,
-      weekday: "short",
-    }).format(dt);
-    const day = new Intl.DateTimeFormat("en-GB", {
-      timeZone: displayTz,
-      day: "numeric",
-    }).format(dt);
-    const month = new Intl.DateTimeFormat("en-GB", {
-      timeZone: displayTz,
-      month: "short",
-    }).format(dt);
-    return `Confirm — ${weekday}, ${day} ${month}, ${
-      formatClockAt(dt, displayTz)
-    }`;
-  })();
-
-  const displaySlot = date && slot
-    ? formatClockAt(zonedDateTime(date, slot, cfg.hostTz), displayTz)
-    : null;
 
   return (
     // data-mig-height (mig#44, HEIGHT_ATTR) marks the element
@@ -408,23 +344,18 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
           )}
         </div>
 
-        <Picker
+        <BookingFlow
           dates={dates}
           slots={slots}
           selectedDate={date}
-          selectedDateLabel={selectedDateLabel}
           selectedSlot={slot}
           monthAnchor={monthAnchor}
           durationMin={cfg.slotDurationMin}
           hostName={cfg.hostName}
           hostTz={cfg.hostTz}
           error={error}
-          confirmLabel={confirmLabel}
-          basePath="/embed"
           tz={tz}
-          displaySlot={displaySlot}
-          slotDateLabel={slotDateLabel}
-          zoneLabel={gridZoneLabel}
+          basePath="/embed"
           theme={theme}
         />
       </main>

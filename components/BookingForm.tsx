@@ -8,18 +8,18 @@
   Fri, 28 Aug, 14:00") so the user can sanity-check their pick right
   up to the click. On the standalone page the button is hydrated into
   the BookingSubmit island so we can show a spinner while the form is
-  in flight. /embed never mounts islands (issue #11 — a partial iframe
-  allow-list must not depend on a script tag loading), so `basePath !==
-  ""` renders a plain <button type="submit"> instead: same label, no
-  spinner, no client-side pre-validation. Server-side arktype is already
-  the trust boundary either way.
+  in flight. /embed (`basePath !== ""`) renders a plain
+  <button type="submit"> instead: same label, no spinner, no
+  client-side pre-validation. Server-side arktype is already the trust
+  boundary either way. BookingSubmit fills guestTz with a freshly
+  detected zone, which would overwrite the `tz` /embed pre-fills below
+  (mig#15), so /embed keeps its own field.
 
-  Timezone capture works the same way, split by the same island/no-island
-  line: the standalone form's guestTz field is filled by the
-  BookingSubmit island after mount; /embed's is filled by a tiny inline
-  <script> (lib/guest-tz-script.ts), the same progressive-enhancement
-  pattern routes/_app.tsx uses for the theme bootstrap. Neither runs
-  without JavaScript, and in that case the field stays empty — the
+  Timezone capture is split the same way: the standalone form's
+  guestTz field is filled by the BookingSubmit island after mount;
+  /embed's is pre-filled from its `tz` query param and, when that is
+  empty, by a tiny inline <script> (lib/guest-tz-script.ts). Neither
+  runs without JavaScript, and in that case the field stays empty — the
   server already treats guestTz as optional and falls back to the
   host's timezone.
 
@@ -44,8 +44,8 @@ interface BookingFormProps {
    *  14:00". Computed by the route so it stays in lockstep with
    *  the rest of the host-local time presentation. */
   confirmLabel: string;
-  /** "" for the standalone page (posts to /api/book, no island), "/embed"
-   *  for the iframe variant (posts to /embed/book, no island). Defaults
+  /** "" for the standalone page (posts to /api/book, BookingSubmit island), "/embed"
+   *  for the iframe variant (posts to /embed/book, plain button). Defaults
    *  to "". */
   basePath?: string;
   /** The visitor's IANA zone, already known from /embed's `tz` query
@@ -155,11 +155,10 @@ export function BookingForm({
 
         {
           /* Progressive-enhancement timezone capture — /embed's
-             equivalent of BookingSubmit's hidden guestTz field, since
-             /embed mounts no island (issue #11 Option A). Without
-             this script the field just stays empty and the booking
-             still completes; lib/book.ts already treats guestTz as
-             optional. */
+             equivalent of BookingSubmit's hidden guestTz field (see the
+             header comment). Without this script the field just stays
+             empty and the booking still completes; lib/book.ts already
+             treats guestTz as optional. */
         }
         {embed && (
           <>

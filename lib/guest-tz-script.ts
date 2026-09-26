@@ -2,12 +2,16 @@
 // form (issue #11, reviewer round 2). The standalone form hydrates
 // BookingSubmit (islands/BookingSubmit.tsx), which reads
 // Intl.DateTimeFormat().resolvedOptions().timeZone into a hidden
-// guestTz field after mount. /embed never mounts an island (issue #11
-// Option A), so it gets the same value the same way islands/theme.ts
-// gets its theme: a tiny inline <script>, same style as
+// guestTz field after mount. /embed keeps its own field (see
+// components/BookingForm.tsx), pre-filled from its `tz` param; when
+// that is empty, it gets the value the same way the theme bootstrap
+// does: a tiny inline <script>, same style as
 // lib/theme.ts:themeScript — no nonce (Fresh adds one to
 // every rendered <script> automatically), a try/catch so a hostile or
 // ancient browser just leaves the field empty instead of throwing.
+// Once BookingFlow is hydrated on /embed (mig#85), a form it renders
+// client-side runs no inline script, but it pre-fills the field with
+// the zone it detected itself, so the script isn't needed there.
 //
 // Without JavaScript the field stays empty and lib/book.ts already
 // treats guestTz as optional, falling back to the host's timezone —

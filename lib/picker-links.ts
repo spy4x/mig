@@ -1,4 +1,5 @@
-// URL builder for the no-JS / /embed picker fallback links.
+// URL builder for the picker's links (the no-JS fallback) and for the
+// addresses BookingFlow pushes into history once hydrated.
 //
 // `basePath` is always a compile-time constant chosen by the route
 // that renders the picker ("" for the standalone page at "/", or
@@ -43,62 +44,52 @@ export function pickerHref(
 }
 
 /** Build the address `BookingFlow.tsx`'s `pushUrl` writes into the
- *  browser's history for the standalone picker (basePath "" — the
- *  island only ever runs there, never under /embed). Same params
- *  `pickerHref` builds `<a href>`s from, and `tz` carried the same
- *  way (mig#18), so a reload or a copied URL keeps showing the
- *  visitor's own clocks instead of falling back to the host's.
+ *  browser's history. Same params `pickerHref` builds `<a href>`s from,
+ *  under the same `basePath` ("" standalone, "/embed" in the iframe —
+ *  mig#85), with `tz` (mig#18) and `theme` (mig#44) carried the same
+ *  way, so a reload or a copied URL keeps showing the visitor's own
+ *  clocks, stays under /embed, and keeps the forced theme.
  *
- *  Pulled out of `pushUrl` as a pure function so *this* piece of the
- *  behaviour — given a `tz`, does the address it builds carry it —
- *  is unit-testable without driving a real `history.pushState`.
- *
- *  No test runs `pushUrl` itself: a server render never calls it (its
- *  handlers only exist after client-side hydration), and
- *  `picker-links.test.ts` calls `pushAddress`/`pickerPushAddress`
- *  directly, not through `pushUrl`. So an edit inside `pushUrl` that
- *  drops `tz` —
- *  whether it builds its own `URLSearchParams` by hand, calls
- *  `pickerLinks(null).pushAddress(next)`, or calls
- *  `pickerPushAddress(next, null)` directly — stays green. The one
- *  thing a test *does* catch is an edit to the `pickerLinks(linkTz)`
- *  binding in `BookingFlow.tsx` (see `pickerLinks` below), because
- *  that same binding also feeds the `tz` on every `<a href>` the
- *  server-rendered test in `routes/index.test.tsx` checks. */
+ *  Pulled out of `pushUrl` as a pure function so this piece of the
+ *  behaviour is unit-testable without driving a real
+ *  `history.pushState`. No test runs `pushUrl` itself (a server render
+ *  never calls it), so an edit inside `pushUrl` that builds its own
+ *  address instead of calling `links.pushAddress` stays green. */
 export function pickerPushAddress(
   next: { date: string | null; slot?: string | null; month?: string },
   tz: string | null,
+  basePath = "",
+  theme: string | null = null,
 ): string {
   const params: Record<string, string> = {};
   if (next.date) params.date = next.date;
   if (next.slot) params.slot = next.slot;
   if (next.month) params.month = next.month;
-  return pickerHref("", params, tz);
+  return pickerHref(basePath, params, tz, theme);
 }
 
-/** Binds one `tz` for both halves of the picker's tz-carrying
- *  behaviour: the `<a href>`s the picker's children render (via
- *  `tz`) and the address `pushUrl` pushes (via `pushAddress`).
- *  `BookingFlow.tsx` computes `linkTz` once per render and passes it
- *  here, then uses `links.tz` for every child and
- *  `links.pushAddress(next)` inside `pushUrl` — one shared value
- *  instead of threading `linkTz` to five separate call sites by hand.
- *
- *  What a test can and can't see through this binding:
- *  `pickerPushAddress`/`pushAddress` are unit-tested
- *  (`lib/picker-links.test.ts`), and `routes/index.test.tsx` server-
- *  render-tests the slot-list `<a href>`s only — the date card,
- *  calendar and time card links are not covered. `pushUrl` itself is
- *  not tested at all — see `pickerPushAddress`'s doc comment above
- *  for exactly what that leaves uncaught. */
-export function pickerLinks(tz: string | null): {
+/** Binds one `tz`, `basePath` and `theme` for both halves of the
+ *  picker's link behaviour: the `<a href>`s the picker's children
+ *  render and the address `pushUrl` pushes (via `pushAddress`).
+ *  `BookingFlow.tsx` computes these once per render and passes them
+ *  here, then threads `links.*` into every child — one shared value
+ *  instead of five separate call sites that could drift. */
+export function pickerLinks(
+  tz: string | null,
+  basePath = "",
+  theme: string | null = null,
+): {
   tz: string | null;
+  basePath: string;
+  theme: string | null;
   pushAddress(
     next: { date: string | null; slot?: string | null; month?: string },
   ): string;
 } {
   return {
     tz,
-    pushAddress: (next) => pickerPushAddress(next, tz),
+    basePath,
+    theme,
+    pushAddress: (next) => pickerPushAddress(next, tz, basePath, theme),
   };
 }

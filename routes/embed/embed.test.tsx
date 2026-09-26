@@ -21,7 +21,7 @@ import type { PageProps } from "fresh";
 import type { State } from "../../lib/utils.ts";
 import type { Config } from "../../lib/types.ts";
 import type { ConfirmedData } from "../../lib/confirmed-data.ts";
-import { Picker } from "../../components/Picker.tsx";
+import BookingFlow from "../../islands/BookingFlow.tsx";
 import { HEIGHT_ATTR } from "../../lib/height-report-script.ts";
 import EmbedPage, { type EmbedData } from "./index.tsx";
 import EmbedConfirmedPage from "./confirmed.tsx";
@@ -102,13 +102,10 @@ function embedData(overrides: Partial<EmbedData>): EmbedData {
     date: null,
     slot: null,
     dates: DATES,
-    selectedDateLabel: null,
     slots: [],
-    slotDateLabel: null,
     monthAnchor: "2027-01-01",
     error: null,
     tz: null,
-    zoneLabel: null,
     theme: null,
     ...overrides,
   };
@@ -189,7 +186,6 @@ Deno.test("embed picker: time step — date-card and slot links stay under /embe
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slots: SLOTS,
       }))}
     />,
@@ -222,7 +218,6 @@ Deno.test("embed picker: time step — the grid header element shows the zone on
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slots: [
           {
             time: "09:00",
@@ -237,13 +232,14 @@ Deno.test("embed picker: time step — the grid header element shows the zone on
             ariaZoneLabel: "Berlin, UTC+2",
           },
         ],
-        zoneLabel: "Berlin, UTC+2",
       }))}
     />,
   );
+  // BookingFlow labels the header from the first slot's own instant:
+  // Berlin in January is UTC+1, whatever the fixture's slots say.
   assertEquals(
     gridHeaderZoneLabel(html),
-    "Berlin, UTC+2",
+    "Berlin, UTC+1",
     "expected the grid header element to show the zone once",
   );
   // Bare HH:MM on the slot itself — the zone lives in the header, not
@@ -254,12 +250,11 @@ Deno.test("embed picker: time step — the grid header element shows the zone on
   );
 });
 
-Deno.test("embed picker: confirm step — form posts to /embed/book, captures guestTz without an island", () => {
+Deno.test("embed picker: confirm step — form posts to /embed/book, captures guestTz with an inline script", () => {
   const html = renderToString(
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slot: "09:00",
         slots: SLOTS,
       }))}
@@ -272,17 +267,12 @@ Deno.test("embed picker: confirm step — form posts to /embed/book, captures gu
   assertEquals(offendingLinks(links, "/embed"), []);
   assertEquals(formActions(html), ["/embed/book"]);
   // The progressive-enhancement guestTz capture: a hidden input the
-  // inline script below fills in, no island required.
+  // inline script below fills in, BookingSubmit not required.
   assert(html.includes('name="guestTz"'), "expected a hidden guestTz input");
   assert(
     html.includes("Intl.DateTimeFormat"),
     "expected the inline timezone-capture script",
   );
-  // No module script anywhere — Fresh only emits island hydration
-  // `<script type="module">` tags through the real Vite build (this
-  // render doesn't go through it, see the file header comment), but a
-  // literal type="module" here would still be a real regression.
-  assertFalse(html.includes('<script type="module"'));
 });
 
 Deno.test("embed form never renders BookingSubmit, the standalone island", async () => {
@@ -308,7 +298,6 @@ Deno.test("mig#15: every picker link carries tz once the visitor's zone is known
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slots: SLOTS,
         tz: "America/New_York",
       }))}
@@ -336,7 +325,6 @@ Deno.test("mig#15: BookingForm pre-fills the hidden guestTz field from the known
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slot: "09:00",
         slots: SLOTS,
         tz: "America/New_York",
@@ -381,7 +369,6 @@ Deno.test("mig#15: the time card's Change link carries tz (step 2, slot picked)"
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slot: "09:00",
         slots: SLOTS,
         tz: "America/New_York",
@@ -420,7 +407,6 @@ Deno.test("/embed's own confirm label converts into the visitor's zone, not the 
     ...fakePageProps(embedData({
       date: "2026-10-06",
       slot: "09:00",
-      selectedDateLabel: "Tuesday, 6 October 2026",
       slots: SLOTS,
       tz: "America/New_York",
     })),
@@ -434,27 +420,23 @@ Deno.test("/embed's own confirm label converts into the visitor's zone, not the 
   );
 });
 
-Deno.test("the time card shows the slot's own converted date when the route supplies slotDateLabel", () => {
+Deno.test("the time card shows the slot's own converted date, not the picked host day", () => {
   // Companion to the confirm-label test above, scoped the same way:
   // extracts the time card's own date text (after the "·" separator)
-  // rather than checking the whole page. This exercises Picker's
-  // slotDateLabel-over-selectedDateLabel precedence with a fabricated
-  // EmbedData; routes/embed/index.test.ts separately proves the real
-  // GET handler actually *computes* slotDateLabel from the slot's own
-  // instant rather than noon of the host day — the two together are
-  // the full regression guard.
-  const html = renderToString(
-    <EmbedPage
-      {...fakePageProps(embedData({
-        date: "2026-10-06",
-        slot: "09:00",
-        selectedDateLabel: "Tuesday, 6 October 2026",
-        slotDateLabel: "Monday, 5 October 2026",
-        slots: SLOTS,
-        tz: "America/New_York",
-      }))}
-    />,
-  );
+  // rather than checking the whole page. 09:00 Tuesday Ho Chi Minh is
+  // 22:00 Monday in New York, so building the date from noon of the
+  // host day ("Tuesday, 6 October 2026") would fail here.
+  const cfg: Config = { ...FAKE_CONFIG, hostTz: "Asia/Ho_Chi_Minh" };
+  const props = {
+    ...fakePageProps(embedData({
+      date: "2026-10-06",
+      slot: "09:00",
+      slots: SLOTS,
+      tz: "America/New_York",
+    })),
+    state: { config: cfg } as unknown as State,
+  };
+  const html = renderToString(<EmbedPage {...props} />);
   const timeCardDate = html.match(/· ([^<]+)</)?.[1];
   assertEquals(timeCardDate, "Monday, 5 October 2026");
 });
@@ -492,7 +474,6 @@ Deno.test("mig#44: every picker link carries theme once forced", () => {
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slots: SLOTS,
         theme: "dark",
       }))}
@@ -516,7 +497,6 @@ Deno.test("mig#44: theme=auto adds no theme param to any link — today's URLs d
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slots: SLOTS,
         theme: null, // routes/embed/index.tsx normalizes "auto" to null
       }))}
@@ -560,7 +540,6 @@ Deno.test("mig#44: the confirm form carries a hidden theme field once forced", (
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slot: "09:00",
         slots: SLOTS,
         theme: "dark",
@@ -577,7 +556,6 @@ Deno.test("mig#44: the confirm form has no hidden theme field when theme is auto
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slot: "09:00",
         slots: SLOTS,
         theme: null,
@@ -624,7 +602,7 @@ Deno.test("embed picker: month navigation links stay under /embed", () => {
 // only rate-limit/validation failures (neither param) or
 // availability/persist failures (date only). Those are the only two
 // states the embed page's error banner actually has to render in.
-// Before this fix the banner lived inside BookingForm, which Picker
+// Before this fix the banner lived inside BookingForm, which the picker
 // only renders at step 3 (date + slot both chosen) — a state the
 // server never redirects to with ?err=, so a failed booking inside
 // the frame showed no error at all.
@@ -634,7 +612,6 @@ Deno.test("embed picker: error banner is visible with a date but no slot (step 2
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slots: SLOTS,
         error: "That time is no longer available.",
       }))}
@@ -799,18 +776,17 @@ Deno.test("mig#15: confirmed page falls back to the labelled host clock when no 
 
 Deno.test("picker defaults to root links when basePath is omitted", () => {
   const html = renderToString(
-    <Picker
+    <BookingFlow
       dates={DATES}
       slots={SLOTS}
       selectedDate="2027-01-04"
-      selectedDateLabel="Monday, 4 January 2027"
       selectedSlot="09:00"
       monthAnchor="2027-01-01"
       durationMin={30}
       hostName="Jane Doe"
       hostTz="Europe/Berlin"
       error={null}
-      confirmLabel="Confirm — Mon, 4 Jan, 09:00"
+      tz={null}
     />,
   );
   const links = [...anchors(html).map((a) => a.href), ...formActions(html)];
@@ -906,7 +882,6 @@ Deno.test("mig#44: /embed confirm step — one data-mig-height wrapper, height s
     <EmbedPage
       {...fakePageProps(embedData({
         date: "2027-01-04",
-        selectedDateLabel: "Monday, 4 January 2027",
         slot: "09:00",
         slots: SLOTS,
       }))}
@@ -941,21 +916,59 @@ Deno.test("mig#44: /embed/confirmed not-found state — one data-mig-height wrap
 });
 
 // ─── Structural guard ────────────────────────────────────────────────
-// Cheap, direct check for Option A of issue #11: /embed never imports
-// an island. Rendering can't observe hydration scripts (see the file
-// header comment), so this is the one check that catches it directly.
+// /embed hydrates BookingFlow (mig#85) as a progressive enhancement;
+// nothing else under routes/embed may depend on an island, so the
+// confirmation page and the form post keep working with no script.
 
-Deno.test("embed routes never import an island", async () => {
-  const files = [
-    "./index.tsx",
-    "./confirmed.tsx",
-    "./book.ts",
-  ];
-  for (const file of files) {
-    const source = await Deno.readTextFile(new URL(file, import.meta.url));
-    assertFalse(
-      source.includes("islands/"),
-      `${file} must not import from islands/`,
-    );
-  }
+Deno.test("embed routes import no island except BookingFlow on the picker", async () => {
+  const islandImports = async (file: string) =>
+    (await Deno.readTextFile(new URL(file, import.meta.url)))
+      .match(/islands\/[A-Za-z]+\.tsx/g) ?? [];
+  assertEquals(await islandImports("./index.tsx"), ["islands/BookingFlow.tsx"]);
+  assertEquals(await islandImports("./confirmed.tsx"), []);
+  assertEquals(await islandImports("./book.ts"), []);
+});
+
+Deno.test("embed picker: the mobile summary bar is not rendered inside the frame", () => {
+  // SummaryBar is fixed to the viewport's bottom; the frame grows to
+  // its content, so the bar would sit over the last row of slots.
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({ date: "2027-01-04", slots: SLOTS }))}
+    />,
+  );
+  assertFalse(html.includes("fixed inset-x-0 bottom-0"));
+  // The same step on / does render it, so the check above can't pass
+  // just because SummaryBar's classes changed.
+  const standalone = renderToString(
+    <BookingFlow
+      dates={DATES}
+      slots={SLOTS}
+      selectedDate="2027-01-04"
+      selectedSlot={null}
+      monthAnchor="2027-01-01"
+      durationMin={30}
+      hostName="Jane Doe"
+      hostTz="Europe/Berlin"
+      error={null}
+      tz={null}
+    />,
+  );
+  assert(standalone.includes("fixed inset-x-0 bottom-0"));
+});
+
+Deno.test("mig#44: the time card's Change link carries theme once forced", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        slot: "09:00",
+        slots: SLOTS,
+        theme: "dark",
+      }))}
+    />,
+  );
+  const tag = html.match(/<a\b[^>]*aria-label="Change time"[^>]*>/)?.[0];
+  assert(tag, "expected the time card's Change link");
+  assert(attr(tag!, "href")?.includes("theme=dark"), `got "${tag}"`);
 });

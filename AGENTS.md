@@ -61,16 +61,15 @@ src/
 │   ├── confirmed.tsx        — standalone confirmation / cancelled page
 │   ├── cancel.tsx           — GET form + POST action
 │   ├── embed/
-│   │   ├── index.tsx        — /embed iframe variant (no islands, self-contained)
+│   │   ├── index.tsx        — /embed iframe variant (BookingFlow, basePath /embed)
 │   │   ├── confirmed.tsx    — /embed/confirmed, no Header/Footer/ThemeToggle
 │   │   └── book.ts          — POST /embed/book, redirects stay under /embed
 │   └── api/
 │       ├── book.ts          — POST /api/book (standalone; shares lib/book.ts)
 │       └── slots.ts         — GET slots for a date (JSON)
 ├── islands/
-│   ├── DatePicker.tsx       — client interactive
-│   ├── SlotPicker.tsx
-│   ├── BookingForm.tsx
+│   ├── BookingFlow.tsx      — date → time → form; on / and /embed, works without JS
+│   ├── BookingSubmit.tsx    — standalone submit button: spinner, guestTz
 │   └── ThemeToggle.tsx
 ├── lib/
 │   ├── config.ts            — env parsing + arktype validation
@@ -85,12 +84,14 @@ src/
 │   ├── validators.ts        — shared arktype schema for booking submission
 │   ├── book.ts              — POST /api/book + POST /embed/book handler
 │   ├── confirmed-data.ts    — shared /confirmed + /embed/confirmed lookup
-│   ├── picker-links.ts      — basePath-aware href builder for the picker
+│   ├── picker-links.ts      — basePath-aware hrefs + pushed addresses for the picker
 │   ├── guest-tz-script.ts   — inline timezone-capture script for /embed's form
 │   ├── theme.ts             — theme bootstrap script + /embed's ?theme= parser
 │   └── height-report-script.ts — /embed's postMessage height-reporting script
 ├── components/              — server-side Preact components (no hydration)
 ├── scripts/screenshots.ts   — writes the README pictures (see "Screenshots")
+├── scripts/embed-check.ts   — /embed in a real browser, with and without JS
+├── scripts/local-app.ts     — SMTP sink + server helpers for both scripts
 └── data/.gitkeep            — runtime mount point
 ```
 
@@ -208,6 +209,19 @@ nor `deno.lock` changes. It launches Playwright 1.63.0's own Chromium build from
 `~/.cache/ms-playwright`; install it once with
 `deno run -A --node-modules-dir=none --no-lock npm:playwright@1.63.0 install chromium`
 (Chromium 1243 plus Playwright's ffmpeg for the video) if it is missing.
+
+## Embed browser check
+
+```bash
+deno task build && deno task embed:check
+```
+
+`scripts/embed-check.ts` frames the built `/embed` in Chromium and checks that
+picking a day and a time needs no page load, that each step posts a new
+`mig:height`, and that a booking completes both with and without JavaScript. It
+uses the same Playwright pin, Chromium install and SMTP sink as the screenshots
+script. CI has no Chromium, so run it by hand after changing `/embed`,
+`BookingFlow` or the height script.
 
 ## CI
 
