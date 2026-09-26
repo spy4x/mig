@@ -29,7 +29,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   write, input checks and the theme toggle. Fixes made there now reach mig
   (#73).
 - `NTFY_TOKEN` is optional: `NTFY_URL` and `NTFY_TOPIC` alone now send pushes
-  without authentication. Before, a missing token silently turned pushes off.
+  without authentication. Before, a missing token silently turned pushes off. A
+  malformed `NTFY_URL` sends nothing and logs one line.
+- The calendar invite's Content-Type names its character set, and the SMTP
+  library under `@spy4x/email` moves from nodemailer 7 to 10.
 - The README opens with the booking-flow demo video and keeps only the
   confirmation email picture, now in a dark mail-client frame. The details moved
   to `docs/`, and the README's last line links to
@@ -39,8 +42,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - A push notification keeps non-ASCII text: "Café" no longer arrives as "Caf?".
-- ntfy answers of 429 or 5xx, and network errors, are retried up to three times
-  within five seconds.
+- A push that ntfy answers with 429 or 5xx, or that hits a network error, is
+  tried up to three times within five seconds.
 - A booking form with a honeypot field filled with only spaces is now caught as
   a bot.
 - A booking form body over 64 KiB is refused with 413, and one that stalls for
