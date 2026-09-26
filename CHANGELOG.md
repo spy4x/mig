@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- The booking rate limit can no longer be bypassed by sending a made-up
+  `CF-Connecting-IP`, `X-Forwarded-For` or `X-Real-IP` header. mig trusted all
+  three on every request, even with no proxy in front, so a script that changed
+  the header each time could fill every slot and send the host unlimited email.
+  mig now trusts no header unless `TRUSTED_PROXY_HEADER` names one, and falls
+  back to the connection's address. Visitors without those headers no longer
+  share one limit either (#59).
+
+### Upgrade notes
+
+- Behind a reverse proxy or Cloudflare, set `TRUSTED_PROXY_HEADER` to the header
+  your proxy sets (`x-real-ip` for Traefik with default settings,
+  `cf-connecting-ip` for Cloudflare). `cf-connecting-ip` is safe only when the
+  server accepts connections from Cloudflare alone; a client that reaches the
+  server directly can send any value in it. Without the setting, every visitor
+  shares the proxy's address and its one limit: with the default
+  `RATE_LIMIT_PER_5MIN=1`, one booking blocks everyone else for five minutes.
+  Unset or empty trusts no header; any other value stops mig at startup. See the
+  README's "Behind a reverse proxy" (#59).
+
 ## [0.6.1] - 2026-09-26
 
 ### Fixed

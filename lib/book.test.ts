@@ -76,6 +76,11 @@ async function rm(path: string) {
   }
 }
 
+// Each stub request comes from its own source port, as real connections
+// do. With one shared port, keying the bucket on `hostname:port` (a new
+// bucket per connection, which reopens mig#59) would pass every test.
+let nextStubPort = 40000;
+
 function stubContext(
   opts: {
     config: Config;
@@ -83,6 +88,8 @@ function stubContext(
     rateLimiter: MemoryRateLimiter;
     fields: Record<string, string>;
     headers?: Record<string, string>;
+    /** Socket peer address; defaults to one fixed direct client. */
+    remoteAddr?: string;
   },
 ): Context<State> {
   const body = new URLSearchParams(opts.fields);
@@ -92,10 +99,17 @@ function stubContext(
     headers: opts.headers,
   });
   // Context is a class with private fields, so it can't be satisfied
-  // structurally — handleBookingSubmit only reads ctx.req and
-  // ctx.state, both present here.
+  // structurally — handleBookingSubmit only reads ctx.req, ctx.info
+  // and ctx.state, all present here.
   return {
     req,
+    info: {
+      remoteAddr: {
+        transport: "tcp",
+        hostname: opts.remoteAddr ?? "192.0.2.1",
+        port: nextStubPort++,
+      },
+    },
     state: {
       config: opts.config,
       bookings: opts.bookings,
@@ -1829,90 +1843,194 @@ Deno.test("mig#57: a submission over the rate limit is refused with the wait tim
   }
 });
 
-// @spy4x/platform's clientIp ignores every proxy header unless told to
-// trust them; mig always trusted them. Without that trust, every
-// visitor behind the reverse proxy would share one "0.0.0.0" bucket.
-Deno.test("mig#57: visitors with different forwarded addresses are rate-limited separately", async () => {
-  const cfg = fakeConfig();
+// ─── Rate-limit bucket: which address counts (mig#59) ──────────────
+
+const PROXY_HEADERS = [
+  "cf-connecting-ip",
+  "x-forwarded-for",
+  "x-real-ip",
+] as const;
+
+interface Attempt {
+  headers?: Record<string, string>;
+  remoteAddr?: string;
+}
+
+/** Submits two bookings for different slots with a limit of one per
+ *  window and reports whether the second went through — i.e. whether
+ *  the two attempts landed in different rate-limit buckets. A second
+ *  attempt refused for any reason other than the rate limit fails the
+ *  test. */
+async function landInSeparateBuckets(
+  config: Config,
+  first: Attempt,
+  second: Attempt,
+): Promise<boolean> {
   const path = tmpDataPath();
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
   const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
-
   try {
-    const first = await handleBookingSubmit(
+    const one = await handleBookingSubmit(
       stubContext({
-        config: cfg,
+        config,
         bookings,
         rateLimiter,
         fields: validFields(date, "09:00"),
-        headers: { "x-forwarded-for": "198.51.100.1, 203.0.113.9" },
+        ...first,
       }),
       "",
     );
-    const second = await handleBookingSubmit(
+    assertEquals(locationPath(one).startsWith("/confirmed?"), true);
+    const two = await handleBookingSubmit(
       stubContext({
-        config: cfg,
+        config,
         bookings,
         rateLimiter,
         fields: validFields(date, "09:30"),
-        headers: { "x-forwarded-for": "198.51.100.2, 203.0.113.9" },
+        ...second,
       }),
       "",
     );
-
-    assertEquals(locationPath(first).startsWith("/confirmed?"), true);
-    assertEquals(locationPath(second).startsWith("/confirmed?"), true);
+    if (locationPath(two).startsWith("/confirmed?")) return true;
+    // Anything but the rate-limit refusal (a validation error, a taken
+    // slot) says nothing about buckets, so it fails the test instead.
+    const err = new URL(two.headers.get("location")!).searchParams.get("err");
+    assertEquals(err?.startsWith("Too many attempts."), true, `err: ${err}`);
+    return false;
   } finally {
     await rm(path);
   }
+}
+
+for (const header of PROXY_HEADERS) {
+  Deno.test(`mig#59: a direct client cannot change its bucket by sending ${header}`, async () => {
+    const separate = await landInSeparateBuckets(
+      fakeConfig(),
+      { headers: { [header]: "198.51.100.1" } },
+      { headers: { [header]: "198.51.100.2" } },
+    );
+    assertEquals(separate, false);
+  });
+}
+
+for (const trusted of PROXY_HEADERS) {
+  const others = PROXY_HEADERS.filter((h) => h !== trusted);
+
+  Deno.test(`mig#59: with ${trusted} trusted, a new ${trusted} value gets a new bucket`, async () => {
+    const separate = await landInSeparateBuckets(
+      { ...fakeConfig(), trustedProxyHeader: trusted },
+      { headers: { [trusted]: "198.51.100.1" } },
+      { headers: { [trusted]: "198.51.100.2" } },
+    );
+    assertEquals(separate, true);
+  });
+
+  Deno.test(`mig#59: with ${trusted} trusted, the other two headers are ignored`, async () => {
+    const separate = await landInSeparateBuckets(
+      { ...fakeConfig(), trustedProxyHeader: trusted },
+      {
+        headers: {
+          [trusted]: "198.51.100.1",
+          [others[0]]: "203.0.113.1",
+          [others[1]]: "203.0.113.1",
+        },
+      },
+      {
+        headers: {
+          [trusted]: "198.51.100.1",
+          [others[0]]: "203.0.113.2",
+          [others[1]]: "203.0.113.2",
+        },
+      },
+    );
+    assertEquals(separate, false);
+  });
+
+  Deno.test(`mig#59: with ${trusted} trusted but absent, the socket address is the bucket`, async () => {
+    const config = { ...fakeConfig(), trustedProxyHeader: trusted };
+    assertEquals(
+      await landInSeparateBuckets(
+        config,
+        { remoteAddr: "192.0.2.1" },
+        { remoteAddr: "192.0.2.2" },
+      ),
+      true,
+    );
+    assertEquals(
+      await landInSeparateBuckets(
+        config,
+        { remoteAddr: "192.0.2.1" },
+        { remoteAddr: "192.0.2.1" },
+      ),
+      false,
+    );
+  });
+}
+
+// X-Forwarded-For is read hop by hop: the first hop is the client, the
+// rest is the proxy chain. Two visitors behind the same proxy differ
+// only in the first hop.
+Deno.test("mig#59: with x-forwarded-for trusted, the first hop picks the bucket", async () => {
+  const config: Config = {
+    ...fakeConfig(),
+    trustedProxyHeader: "x-forwarded-for",
+  };
+  assertEquals(
+    await landInSeparateBuckets(
+      config,
+      { headers: { "x-forwarded-for": "198.51.100.1, 203.0.113.9" } },
+      { headers: { "x-forwarded-for": "198.51.100.2, 203.0.113.9" } },
+    ),
+    true,
+  );
+  assertEquals(
+    await landInSeparateBuckets(
+      config,
+      { headers: { "x-forwarded-for": "198.51.100.1, 203.0.113.8" } },
+      { headers: { "x-forwarded-for": "198.51.100.1, 203.0.113.9" } },
+    ),
+    false,
+  );
 });
 
-// mig's own clientIp took X-Forwarded-For's first hop even when it was
-// empty (", 203.0.113.9"), so every such visitor shared one "" bucket;
-// @spy4x/platform's skips an empty hop and falls through to X-Real-IP.
-Deno.test("mig#57: an empty first X-Forwarded-For hop falls through to X-Real-IP", async () => {
-  const cfg = fakeConfig();
-  const path = tmpDataPath();
-  const bookings = new BookingsStore({ filePath: path });
-  await bookings.init();
-  const date = futureWeekday(3, HOST_TZ);
-  const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
+// An empty first hop (", 203.0.113.9") is not an address: it falls back
+// to the socket address instead of putting every such visitor in one ""
+// bucket, which mig's own pre-ts-libs clientIp did.
+Deno.test("mig#59: with x-forwarded-for trusted, an empty first hop falls back to the socket address", async () => {
+  const separate = await landInSeparateBuckets(
+    { ...fakeConfig(), trustedProxyHeader: "x-forwarded-for" },
+    {
+      headers: { "x-forwarded-for": ", 203.0.113.9" },
+      remoteAddr: "192.0.2.1",
+    },
+    {
+      headers: { "x-forwarded-for": ", 203.0.113.9" },
+      remoteAddr: "192.0.2.2",
+    },
+  );
+  assertEquals(separate, true);
+});
 
-  try {
-    const first = await handleBookingSubmit(
-      stubContext({
-        config: cfg,
-        bookings,
-        rateLimiter,
-        fields: validFields(date, "09:00"),
-        headers: {
-          "x-forwarded-for": ", 203.0.113.9",
-          "x-real-ip": "198.51.100.1",
-        },
-      }),
-      "",
-    );
-    const second = await handleBookingSubmit(
-      stubContext({
-        config: cfg,
-        bookings,
-        rateLimiter,
-        fields: validFields(date, "09:30"),
-        headers: {
-          "x-forwarded-for": ", 203.0.113.9",
-          "x-real-ip": "198.51.100.2",
-        },
-      }),
-      "",
-    );
+// Before mig#59 no socket address was passed, so every visitor without
+// a proxy header fell into one shared "0.0.0.0" bucket.
+Deno.test("mig#59: two headerless direct clients get separate buckets", async () => {
+  const separate = await landInSeparateBuckets(
+    fakeConfig(),
+    { remoteAddr: "192.0.2.1" },
+    { remoteAddr: "192.0.2.2" },
+  );
+  assertEquals(separate, true);
+});
 
-    assertEquals(locationPath(first).startsWith("/confirmed?"), true);
-    assertEquals(locationPath(second).startsWith("/confirmed?"), true);
-  } finally {
-    await rm(path);
-  }
+Deno.test("mig#59: one headerless direct client keeps one bucket", async () => {
+  const separate = await landInSeparateBuckets(
+    fakeConfig(),
+    { remoteAddr: "192.0.2.1" },
+    { remoteAddr: "192.0.2.1" },
+  );
+  assertEquals(separate, false);
 });
 
 // @spy4x/time/tz's zonedDateTime resolves Berlin's nonexistent 02:30 on
