@@ -300,9 +300,17 @@ function SlotButton(
     );
   }
 
+  // `aria-current="false"` (mig#50): Fresh's server renderer marks
+  // every `<a>` whose path matches the page's own with
+  // `aria-current="true"` and `data-ancestor`, and every slot link
+  // points back at this page with only its query string changed, so a
+  // screen reader announced each one as "current". Fresh leaves a link
+  // alone when `aria-current` is already set; only the selected slot's
+  // chip above is current.
   return (
     <a
       href={pickerHref(basePath, { date, slot: slot.time }, tz, theme)}
+      aria-current="false"
       aria-label={fullLabel}
       class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
     >
