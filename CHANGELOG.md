@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-09-26
+
+### Fixed
+
+- Missing pages such as `/nope` and `/embed/nope` now answer with HTTP 404
+  instead of 200, so search engines and link checkers no longer treat them as
+  real pages (#68).
+
+### Documentation
+
+- The README shows the dark screenshots by default, and the booking-flow
+  animation is dark, with a visible mouse pointer, click marks and smooth motion
+  (#70).
+
 ## [0.7.1] - 2026-09-26
 
 ### Fixed
@@ -417,7 +431,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/spy4x/mig/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/spy4x/mig/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/spy4x/mig/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/spy4x/mig/compare/v0.6.0...v0.6.1
