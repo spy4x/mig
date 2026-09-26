@@ -1,5 +1,6 @@
-// Writes the README screenshots under docs/screenshots/, plus
-// docs/social-preview.png, from a local build of mig.
+// Writes the README pictures under docs/screenshots/ (the booking-flow
+// GIF and the confirmation email), plus docs/social-preview.png, from a
+// local build of mig.
 //
 //   deno task build && deno task screenshots
 //
@@ -31,7 +32,6 @@ const ROOT = new URL("../", import.meta.url);
 const SHOTS = new URL("docs/screenshots/", ROOT);
 const SOCIAL = new URL("docs/social-preview.png", ROOT);
 const PUBLIC_URL = "http://meet.example.com";
-const PARENT_URL = "http://www.example.com/";
 const VIEWPORT = { width: 1280, height: 800 };
 const GUEST = {
   name: "John Doe",
@@ -90,13 +90,6 @@ interface Page {
   video(): { path(): Promise<string> } | null;
 }
 
-interface Route {
-  request(): { url(): string };
-  fulfill(
-    opts: { status: number; contentType: string; body: string },
-  ): Promise<void>;
-}
-
 interface ContextOptions {
   viewport: { width: number; height: number };
   deviceScaleFactor: number;
@@ -109,10 +102,6 @@ interface ContextOptions {
 interface BrowserContext {
   newPage(): Promise<Page>;
   addInitScript(script: string): Promise<void>;
-  route(
-    url: string | RegExp,
-    handler: (route: Route) => Promise<void>,
-  ): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -325,90 +314,88 @@ async function waitForHealth(
   throw new Error("the server did not answer /health within 30 s");
 }
 
-/** Serves the neutral parent page for the embed shots. */
-async function routeParentPage(ctx: BrowserContext): Promise<void> {
-  await ctx.route(
-    new RegExp(`^${PARENT_URL.replaceAll(`.`, `\\.`)}`),
-    async (route) => {
-      const theme =
-        new URL(route.request().url()).searchParams.get("theme") === "dark"
-          ? "dark"
-          : "light";
-      await route.fulfill({
-        status: 200,
-        contentType: "text/html",
-        body: parentPage(theme),
-      });
-    },
-  );
+/** Colours of the mail-client frame: Tailwind's slate scale, matching the
+ *  email body's own #0f172a background, so frame and email read as one
+ *  dark mail client. */
+const MAIL_FRAME = {
+  page: "#020617",
+  pane: "#0f172a",
+  bar: "#0b1120",
+  line: "#1e293b",
+  ink: "#e2e8f0",
+  muted: "#94a3b8",
+  accent: "#f97316",
+};
+
+/** One toolbar icon: a 20px stroked SVG path, the way mail clients draw them. */
+function toolIcon(d: string): string {
+  return `<span class="tool"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg></span>`;
 }
 
-/** A neutral host page framing /embed, sized by its height message. */
-function parentPage(theme: "light" | "dark"): string {
-  const dark = theme === "dark";
-  const bg = dark ? "#0f1115" : "#f4f4f5";
-  const ink = dark ? "#e4e4e7" : "#18181b";
-  const muted = dark ? "#a1a1aa" : "#52525b";
-  const bar = dark ? "#1c1f26" : "#ffffff";
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Example site</title>
-<style>
-  body { margin: 0; background: ${bg}; color: ${ink}; font: 16px/1.5 system-ui, sans-serif; }
-  header { background: ${bar}; padding: 18px 48px; font-weight: 600; display: flex; gap: 32px; }
-  header span { color: ${muted}; font-weight: 400; }
-  main { display: grid; grid-template-columns: 1fr 36rem; gap: 56px; padding: 48px; max-width: 1180px; margin: 0 auto; box-sizing: border-box; }
-  h1 { font-size: 34px; line-height: 1.2; margin: 24px 0 12px; }
-  p { color: ${muted}; margin: 0 0 12px; }
-  iframe { width: 100%; border: 0; height: 600px; display: block; }
-</style></head>
-<body>
-<header>Example Studio <span>Work</span><span>About</span><span>Contact</span></header>
-<main>
-  <section>
-    <h1>Let's talk</h1>
-    <p>Pick a time that suits you. You'll get a calendar invite and a meeting link by email.</p>
-    <p>Calls last 30 minutes.</p>
-  </section>
-  <iframe id="mig-embed" src="${PUBLIC_URL}/embed?theme=${theme}" title="Book a meeting"></iframe>
-</main>
-<script>
-  const iframe = document.getElementById("mig-embed")
-  addEventListener("message", (event) => {
-    if (event.origin !== "${PUBLIC_URL}") return
-    if (event.source !== iframe.contentWindow) return
-    if (event.data?.type !== "mig:height") return
-    iframe.style.height = event.data.height + "px"
-  })
-</script>
-</body></html>`;
-}
-
-/** A plain mail-client frame around the real email HTML. */
+/** A dark mail-client frame around the real email HTML: a toolbar, the
+ *  subject, the sender with an avatar, the recipient and the attachment,
+ *  then the email itself in an iframe sized to its content. The recipe is
+ *  written down in .claude/skills/email-screenshot-frame/SKILL.md. */
 function emailPage(
   mail: { from: string; to: string; subject: string; html: string },
 ): string {
   const esc = (s: string) =>
     s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-      .replaceAll(
-        `"`,
-        "&quot;",
-      );
+      .replaceAll(`"`, "&quot;");
+  const from = mail.from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  const fromName = from?.[1] || mail.from;
+  const fromAddress = from?.[2] ?? "";
+  const c = MAIL_FRAME;
+  const icons = {
+    back: "M15 18l-6-6 6-6",
+    archive: "M3 7h18v4H3zM5 11v8h14v-8M10 15h4",
+    trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+    unread: "M3 6h18v12H3zM3 6l9 7 9-7",
+    reply: "M9 14l-5-5 5-5M4 9h10a6 6 0 0 1 6 6v3",
+    forward: "M15 14l5-5-5-5M20 9H10a6 6 0 0 0-6 6v3",
+    more: "M5 12h.01M12 12h.01M19 12h.01",
+  };
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Email</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><title>Email</title>
 <style>
-  body { margin: 0; background: #f4f4f5; font: 14px/1.5 system-ui, sans-serif; color: #18181b; }
-  .card { width: 760px; margin: 40px auto; background: #fff; border: 1px solid #e4e4e7; border-radius: 12px; overflow: hidden; }
-  .head { padding: 20px 28px; border-bottom: 1px solid #e4e4e7; }
-  .subject { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
-  .meta { color: #52525b; }
+  body { margin: 0; background: ${c.page}; font: 14px/1.5 system-ui, sans-serif; color: ${c.ink}; }
+  .card { width: 760px; margin: 40px auto; background: ${c.pane}; border: 1px solid ${c.line}; border-radius: 12px; overflow: hidden; }
+  .toolbar { display: flex; align-items: center; gap: 4px; padding: 8px 16px; background: ${c.bar}; border-bottom: 1px solid ${c.line}; color: ${c.muted}; }
+  .tool { display: inline-flex; padding: 6px; border-radius: 6px; }
+  .gap { flex: 1; }
+  .sep { width: 1px; height: 20px; background: ${c.line}; margin: 0 6px; }
+  .head { padding: 20px 28px; border-bottom: 1px solid ${c.line}; }
+  .subject { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+  .sender { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: ${c.accent}; color: ${c.page}; font-weight: 700; font-size: 17px; display: flex; align-items: center; justify-content: center; }
+  .name { font-weight: 600; }
+  .addr, .meta { color: ${c.muted}; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 6px 12px; border: 1px solid ${c.line}; border-radius: 8px; color: ${c.ink}; }
+  .chip small { color: ${c.muted}; font-size: 12px; }
   iframe { width: 100%; border: 0; display: block; }
 </style></head>
 <body><div class="card">
+  <div class="toolbar">
+    ${toolIcon(icons.back)}<span class="sep"></span>${toolIcon(icons.archive)}${
+    toolIcon(icons.trash)
+  }${toolIcon(icons.unread)}
+    <span class="gap"></span>
+    ${toolIcon(icons.reply)}${toolIcon(icons.forward)}${toolIcon(icons.more)}
+  </div>
   <div class="head">
     <div class="subject">${esc(mail.subject)}</div>
-    <div class="meta">From: ${esc(mail.from)}</div>
-    <div class="meta">To: ${esc(mail.to)}</div>
-    <div class="meta">Attachment: meeting.ics</div>
+    <div class="sender">
+      <div class="avatar">${esc(fromName.trim().charAt(0).toUpperCase())}</div>
+      <div>
+        <div><span class="name">${esc(fromName)}</span>${
+    fromAddress ? ` <span class="addr">&lt;${esc(fromAddress)}&gt;</span>` : ""
+  }</div>
+        <div class="meta">to ${esc(mail.to)}</div>
+      </div>
+    </div>
+    <div class="chip">${
+    toolIcon("M8 3h6l4 4v14H8zM14 3v4h4")
+  }<span>meeting.ics</span><small>Calendar invite</small></div>
   </div>
   <iframe id="body" srcdoc="${esc(mail.html)}"></iframe>
 </div>
@@ -430,24 +417,34 @@ function header(raw: string, name: string): string {
 /** Screenshot with no hover, focus ring, caret or running animation.
  *  Refuses to write a picture taken in any zone but Europe/Berlin, so a
  *  dropped `timezoneId` can never leak the machine's own zone. `clip`
- *  crops to a region, for a page shorter than the viewport. */
+ *  crops to a region, for a page shorter than the viewport. `file` is
+ *  usually under docs/screenshots/; the social preview's hero goes to
+ *  the throwaway directory instead, since the README no longer shows it. */
 async function shot(
   page: Page,
-  name: string,
+  file: URL,
   clip?: { x: number; y: number; width: number; height: number },
 ): Promise<void> {
   const zone = await page.evaluate(
     "Intl.DateTimeFormat().resolvedOptions().timeZone",
   );
   if (zone !== "Europe/Berlin") {
-    throw new Error(`${name}: the browser runs in ${zone}, not Europe/Berlin`);
+    throw new Error(
+      `${file.pathname}: the browser runs in ${zone}, not Europe/Berlin`,
+    );
   }
   await page.evaluate("document.activeElement?.blur?.()");
   await page.mouse.move(2, VIEWPORT.height - 2);
   await page.waitForTimeout(300);
-  const path = new URL(name, SHOTS).pathname;
-  await page.screenshot({ path, animations: "disabled", caret: "hide", clip });
-  console.log(`wrote docs/screenshots/${name}`);
+  await page.screenshot({
+    path: file.pathname,
+    animations: "disabled",
+    caret: "hide",
+    clip,
+  });
+  if (file.href.startsWith(ROOT.href)) {
+    console.log(`wrote ${file.href.slice(ROOT.href.length)}`);
+  }
 }
 
 // ─── Demo pointer ───────────────────────────────────────────────────
@@ -695,7 +692,6 @@ async function main(): Promise<void> {
         colorScheme,
         ...extra,
       });
-      await routeParentPage(ctx);
       return ctx;
     };
 
@@ -724,43 +720,19 @@ async function main(): Promise<void> {
       page.locator(`section[aria-labelledby="step-time"] :is(button, a)`)
         .first().waitFor();
 
-    for (const scheme of ["light", "dark"] as const) {
-      const ctx = await contextFor(scheme);
-      const page = await ctx.newPage();
+    // The social preview's hero: the light booking page with the picked
+    // date's slots. It lands in the throwaway directory, not the README.
+    const heroFile = new URL("hero.png", `file://${tmp}/`);
+    const heroCtx = await contextFor("light");
+    const heroPage = await heroCtx.newPage();
+    await heroPage.goto(`${PUBLIC_URL}/?date=${date}`, {
+      waitUntil: "networkidle",
+    });
+    await slotsVisible(heroPage);
+    await shot(heroPage, heroFile);
+    await heroCtx.close();
 
-      await page.goto(`${PUBLIC_URL}/?date=${date}`, {
-        waitUntil: "networkidle",
-      });
-      await slotsVisible(page);
-      await shot(page, `booking-time-${scheme}.png`);
-
-      await page.goto(`${PUBLIC_URL}/?date=${date}&slot=14:00`, {
-        waitUntil: "networkidle",
-      });
-      await page.locator(`input[name="name"]`).fill(GUEST.name);
-      await page.locator(`input[name="email"]`).fill(GUEST.email);
-      await page.locator(`textarea[name="notes"]`).fill(GUEST.notes);
-      // Start the frame at the picked-time card, just under the sticky header.
-      await page.evaluate(`{
-        const step = document.querySelector('section[aria-labelledby="step-time"]')
-        const header = document.querySelector("header")
-        const top = step.getBoundingClientRect().top + scrollY - header.offsetHeight - 24
-        scrollTo({ top, behavior: "instant" })
-      }`);
-      await shot(page, `booking-confirm-${scheme}.png`);
-
-      await page.goto(`${PARENT_URL}?theme=${scheme}`, {
-        waitUntil: "networkidle",
-      });
-      await page.frameLocator("#mig-embed").locator(
-        `[aria-label$=" available"]`,
-      ).first().waitFor();
-      await page.waitForTimeout(500);
-      await shot(page, `embed-${scheme}.png`);
-      await ctx.close();
-    }
-
-    // One real booking through the form, then its confirmation page in both themes.
+    // One real booking through the form, so the SMTP sink gets the email.
     const bookCtx = await contextFor("light");
     const bookPage = await bookCtx.newPage();
     await bookPage.goto(`${PUBLIC_URL}/?date=${date}&slot=11:00`, {
@@ -773,22 +745,15 @@ async function main(): Promise<void> {
       `form[aria-label="Booking details"] button[type="submit"]`,
     ).click();
     await bookPage.waitForURL(/\/confirmed\?/, { timeout: 30_000 });
-    await bookPage.waitForTimeout(500);
-    const confirmedUrl = bookPage.url();
-    await shot(bookPage, "confirmed-light.png");
     await bookCtx.close();
-    const darkCtx = await contextFor("dark");
-    const darkPage = await darkCtx.newPage();
-    await darkPage.goto(confirmedUrl, { waitUntil: "networkidle" });
-    await shot(darkPage, "confirmed-dark.png");
-    await darkCtx.close();
 
-    // The guest's confirmation email, exactly as lib/email.ts produced it.
+    // The guest's confirmation email, exactly as lib/email.ts produced it,
+    // in a dark mail-client frame to match the email's dark body.
     const guestMail = smtp.mails.find((m) => m.to === GUEST.email);
     if (!guestMail) {
       throw new Error("the SMTP sink received no email for the guest");
     }
-    const mailCtx = await contextFor("light");
+    const mailCtx = await contextFor("dark");
     const mailPage = await mailCtx.newPage();
     await mailPage.setContent(
       emailPage({
@@ -806,7 +771,7 @@ async function main(): Promise<void> {
         `document.querySelector(".card").getBoundingClientRect().bottom`,
       ),
     );
-    await shot(mailPage, "email-confirmation.png", {
+    await shot(mailPage, new URL("email-confirmation.png", SHOTS), {
       x: 0,
       y: 0,
       width: VIEWPORT.width,
@@ -889,7 +854,7 @@ async function main(): Promise<void> {
     }
 
     // The social preview: the product on a neutral background, name and one line.
-    const hero = await Deno.readFile(new URL("booking-time-light.png", SHOTS));
+    const hero = await Deno.readFile(heroFile);
     const heroSrc = `data:image/png;base64,${
       btoa(Array.from(hero, (b) => String.fromCharCode(b)).join(``))
     }`;
