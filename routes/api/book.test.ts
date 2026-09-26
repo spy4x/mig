@@ -5,7 +5,7 @@
 // route module itself (not lib/book.ts directly) so that swapping the
 // "" literal in routes/api/book.ts for "/embed" turns it red.
 
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import type { Context } from "fresh";
 import type { State } from "../../lib/utils.ts";
 import type { Config } from "../../lib/types.ts";
@@ -14,6 +14,10 @@ import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../../lib/availability.ts";
 import { addDays, dayOfWeek, isoDateInTz } from "@spy4x/time/tz";
 import { setTransportForTesting } from "../../lib/email.ts";
+import {
+  BOOKING_BODY_TIMEOUT_MS,
+  handleBookingSubmit,
+} from "../../lib/book.ts";
 import { MAX_BOOKING_BODY_BYTES } from "../../lib/book.ts";
 import { handler } from "./book.ts";
 
@@ -257,7 +261,8 @@ Deno.test("POST /api/book: a body that stalls is answered with 408 and books not
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   // A body that never sends a byte and never ends, as a slow-loris
-  // client would. The bounded read gives up after its 10 s stall budget.
+  // client would. The routes give up after BOOKING_BODY_TIMEOUT_MS;
+  // this test passes 50 ms so it does not wait 10 s.
   const req = new Request("http://localhost/api/book", {
     method: "POST",
     body: new ReadableStream<Uint8Array>({ start() {} }),
@@ -275,8 +280,11 @@ Deno.test("POST /api/book: a body that stalls is answered with 408 and books not
     },
   } as unknown as Context<State>;
   try {
-    const res = await handler.POST!(ctx);
+    const started = performance.now();
+    const res = await handleBookingSubmit(ctx, "", { bodyTimeoutMs: 50 });
     assertEquals(res.status, 408);
+    // The 50 ms budget, not the routes' 10 s default, ended the read.
+    assert(performance.now() - started < BOOKING_BODY_TIMEOUT_MS / 2);
     assertEquals(bookings.list().length, 0);
   } finally {
     await rm(path);

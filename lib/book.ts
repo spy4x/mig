@@ -54,6 +54,17 @@ function capRedirectField(value: string | undefined): string | undefined {
 // oversized body is refused before it is buffered.
 export const MAX_BOOKING_BODY_BYTES = 64 * 1024;
 
+// How long a booking body may go without sending a byte before the
+// read gives up with 408, so a slow client cannot hold a request open.
+export const BOOKING_BODY_TIMEOUT_MS = 10_000;
+
+/** Knobs for `handleBookingSubmit`; the routes pass none. */
+export interface BookingSubmitOptions {
+  /** Stall budget for reading the body, in milliseconds. Tests pass a
+   *  short one; the default is `BOOKING_BODY_TIMEOUT_MS`. */
+  bodyTimeoutMs?: number;
+}
+
 /** The peer's IP address, or `undefined` for a transport without one
  *  (a Unix socket). */
 function socketHostname(addr: Deno.Addr): string | undefined {
@@ -63,6 +74,7 @@ function socketHostname(addr: Deno.Addr): string | undefined {
 export async function handleBookingSubmit(
   ctx: Context<State>,
   basePath: string,
+  options: BookingSubmitOptions = {},
 ): Promise<Response> {
   const cfg = ctx.state.config;
   // mig#59: only the header TRUSTED_PROXY_HEADER names is read, and the
@@ -103,6 +115,7 @@ export async function handleBookingSubmit(
   try {
     form = await parseBoundedFormData(ctx.req, {
       maxBytes: MAX_BOOKING_BODY_BYTES,
+      timeoutMs: options.bodyTimeoutMs ?? BOOKING_BODY_TIMEOUT_MS,
     });
   } catch (e) {
     if (e instanceof PayloadTooLargeError) {
