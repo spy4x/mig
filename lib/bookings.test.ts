@@ -1,9 +1,5 @@
-import { assertEquals, assertExists } from "@std/assert";
-import {
-  AsyncMutex,
-  BookingsStore,
-  rollOverStoredWallClock,
-} from "../lib/bookings.ts";
+import { assertEquals, assertExists, assertRejects } from "@std/assert";
+import { BookingsStore, rollOverStoredWallClock } from "../lib/bookings.ts";
 import type { Booking } from "../lib/types.ts";
 
 function tmpPath(): string {
@@ -96,28 +92,6 @@ Deno.test("BookingsStore — forDate filters by host-local date", async () => {
   await rm(path);
 });
 
-Deno.test("AsyncMutex — serialises critical section", async () => {
-  const m = new AsyncMutex();
-  const order: number[] = [];
-  const task = (id: number) =>
-    m.acquire().then(async (release) => {
-      order.push(id);
-      await new Promise((r) => setTimeout(r, 10));
-      order.push(id + 100);
-      release();
-    });
-  await Promise.all([task(1), task(2), task(3)]);
-  // Each task's "before release" must precede its "after release"
-  assertEquals(order[0] < order[1], true);
-  assertEquals(order[2] < order[3], true);
-  assertEquals(order[4] < order[5], true);
-  // The three sections should not interleave
-  const ids = [1, 2, 3].filter((i) =>
-    order.indexOf(i) < order.indexOf(i + 100)
-  );
-  assertEquals(new Set(ids).size, 3);
-});
-
 Deno.test("BookingsStore — temp file cleanup on crash simulation", async () => {
   // Simulate crash by manually creating a stale .tmp file, then start.
   const path = tmpPath();
@@ -192,4 +166,39 @@ Deno.test("rollOverStoredWallClock — leaves a record that would roll past year
 
   assertEquals(rollOverStoredWallClock(pastYear), pastYear);
   assertEquals(rollOverStoredWallClock(pastMidnight), pastMidnight);
+});
+
+Deno.test("BookingsStore — a failed write leaves no temp file behind", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const path = `${dir}/bookings.json`;
+    const s = new BookingsStore({ filePath: path });
+    await s.init();
+    // Put a non-empty directory where the file was, so the rename that
+    // finishes the next write fails after the temp file was written.
+    await Deno.remove(path);
+    await Deno.mkdir(`${path}/blocker`, { recursive: true });
+    await assertRejects(() =>
+      s.mutate((draft) => {
+        draft.push(makeBooking());
+      })
+    );
+    const left: string[] = [];
+    for await (const entry of Deno.readDir(dir)) left.push(entry.name);
+    assertEquals(left, ["bookings.json"]);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("BookingsStore — a bookings file that is not JSON stops startup", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const path = `${dir}/bookings.json`;
+    await Deno.writeTextFile(path, "{ broken json");
+    const s = new BookingsStore({ filePath: path });
+    await assertRejects(() => s.init(), Error, "is not valid JSON");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
 });
