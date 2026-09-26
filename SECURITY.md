@@ -26,7 +26,8 @@ coordinate disclosure on a timeline that makes sense for the actual exposure.
 ## Hardening checklist for self-hosters
 
 - [ ] Run mig behind a TLS-terminating reverse proxy (Traefik, Caddy, nginx).
-      Don't expose port 8080 to the internet directly.
+      Don't expose port 8080 to the internet directly, and set
+      `TRUSTED_PROXY_HEADER` (see README's "Behind a reverse proxy").
 - [ ] Keep `CANCEL_SECRET` ≥ 32 random bytes (`openssl rand -base64 32`). Rotate
       it to invalidate all outstanding cancel links.
   - **WARNING**: rotating `CANCEL_SECRET` cancels nobody — every active booking
@@ -41,7 +42,8 @@ coordinate disclosure on a timeline that makes sense for the actual exposure.
 - [ ] Don't log raw SMTP credentials. mig only logs SMTP errors at startup
       (`mig: SMTP connect failed (host:port): ...`).
 - [ ] The rate-limit map is in-memory only — restart resets it. For public
-      exposure, add Cloudflare or Traefik in front.
+      exposure, add Cloudflare or Traefik in front, and set
+      `TRUSTED_PROXY_HEADER`.
 
 ## Threat model
 

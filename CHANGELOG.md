@@ -20,11 +20,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Behind a reverse proxy or Cloudflare, set `TRUSTED_PROXY_HEADER` to the header
   your proxy sets (`x-real-ip` for Traefik with default settings,
-  `cf-connecting-ip` for Cloudflare). Without it, every visitor shares the
-  proxy's address and its one limit: with the default `RATE_LIMIT_PER_5MIN=1`,
-  one booking blocks everyone else for five minutes. A value other than the
-  three header names, or empty, stops mig at startup. See the README's "Behind a
-  reverse proxy" (#59).
+  `cf-connecting-ip` for Cloudflare). `cf-connecting-ip` is safe only when the
+  server accepts connections from Cloudflare alone; a client that reaches the
+  server directly can send any value in it. Without the setting, every visitor
+  shares the proxy's address and its one limit: with the default
+  `RATE_LIMIT_PER_5MIN=1`, one booking blocks everyone else for five minutes.
+  Unset or empty trusts no header; any other value stops mig at startup. See the
+  README's "Behind a reverse proxy" (#59).
 
 ## [0.6.1] - 2026-09-26
 

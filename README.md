@@ -260,6 +260,14 @@ proxy sets:
   reaches the server directly can send any value, and Traefik passes the header
   through unchanged.
 
+Behind Cloudflare, the connection that reaches Traefik comes from Cloudflare, so
+Traefik's `X-Real-IP` and `X-Forwarded-For` hold Cloudflare's address, not the
+visitor's. Use `cf-connecting-ip` there, and limit the server to Cloudflare.
+Ports that Docker publishes bypass ufw's and firewalld's INPUT rules, so a
+Cloudflare-only rule for a container belongs in the `DOCKER-USER` chain, or in
+Traefik (an IP allow-list on the router), not in the host firewall's usual
+rules.
+
 Name a header your proxy does not set, and a client can pick a new address for
 every request and never be limited. When the trusted header is missing from a
 request, mig falls back to the connection's address.
