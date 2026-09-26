@@ -482,15 +482,31 @@ function pointerScript(start: { x: number; y: number }): string {
     mount()
     try { sessionStorage.setItem(KEY, JSON.stringify(pos)) } catch {}
   }, true)
+  // The click mark: an opaque accent ring and a solid dot, about 88 px
+  // across at the end, so they keep their colour in a 256-colour GIF.
+  // Gone within 400 ms, and removed at once if the page starts to
+  // unload, so a slow navigation never freezes it on screen.
+  const ripples = new Set()
+  const clear = () => { for (const r of ripples) r.remove(); ripples.clear() }
+  addEventListener("beforeunload", clear, true)
+  addEventListener("pagehide", clear, true)
   addEventListener("mousedown", (e) => {
-    el.firstChild.style.transform = "scale(.82)"
+    el.firstChild.style.transform = "scale(.7)"
     const r = document.createElement("div")
-    r.style.cssText = "position:fixed;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;" +
-      "pointer-events:none;z-index:2147483646;left:" + e.clientX + "px;top:" + e.clientY + "px;" +
-      "background:rgba(96,165,250,.35);border:2px solid rgba(147,197,253,.95)"
+    r.style.cssText = "position:fixed;width:88px;height:88px;margin:-44px 0 0 -44px;border-radius:50%;" +
+      "box-sizing:border-box;pointer-events:none;z-index:2147483646;left:" + e.clientX + "px;top:" +
+      e.clientY + "px;border:5px solid #38bdf8;" +
+      "background:radial-gradient(circle,#38bdf8 0 14px,transparent 15px)"
     document.documentElement.appendChild(r)
-    r.animate([{ transform: "scale(.3)", opacity: 1 }, { transform: "scale(1.5)", opacity: 0 }],
-      { duration: 550, easing: "ease-out" }).onfinish = () => r.remove()
+    ripples.add(r)
+    r.animate([
+      { transform: "scale(.25)", opacity: 1 },
+      { transform: "scale(.8)", opacity: 1, offset: 0.5 },
+      { transform: "scale(1)", opacity: 0 },
+    ], { duration: 400, easing: "ease-out", fill: "forwards" }).onfinish = () => {
+      r.remove()
+      ripples.delete(r)
+    }
   }, true)
   addEventListener("mouseup", () => { el.firstChild.style.transform = "" }, true)
 })()`;
@@ -556,7 +572,9 @@ async function clickLike(
   });
   await page.waitForTimeout(150);
   await page.mouse.down();
-  await page.waitForTimeout(90);
+  // Held long enough for the click mark to reach full size before the
+  // release, which is what starts a navigation and clears the mark.
+  await page.waitForTimeout(200);
   await page.mouse.up();
   await page.waitForTimeout(200);
 }
@@ -580,7 +598,7 @@ function gifArgs(
     trimStart.toFixed(2),
     "-vf",
     "fps=20,scale=800:-1:flags=lanczos,split[a][b];" +
-    "[a]palettegen=max_colors=128:stats_mode=diff[p];" +
+    "[a]palettegen=max_colors=256:stats_mode=diff[p];" +
     "[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle",
     "-loop",
     "0",
