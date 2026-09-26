@@ -5,41 +5,55 @@
 //   booking           → push only on successful bookings
 //   cancel            → push only on cancellations
 //
-// All three of NTFY_URL + NTFY_TOPIC + NTFY_TOKEN must be set to
-// enable the notifier at all; missing any = no-op regardless of mode.
-// Pushes are fail-soft: a transport error is logged but doesn't
+// NTFY_URL + NTFY_TOPIC must both be set to enable the notifier at all;
+// NTFY_TOKEN is optional (an ntfy without auth needs none). The client
+// is @spy4x/integrations' NtfyClient: the title and tags are sent as
+// ASCII headers, the body as UTF-8, and a 429, a 5xx or a network error
+// is retried. Pushes are fail-soft: a failure is logged but doesn't
 // affect the user-facing flow.
 
+import {
+  NotificationSeverity,
+  NtfyClient,
+  type NtfyClientOptions,
+  ntfyConfigFromEnv,
+  type NtfyPriority,
+  type NtfyRetryOptions,
+} from "@spy4x/integrations/ntfy";
 import type { Config } from "./types.ts";
 import type { Booking } from "./types.ts";
 import { formatClockShortAt, formatOwnerClock } from "./clock.ts";
 
 export type NtfyMode = "all" | "errors" | "booking" | "cancel";
 
-export interface NotifyOpts {
+interface NotifyOpts {
   title: string;
   message: string;
-  priority?: 1 | 2 | 3 | 4 | 5;
+  priority?: NtfyPriority;
   tags?: string[];
-  click?: string;
+  severity: NotificationSeverity;
 }
 
-export interface NtfyConfig {
-  url: string;
-  topic: string;
-  token: string;
-}
+// The booking and cancel handlers await the push before they answer
+// the visitor, so a slow or failing ntfy must not hold a request for
+// the client's default minute. Three attempts within five seconds.
+const NTFY_RETRY: NtfyRetryOptions = {
+  maxAttempts: 3,
+  baseDelayMs: 500,
+  maxDelayMs: 2_000,
+  totalBudgetMs: 5_000,
+};
+const NTFY_REQUEST_TIMEOUT_MS = 3_000;
 
-export function ntfyConfigFromEnv(_config: Config): NtfyConfig | null {
-  const url = Deno.env.get("NTFY_URL")?.trim();
-  const topic = Deno.env.get("NTFY_TOPIC")?.trim();
-  const token = Deno.env.get("NTFY_TOKEN")?.trim();
-  if (!url || !topic || !token) return null;
-  return { url: url.replace(/\/+$/, ""), topic, token };
-}
+let clientOptionsForTesting: NtfyClientOptions = {};
 
-function isNtfyEnabled(n: NtfyConfig | null): n is NtfyConfig {
-  return n !== null;
+/** Test-only seam: extra NtfyClient options (a fake `sleep`, say) for
+ *  every push until called again with `{}`. Never call this outside a
+ *  test. */
+export function setNtfyClientOptionsForTesting(
+  options: NtfyClientOptions,
+): void {
+  clientOptionsForTesting = options;
 }
 
 function ntfyMode(): NtfyMode {
@@ -57,75 +71,30 @@ function isEventEnabled(event: "booking" | "cancel" | "error"): boolean {
   return false;
 }
 
-export async function notify(
-  config: Config,
-  opts: NotifyOpts,
-): Promise<void> {
-  const n = ntfyConfigFromEnv(config);
-  if (!isNtfyEnabled(n)) return;
-  const url = `${n.url}/${encodeURIComponent(n.topic)}`;
-  // NTFY only accepts HTTP-header-safe characters (per the WHATWG
-  // Headers spec), so strip / replace non-ASCII before setting
-  // them. Whitespace (LF, CR, TAB) is preserved so multi-line
-  // message bodies stay readable. Use a Headers instance so any
-  // failure throws a clear scoped error here instead of "Request
-  // constructor: headers is not a valid ByteString" from the
-  // fetch internals.
-  const safe = (s: string): string =>
-    // deno-lint-ignore no-control-regex
-    s.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, (c) => {
-      // Map common non-ASCII punctuation to ASCII fallbacks so
-      // titles still read well ("mig: cancelled by guest - Bob"
-      // not "mig: cancelled by guest ? Bob").
-      switch (c) {
-        case "—":
-        case "–":
-        case "‐":
-        case "−":
-          return "-";
-        case "‘":
-        case "’":
-        case "‚":
-        case "‛":
-          return "'";
-        case "“":
-        case "”":
-        case "„":
-        case "‟":
-          return '"';
-        case "…":
-          return "...";
-        case " ":
-          return " ";
-        default:
-          return "?";
-      }
-    });
-  const headers = new Headers();
-  headers.set("Title", safe(opts.title));
-  headers.set("Authorization", `Bearer ${n.token}`);
-  if (opts.priority !== undefined) {
-    headers.set("Priority", String(opts.priority));
-  }
-  if (opts.tags && opts.tags.length > 0) {
-    headers.set("Tags", safe(opts.tags.join(",")));
-  }
-  if (opts.click) {
-    headers.set("Click", opts.click);
-  }
+async function notify(opts: NotifyOpts): Promise<void> {
+  const settings = ntfyConfigFromEnv();
+  if (settings === null) return;
+  let client: NtfyClient;
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: safe(opts.message),
+    client = new NtfyClient(settings, {
+      retry: NTFY_RETRY,
+      requestTimeoutMs: NTFY_REQUEST_TIMEOUT_MS,
+      // NTFY_MODE above is mig's gate; the client's own gate lets
+      // every severity through.
+      gate: NotificationSeverity.Info,
+      ...clientOptionsForTesting,
     });
-    if (!res.ok) {
-      console.error(
-        `mig: ntfy notify failed (${url}): ${res.status} ${res.statusText}`,
-      );
-    }
   } catch (e) {
-    console.error(`mig: ntfy notify error: ${(e as Error).message}`);
+    // A malformed NTFY_URL. The message names the shape, never the value.
+    console.error(`mig: ntfy is misconfigured: ${(e as Error).message}`);
+    return;
+  }
+  const result = await client.push(opts);
+  if (!result.ok) {
+    console.error(
+      `mig: ntfy notify failed (${client.endpoint}): ${result.message} ` +
+        `after ${result.attempts} attempt(s)`,
+    );
   }
 }
 
@@ -152,7 +121,8 @@ export function notifyBookingSucceeded(
   booking: Booking,
 ): Promise<void> {
   if (!isEventEnabled("booking")) return Promise.resolve();
-  return notify(config, {
+  return notify({
+    severity: NotificationSeverity.Info,
     title: `mig: new booking - ${booking.guestName}`,
     message: [
       `mig: ${config.hostName} got a new booking.`,
@@ -179,7 +149,8 @@ export function notifyBookingCancelled(
   const cancellerLabel = cancelledBy === "guest"
     ? `${booking.guestName} <${booking.guestEmail}>`
     : `${config.hostName}`;
-  return notify(config, {
+  return notify({
+    severity: NotificationSeverity.Info,
     title: `mig: cancelled by ${cancelledBy} - ${booking.guestName}`,
     message: [
       `mig: ${config.hostName}'s booking was cancelled.`,
@@ -248,7 +219,8 @@ export function notifyBookingEmailFailed(
     `Notes:  ${booking.notes?.trim() || "(none)"}`,
     `Booked: ${formatClockShortAt(new Date(booking.createdAt), config.hostTz)}`,
   ];
-  return notify(config, {
+  return notify({
+    severity: NotificationSeverity.Failure,
     title: rolledBack
       ? `mig: NOT booked - ${booking.guestName}`
       : `mig: NOT booked, remove by hand - ${booking.guestName}`,
