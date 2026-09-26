@@ -10,18 +10,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- `THEME` takes effect. With nothing stored, a visitor sees the owner's `THEME`,
-  and a theme the visitor picked still wins; `/embed` without `?theme=light` or
-  `?theme=dark` follows `THEME` (#52). Upgrade note: if you set `THEME` earlier,
-  when it did nothing, your pages and embeds now use it, including an embed
-  whose address carries `?theme=auto`.
+- `THEME` takes effect. On the standalone pages, a visitor with nothing stored
+  sees the owner's `THEME`, and a theme the visitor picked still wins. `/embed`
+  follows `THEME` unless its address carries `?theme=light` or `?theme=dark`
+  (#52). Upgrade note: if you set `THEME` earlier, when it did nothing, your
+  pages and embeds now use it. On `/embed`, a `THEME` of `light` or `dark` also
+  overrides a theme the visitor stored, and applies to an address that carries
+  `?theme=auto`.
 - The day named above the time grid, in the date card and in the mobile summary
-  bar is the day the visitor clicked whenever one of its slots falls on that day
-  in the visitor's time zone, and otherwise the first slot's day. Before, it was
-  the visitor's date at the host's noon, so a Tokyo host's Sunday evening could
-  be labelled Saturday for a visitor in New York (#50).
+  bar is the day the visitor clicked, unless it has slots and none of them falls
+  on that day in the visitor's time zone; then it is the first slot's day.
+  Before, it was the visitor's date at the host's noon, so a Tokyo host's Sunday
+  evening could be labelled Saturday for a visitor in New York (#50).
 - Slot, calendar-day, month and "Change" links are no longer announced as
-  "current" by screen readers; only the selected day keeps that mark (#50).
+  "current" by screen readers; only the selected day and the selected time keep
+  that mark (#50).
 
 ## [0.6.0] - 2026-09-26
 
