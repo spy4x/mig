@@ -938,4 +938,37 @@ Deno.test("embed picker: the mobile summary bar is not rendered inside the frame
     />,
   );
   assertFalse(html.includes("fixed inset-x-0 bottom-0"));
+  // The same step on / does render it, so the check above can't pass
+  // just because SummaryBar's classes changed.
+  const standalone = renderToString(
+    <BookingFlow
+      dates={DATES}
+      slots={SLOTS}
+      selectedDate="2027-01-04"
+      selectedSlot={null}
+      monthAnchor="2027-01-01"
+      durationMin={30}
+      hostName="Jane Doe"
+      hostTz="Europe/Berlin"
+      error={null}
+      tz={null}
+    />,
+  );
+  assert(standalone.includes("fixed inset-x-0 bottom-0"));
+});
+
+Deno.test("mig#44: the time card's Change link carries theme once forced", () => {
+  const html = renderToString(
+    <EmbedPage
+      {...fakePageProps(embedData({
+        date: "2027-01-04",
+        slot: "09:00",
+        slots: SLOTS,
+        theme: "dark",
+      }))}
+    />,
+  );
+  const tag = html.match(/<a\b[^>]*aria-label="Change time"[^>]*>/)?.[0];
+  assert(tag, "expected the time card's Change link");
+  assert(attr(tag!, "href")?.includes("theme=dark"), `got "${tag}"`);
 });

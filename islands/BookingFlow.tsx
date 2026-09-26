@@ -171,8 +171,8 @@ export default function BookingFlow(props: BookingFlowProps) {
   // date/time labels in the visitor's local TZ.
   const guestTz = useSignal<string>("");
   // True once the island has mounted. Used to gate visitor-TZ
-  // re-formatting (so SSR markup stays host-local for crawlers +
-  // no-JS clients — same labels the SSR Picker always showed).
+  // re-formatting (so SSR markup keeps the route's labels for
+  // crawlers + no-JS clients — the same labels the server render has).
   const mounted = useSignal(false);
   // Inline error from server-side validation (?err=…). Mirrors the
   // SSR error prop, but dismissible so a stale error doesn't haunt
@@ -424,8 +424,9 @@ export default function BookingFlow(props: BookingFlowProps) {
   // Re-derive every slot's visitor-TZ HH:MM + own offset for display
   // (mig#15, mig#48). Before mount the route's own `displayHHMM` is
   // used, or TimeSlots falls back to the host-local `time` (the
-  // authoritative value the server books against — never swapped). After hydration Preact diffs the text node and updates
-  // in place; the surrounding DOM structure stays identical.
+  // authoritative value the server books against — never swapped).
+  // After hydration Preact diffs the text node and updates in place;
+  // the surrounding DOM structure stays identical.
   const slotsForDisplay = (mounted.value && date.value)
     ? orderedSlots.map((s) => {
       const visitorDate = isoDateInTz(s.instant, displayTz);
