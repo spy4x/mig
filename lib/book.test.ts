@@ -76,6 +76,11 @@ async function rm(path: string) {
   }
 }
 
+// Each stub request comes from its own source port, as real connections
+// do. With one shared port, keying the bucket on `hostname:port` (a new
+// bucket per connection, which reopens mig#59) would pass every test.
+let nextStubPort = 40000;
+
 function stubContext(
   opts: {
     config: Config;
@@ -102,7 +107,7 @@ function stubContext(
       remoteAddr: {
         transport: "tcp",
         hostname: opts.remoteAddr ?? "192.0.2.1",
-        port: 40000,
+        port: nextStubPort++,
       },
     },
     state: {
@@ -1853,7 +1858,9 @@ interface Attempt {
 
 /** Submits two bookings for different slots with a limit of one per
  *  window and reports whether the second went through — i.e. whether
- *  the two attempts landed in different rate-limit buckets. */
+ *  the two attempts landed in different rate-limit buckets. A second
+ *  attempt refused for any reason other than the rate limit fails the
+ *  test. */
 async function landInSeparateBuckets(
   config: Config,
   first: Attempt,
@@ -1886,7 +1893,12 @@ async function landInSeparateBuckets(
       }),
       "",
     );
-    return locationPath(two).startsWith("/confirmed?");
+    if (locationPath(two).startsWith("/confirmed?")) return true;
+    // Anything but the rate-limit refusal (a validation error, a taken
+    // slot) says nothing about buckets, so it fails the test instead.
+    const err = new URL(two.headers.get("location")!).searchParams.get("err");
+    assertEquals(err?.startsWith("Too many attempts."), true, `err: ${err}`);
+    return false;
   } finally {
     await rm(path);
   }
