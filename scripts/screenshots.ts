@@ -40,6 +40,10 @@ const GUEST = {
 };
 /** PNGs above this size get quantised to 256 colours, if ImageMagick is installed. */
 const PNG_BUDGET = 400 * 1024;
+/** Where the demo's drawn pointer rests before its first move. */
+const POINTER_START = { x: 900, y: 620 };
+/** Milliseconds between keystrokes in the demo: a calm human pace. */
+const TYPING_DELAY = 70;
 
 // ─── Minimal Playwright types (see the header for why) ──────────────
 
@@ -48,6 +52,9 @@ interface Locator {
   fill(value: string): Promise<void>;
   pressSequentially(value: string, opts?: { delay?: number }): Promise<void>;
   first(): Locator;
+  boundingBox(): Promise<
+    { x: number; y: number; width: number; height: number } | null
+  >;
   nth(index: number): Locator;
   count(): Promise<number>;
   getAttribute(name: string): Promise<string | null>;
@@ -76,7 +83,10 @@ interface Page {
   url(): string;
   mouse: {
     move(x: number, y: number, opts?: { steps?: number }): Promise<void>;
+    down(): Promise<void>;
+    up(): Promise<void>;
   };
+  keyboard: { type(text: string, opts?: { delay?: number }): Promise<void> };
   video(): { path(): Promise<string> } | null;
 }
 
@@ -98,6 +108,7 @@ interface ContextOptions {
 
 interface BrowserContext {
   newPage(): Promise<Page>;
+  addInitScript(script: string): Promise<void>;
   route(
     url: string | RegExp,
     handler: (route: Route) => Promise<void>,
@@ -439,6 +450,162 @@ async function shot(
   console.log(`wrote docs/screenshots/${name}`);
 }
 
+// ─── Demo pointer ───────────────────────────────────────────────────
+
+/** A page script that draws a mouse pointer the recording can show:
+ *  headless Chromium records no system cursor. It follows real mouse
+ *  events, shows a ripple on each press, and keeps its position in
+ *  sessionStorage, so it reappears in the same place after a page load
+ *  (the context runs it again, via addInitScript, on every document). */
+function pointerScript(start: { x: number; y: number }): string {
+  return `(() => {
+  if (window !== window.top) return
+  const KEY = "__migDemoPointer"
+  let pos = { x: ${start.x}, y: ${start.y} }
+  try { pos = JSON.parse(sessionStorage.getItem(KEY)) ?? pos } catch {}
+  const el = document.createElement("div")
+  el.setAttribute("aria-hidden", "true")
+  el.style.cssText = "position:fixed;left:0;top:0;width:24px;height:28px;pointer-events:none;" +
+    "z-index:2147483647;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))"
+  el.innerHTML = '<svg width="24" height="28" viewBox="0 0 24 28" style="display:block;' +
+    'transform-origin:3px 2px;transition:transform 90ms ease-out">' +
+    '<path d="M3 2 L3 21.5 L8.3 16.4 L11.9 24.6 L15.3 23.1 L11.8 15.1 L19 14.8 Z" ' +
+    'fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg>'
+  const place = () => { el.style.transform = "translate(" + (pos.x - 3) + "px," + (pos.y - 2) + "px)" }
+  place()
+  const mount = () => { if (!el.isConnected) (document.body ?? document.documentElement)?.appendChild(el) }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount)
+  mount()
+  addEventListener("mousemove", (e) => {
+    pos = { x: e.clientX, y: e.clientY }
+    place()
+    mount()
+    try { sessionStorage.setItem(KEY, JSON.stringify(pos)) } catch {}
+  }, true)
+  // The click mark: an opaque accent ring and a solid dot, about 88 px
+  // across at the end, so they keep their colour in a 256-colour GIF.
+  // Gone within 400 ms, and removed at once if the page starts to
+  // unload, so a slow navigation never freezes it on screen.
+  const ripples = new Set()
+  const clear = () => { for (const r of ripples) r.remove(); ripples.clear() }
+  addEventListener("beforeunload", clear, true)
+  addEventListener("pagehide", clear, true)
+  addEventListener("mousedown", (e) => {
+    el.firstChild.style.transform = "scale(.7)"
+    const r = document.createElement("div")
+    r.style.cssText = "position:fixed;width:88px;height:88px;margin:-44px 0 0 -44px;border-radius:50%;" +
+      "box-sizing:border-box;pointer-events:none;z-index:2147483646;left:" + e.clientX + "px;top:" +
+      e.clientY + "px;border:5px solid #38bdf8;" +
+      "background:radial-gradient(circle,#38bdf8 0 14px,transparent 15px)"
+    document.documentElement.appendChild(r)
+    ripples.add(r)
+    r.animate([
+      { transform: "scale(.25)", opacity: 1 },
+      { transform: "scale(.8)", opacity: 1, offset: 0.5 },
+      { transform: "scale(1)", opacity: 0 },
+    ], { duration: 400, easing: "ease-out", fill: "forwards" }).onfinish = () => {
+      r.remove()
+      ripples.delete(r)
+    }
+  }, true)
+  addEventListener("mouseup", () => { el.firstChild.style.transform = "" }, true)
+})()`;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Moves the real mouse (and so the drawn pointer) to `to` along a
+ *  gently curved, ease-in-out path, one small step about every 12 ms,
+ *  over 400–700 ms depending on the distance. Wall-clock timed, so the
+ *  recording shows the same pace whatever the machine's speed. */
+async function moveLike(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): Promise<void> {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const dist = Math.hypot(dx, dy);
+  const duration = Math.min(700, Math.max(400, dist * 0.8));
+  // A slight arc, perpendicular to the straight line, reads as a hand.
+  const bow = Math.min(40, dist * 0.08);
+  const nx = dist ? -dy / dist : 0;
+  const ny = dist ? dx / dist : 0;
+  const ease = (t: number) => t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
+  const t0 = Date.now();
+  while (true) {
+    const t = Math.min(1, (Date.now() - t0) / duration);
+    const e = ease(t);
+    const arc = Math.sin(Math.PI * t) * bow;
+    await page.mouse.move(
+      from.x + dx * e + nx * arc,
+      from.y + dy * e + ny * arc,
+    );
+    if (t === 1) break;
+    await sleep(12);
+  }
+  from.x = to.x;
+  from.y = to.y;
+}
+
+/** Scrolls `target` into the middle of the viewport if it is near an
+ *  edge, glides the pointer to its centre and presses it like a person:
+ *  a short pause, press, release. `pointer` is updated in place. */
+async function clickLike(
+  page: Page,
+  pointer: { x: number; y: number },
+  target: Locator,
+): Promise<void> {
+  await target.waitFor();
+  let box = await target.boundingBox();
+  if (!box) throw new Error("the demo's click target has no box");
+  if (box.y < 96 || box.y + box.height > VIEWPORT.height - 48) {
+    const delta = Math.round(box.y + box.height / 2 - VIEWPORT.height / 2);
+    await page.evaluate(`scrollBy({ top: ${delta}, behavior: "smooth" })`);
+    await page.waitForTimeout(800);
+    box = await target.boundingBox();
+    if (!box) throw new Error("the demo's click target has no box");
+  }
+  await moveLike(page, pointer, {
+    x: Math.round(box.x + box.width / 2),
+    y: Math.round(box.y + box.height / 2),
+  });
+  await page.waitForTimeout(150);
+  await page.mouse.down();
+  // Held long enough for the click mark to reach full size before the
+  // release, which is what starts a navigation and clears the mark.
+  await page.waitForTimeout(200);
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+}
+
+/** ffmpeg arguments for the README GIF: drop the first `trimStart`
+ *  seconds (the blank page before the first paint), resample the
+ *  variable-rate WebM to a steady 20 fps, and build one palette for the
+ *  whole clip from the pixels that change (stats_mode=diff), then apply
+ *  it with a light ordered dither, which keeps flat dark areas still
+ *  from frame to frame. */
+function gifArgs(
+  webm: string,
+  trimStart: number,
+  gif: string,
+): string[] {
+  return [
+    "-y",
+    "-i",
+    webm,
+    "-ss",
+    trimStart.toFixed(2),
+    "-vf",
+    "fps=20,scale=800:-1:flags=lanczos,split[a][b];" +
+    "[a]palettegen=max_colors=256:stats_mode=diff[p];" +
+    "[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle",
+    "-loop",
+    "0",
+    gif,
+  ];
+}
+
 async function fitPng(path: string, magick: boolean): Promise<void> {
   if ((await Deno.stat(path)).size <= PNG_BUDGET || !magick) return;
   await run("magick", [path, "-colors", "256", `PNG8:${path}`]);
@@ -647,56 +814,72 @@ async function main(): Promise<void> {
     });
     await mailCtx.close();
 
-    // The main flow as a short clip: date → time → confirm → confirmed.
+    // The main flow as a short clip, dark theme: date → time → confirm →
+    // confirmed. A drawn pointer (see pointerScript) moves along eased
+    // paths and shows each click, so a viewer can follow what happens.
     const videoDir = `${tmp}/video`;
-    const videoCtx = await contextFor("light", {
+    const videoCtx = await contextFor("dark", {
       deviceScaleFactor: 1,
       recordVideo: { dir: videoDir, size: VIEWPORT },
     });
+    await videoCtx.addInitScript(pointerScript(POINTER_START));
     const videoPage = await videoCtx.newPage();
+    // The recording starts with the page; everything before the first
+    // painted booking page is cut off by `trimStart` below.
+    const recordStart = Date.now();
     await videoPage.goto(`${PUBLIC_URL}/`, { waitUntil: "networkidle" });
-    await videoPage.mouse.move(640, 700);
+    await videoPage.mouse.move(POINTER_START.x, POINTER_START.y);
+    await videoPage.waitForTimeout(300);
+    const trimStart = (Date.now() - recordStart) / 1000;
+    const pointer = { ...POINTER_START };
     await videoPage.waitForTimeout(900);
-    await videoPage.locator(`[aria-label^="${date} "]`).click();
+    await clickLike(
+      videoPage,
+      pointer,
+      videoPage.locator(`[aria-label^="${date} "]`),
+    );
     await slotsVisible(videoPage);
-    await videoPage.waitForTimeout(1100);
-    await videoPage.locator(
-      `section[aria-labelledby="step-time"] :is(button, a)`,
-    )
-      .filter({ hasText: /^\s*15:30\s*$/ }).first().click();
+    await videoPage.waitForTimeout(900);
+    await clickLike(
+      videoPage,
+      pointer,
+      videoPage.locator(`section[aria-labelledby="step-time"] :is(button, a)`)
+        .filter({ hasText: /^\s*15:30\s*$/ }).first(),
+    );
     await videoPage.locator(`input[name="name"]`).waitFor();
+    await videoPage.waitForTimeout(800);
+    await clickLike(
+      videoPage,
+      pointer,
+      videoPage.locator(`input[name="name"]`),
+    );
+    await videoPage.keyboard.type(GUEST.name, { delay: TYPING_DELAY });
+    await videoPage.waitForTimeout(300);
+    await clickLike(
+      videoPage,
+      pointer,
+      videoPage.locator(`input[name="email"]`),
+    );
+    await videoPage.keyboard.type(GUEST.email, { delay: TYPING_DELAY });
     await videoPage.waitForTimeout(700);
-    await videoPage.locator(`input[name="name"]`).pressSequentially(
-      GUEST.name,
-      { delay: 60 },
+    await clickLike(
+      videoPage,
+      pointer,
+      videoPage.locator(
+        `form[aria-label="Booking details"] button[type="submit"]`,
+      ),
     );
-    await videoPage.locator(`input[name="email"]`).pressSequentially(
-      GUEST.email,
-      { delay: 40 },
-    );
-    await videoPage.waitForTimeout(500);
-    await videoPage.locator(
-      `form[aria-label="Booking details"] button[type="submit"]`,
-    ).click();
     await videoPage.waitForURL(/\/confirmed\?/, { timeout: 30_000 });
-    await videoPage.mouse.move(1270, 790);
-    await videoPage.waitForTimeout(2200);
+    await videoPage.waitForTimeout(600);
+    await moveLike(videoPage, pointer, { x: 1100, y: 700 });
+    await videoPage.waitForTimeout(2400);
     const video = videoPage.video();
     await videoCtx.close();
     const webm = await video?.path();
     if (!webm) throw new Error("Playwright recorded no video");
     if (await hasCommand("ffmpeg")) {
       const gif = new URL("booking-flow.gif", SHOTS).pathname;
-      await run("ffmpeg", [
-        "-y",
-        "-i",
-        webm,
-        "-vf",
-        "fps=10,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle",
-        "-loop",
-        "0",
-        gif,
-      ]);
+      await run("ffmpeg", gifArgs(webm, trimStart, gif));
       console.log("wrote docs/screenshots/booking-flow.gif");
     } else {
       await Deno.copyFile(webm, new URL("booking-flow.webm", SHOTS));
