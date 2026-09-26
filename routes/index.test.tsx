@@ -377,6 +377,13 @@ Deno.test("mig#57: standalone / ignores a month before 1980", async () => {
 
 // ─── mig#50: daylight-saving days and the grid's date heading ────────
 
+// Every "HH:MM, Berlin, UTC±N" clock on the page, in order, once each:
+// the slot's own accessible name (its `aria-label`, or the `sr-only`
+// text of a past slot, which renders as a plain chip).
+function berlinSlotClocks(html: string): string[] {
+  return [...new Set(html.match(/\d\d:\d\d, Berlin, UTC[+-]\d+/g) ?? [])];
+}
+
 // The slot grid's own date heading (TimeSlots.tsx's `<h3>`).
 function gridHeading(html: string): string | null {
   const m = html.match(
@@ -384,6 +391,50 @@ function gridHeading(html: string): string | null {
   );
   return m ? m[1] : null;
 }
+
+Deno.test("mig#50: Berlin host and visitor on 29 March 2026 — the 00:00 and 01:00 slots show different times", async () => {
+  // Clocks jump from 02:00 (UTC+1) to 03:00 (UTC+2) at 01:00 UTC. The
+  // conversion used to take the offset after the change for the slots
+  // before it, so 00:00 and 01:00 both rendered as "00:00, UTC+1".
+  const html = await renderIndex(
+    "http://localhost/?date=2026-03-29&tz=Europe/Berlin",
+    {
+      hostTz: "Europe/Berlin",
+      weeklyAvailability: parseWeeklyAvailability("SUN 00:00-04:00"),
+    },
+  );
+  assertEquals(berlinSlotClocks(html), [
+    "00:00, Berlin, UTC+1",
+    "00:30, Berlin, UTC+1",
+    "01:00, Berlin, UTC+1",
+    "01:30, Berlin, UTC+1",
+    "03:00, Berlin, UTC+2",
+    "03:30, Berlin, UTC+2",
+  ]);
+});
+
+Deno.test("mig#50: Berlin host and visitor on 25 October 2026 — every slot shows its own time and offset", async () => {
+  // Clocks fall back from 03:00 (UTC+2) to 02:00 (UTC+1) at 01:00 UTC.
+  // 02:00 and 02:30 happen twice that night; mig books the first,
+  // summer-time one.
+  const html = await renderIndex(
+    "http://localhost/?date=2026-10-25&tz=Europe/Berlin",
+    {
+      hostTz: "Europe/Berlin",
+      weeklyAvailability: parseWeeklyAvailability("SUN 00:00-04:00"),
+    },
+  );
+  assertEquals(berlinSlotClocks(html), [
+    "00:00, Berlin, UTC+2",
+    "00:30, Berlin, UTC+2",
+    "01:00, Berlin, UTC+2",
+    "01:30, Berlin, UTC+2",
+    "02:00, Berlin, UTC+2",
+    "02:30, Berlin, UTC+2",
+    "03:00, Berlin, UTC+1",
+    "03:30, Berlin, UTC+1",
+  ]);
+});
 
 Deno.test("mig#50: Tokyo host, New York visitor, 1 November 2026 — the heading names the slots' own day", async () => {
   // Tokyo's Sunday 17:00-20:00 is Sunday 03:00-06:00 in New York, but
