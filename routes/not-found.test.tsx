@@ -86,8 +86,13 @@ function handler(): (req: Request) => Promise<Response> {
   return app.handler();
 }
 
-async function get(path: string): Promise<{ status: number; body: string }> {
-  const res = await handler()(new Request(`http://localhost${path}`));
+async function get(
+  path: string,
+  method = "GET",
+): Promise<{ status: number; body: string }> {
+  const res = await handler()(
+    new Request(`http://localhost${path}`, { method }),
+  );
   return { status: res.status, body: await res.text() };
 }
 
@@ -98,6 +103,11 @@ for (const path of ["/nope", "/embed/nope"]) {
     assertStringIncludes(body, "Page not found");
   });
 }
+
+Deno.test("mig#68: a POST to a missing path answers 404 too", async () => {
+  const { status } = await get("/nope", "POST");
+  assertEquals(status, 404);
+});
 
 Deno.test("mig#68: an existing route still answers 200", async () => {
   const { status, body } = await get("/health");
