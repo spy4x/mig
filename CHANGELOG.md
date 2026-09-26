@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The embedded booking page (`/embed`) now changes steps in place: choosing a
+  day or a time no longer reloads the frame, the same as on mig's own page. The
+  frame still reports its new height after each step, keeps `?theme=` and the
+  visitor's timezone, and works without JavaScript as before (#85).
+
 ## [0.8.0] - 2026-09-27
 
 ### Upgrade notes

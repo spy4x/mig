@@ -6,7 +6,7 @@
   link) so the swap doesn't feel jarring.
 
   The Change link goes back to the picker root (no date param), which
-  the Picker interprets as "show the calendar again".
+  the booking flow reads as "show the calendar again".
 */
 
 import { ArrowRight, Calendar } from "./icons.tsx";
