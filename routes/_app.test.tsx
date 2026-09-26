@@ -90,7 +90,7 @@ Deno.test("App: /embed?theme=dark renders the dark class and data-theme before a
   assert(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag);
   assert(tag.includes('data-theme="dark"'), tag);
   assertFalse(
-    html.includes("__migTheme"),
+    html.includes("mig-theme"),
     "forced theme must skip the client bootstrap script entirely",
   );
 });
@@ -100,7 +100,7 @@ Deno.test("App: /embed?theme=light renders no dark class and data-theme=light", 
   const tag = htmlTag(html);
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag);
   assert(tag.includes('data-theme="light"'), tag);
-  assertFalse(html.includes("__migTheme"));
+  assertFalse(html.includes("mig-theme"));
 });
 
 Deno.test("App: /embed?theme=auto keeps today's behaviour — no forced class, bootstrap script present", () => {
@@ -108,7 +108,7 @@ Deno.test("App: /embed?theme=auto keeps today's behaviour — no forced class, b
   const tag = htmlTag(html);
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag);
   assertFalse(tag.includes("data-theme="), tag);
-  assert(html.includes("__migTheme"));
+  assert(html.includes("mig-theme"));
 });
 
 Deno.test("App: /embed with no theme param at all behaves exactly like ?theme=auto", () => {
@@ -116,7 +116,7 @@ Deno.test("App: /embed with no theme param at all behaves exactly like ?theme=au
   const tag = htmlTag(html);
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag);
   assertFalse(tag.includes("data-theme="), tag);
-  assert(html.includes("__migTheme"));
+  assert(html.includes("mig-theme"));
 });
 
 Deno.test("App: an invalid /embed?theme= value falls back to auto, never reflected unescaped", () => {
@@ -141,7 +141,7 @@ Deno.test("App: ?theme=dark on the standalone site (not /embed) is ignored", () 
   const tag = htmlTag(html);
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag);
   assertFalse(tag.includes("data-theme="), tag);
-  assert(html.includes("__migTheme"));
+  assert(html.includes("mig-theme"));
 });
 
 Deno.test("App: /embed/confirmed?theme=dark also forces the theme (not just /embed's picker)", () => {
@@ -186,7 +186,7 @@ Deno.test("App: theme=auto sets no color-scheme style on <html> (unchanged from 
 
 Deno.test("App: a forced theme never renders a script that writes the mig-theme localStorage key", () => {
   // The standalone site and /embed share an origin and read/write the
-  // same "mig-theme" key (lib/theme.ts's themeBootstrapScript). An
+  // same "mig-theme" key (lib/theme.ts's themeScript). An
   // explicit ?theme= must override what that key decides without ever
   // touching it — otherwise picking a theme in one embed would leak
   // into the standalone site's own stored preference, or a later
@@ -212,7 +212,7 @@ Deno.test("App: THEME=dark makes /embed without ?theme= render dark before any s
     const tag = htmlTag(html);
     assert(/class="[^"]*\bdark\b[^"]*"/.test(tag), `${path}: ${tag}`);
     assert(tag.includes('data-theme="dark"'), `${path}: ${tag}`);
-    assertFalse(html.includes("__migTheme"), path);
+    assertFalse(html.includes("mig-theme"), path);
   }
 });
 

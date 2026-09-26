@@ -5,7 +5,7 @@
 // guestTz field after mount. /embed never mounts an island (issue #11
 // Option A), so it gets the same value the same way islands/theme.ts
 // gets its theme: a tiny inline <script>, same style as
-// lib/theme.ts:themeBootstrapScript — no nonce (Fresh adds one to
+// lib/theme.ts:themeScript — no nonce (Fresh adds one to
 // every rendered <script> automatically), a try/catch so a hostile or
 // ancient browser just leaves the field empty instead of throwing.
 //

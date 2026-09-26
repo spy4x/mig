@@ -14,6 +14,7 @@ export default define.page(function Error(
       {cfg && (
         <Header
           compact
+          defaultTheme={cfg.theme}
           themeToggle={!url || forcedThemeFor(url, cfg.theme) === null}
         />
       )}

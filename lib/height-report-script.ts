@@ -27,7 +27,7 @@
 // document's tallest-ever size.
 //
 // Same inline-script pattern as lib/guest-tz-script.ts and
-// lib/theme.ts's themeBootstrapScript: no build step, no dependency,
+// lib/theme.ts's themeScript: no build step, no dependency,
 // a try/catch so a hostile or ancient browser just never posts instead
 // of throwing. Everything goes through the
 // `window` parameter passed in at the call site (the real `window`
