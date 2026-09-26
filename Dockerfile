@@ -53,7 +53,7 @@ ENV MIG_VERSION=${MIG_VERSION}
 # access to the directory itself, not just the file. Creating it here,
 # owned by deno, means a Docker named volume mounted at /data inherits
 # that ownership; a host bind mount instead needs its own directory
-# writable by uid 1993 (see README). /app's COPY'd files stay
+# writable by uid 1993 (see docs/self-hosting.md). /app's COPY'd files stay
 # world-readable (Docker's default COPY permissions), so `deno` can
 # read them without any extra chown.
 RUN mkdir -p /data && chown deno:deno /data

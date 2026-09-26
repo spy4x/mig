@@ -319,7 +319,7 @@ export const handler = define.handlers({
   Auto-sizing (mig#44): every /embed page posts its content height to
   `window.parent` via `postMessage` (lib/height-report-script.ts) —
   the parent page listens and sets the iframe's height from it. See
-  the README's Embedding section for the parent-side listener.
+  docs/embedding.md for the parent-side listener.
 */
 export default define.page<typeof handler>(function Embed({ data, state }) {
   const {
