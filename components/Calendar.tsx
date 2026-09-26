@@ -183,6 +183,11 @@ export function Calendar(props: CalendarProps) {
             : (
               <a
                 href={pickerHref(basePath, { month: prevMonth }, tz, theme)}
+                // Fresh marks a link to the page's own path as current
+                // unless it sets aria-current itself (mig#50, see
+                // SlotButton in TimeSlots.tsx); so do the next-month and
+                // day links below.
+                aria-current="false"
                 aria-label="Previous month"
                 class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                   prevHasContent ? "" : "opacity-30 pointer-events-none"
@@ -208,6 +213,7 @@ export function Calendar(props: CalendarProps) {
             : (
               <a
                 href={pickerHref(basePath, { month: nextMonth }, tz, theme)}
+                aria-current="false"
                 aria-label="Next month"
                 class={`inline-flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-muted transition-colors hover:bg-surface-sunken hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                   nextHasContent ? "" : "opacity-30 pointer-events-none"
@@ -308,7 +314,8 @@ export function Calendar(props: CalendarProps) {
               key={date}
               href={pickerHref(basePath, { date }, tz, theme)}
               aria-label={ariaLabel}
-              aria-current={isSelected ? "date" : undefined}
+              // "false", not undefined (mig#50, see the month links).
+              aria-current={isSelected ? "date" : "false"}
               class={`${cellBase} ${cellState} focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised ${
                 isSelected ? "selected-pulse" : ""
               }`}

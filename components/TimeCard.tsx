@@ -74,6 +74,9 @@ export function TimeCard(
         : (
           <a
             href={pickerHref(basePath, { date }, tz, theme)}
+            // Fresh would mark this link to the page's own path as
+            // current (mig#50, see SlotButton in TimeSlots.tsx).
+            aria-current="false"
             aria-label="Change time"
             class={changeClass}
           >
