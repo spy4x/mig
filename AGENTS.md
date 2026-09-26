@@ -18,8 +18,8 @@
   `deno` before `USER deno`, so a _new_, empty Docker named volume mounted there
   inherits that ownership. A named volume mig already wrote to under an older,
   root-run image stays owned by root — see CHANGELOG's upgrade note. A host bind
-  mount needs to be writable by uid 1993 itself — see docs/self-hosting.md's
-  Docker section.
+  mount needs to be writable by uid 1993 itself — see README's Docker quick
+  start.
 - **CI:** Woodpecker `check` step — `deno install --frozen`, `deno task check`
   (fmt --check + lint + type check), `deno task test`, `deno task build` — on
   every push, pull request, tag and manual run; a tag-only `release` step then
@@ -166,14 +166,14 @@ deno task build && deno task screenshots
 ```
 
 `scripts/screenshots.ts` writes only the pictures in use: the README's two under
-`docs/screenshots/` (the booking-flow GIF, shown first under "Demo video", and
-the confirmation email in a dark mail-client frame) and
-`docs/social-preview.png`, which the owner uploads by hand in the GitHub
-repository settings. The social preview's hero, the dark booking page, is taken
-into the throwaway directory, not the repository. The pictures are placeholders
-only: "Jane Doe", example.com addresses and Europe/Berlin, never real data, so
-rerunning the command is always safe to commit. How the email's mail-client
-frame is built is in `.claude/skills/email-screenshot-frame/SKILL.md`.
+`docs/screenshots/` (the booking-flow GIF, shown first under the title, and the
+confirmation email in a dark mail-client frame) and `docs/social-preview.png`,
+which the owner uploads by hand in the GitHub repository settings. The social
+preview's hero, the dark booking page, is taken into the throwaway directory,
+not the repository. The pictures are placeholders only: "Jane Doe", example.com
+addresses and Europe/Berlin, never real data, so rerunning the command is always
+safe to commit. How the email's mail-client frame is built is in
+`.claude/skills/email-screenshot-frame/SKILL.md`.
 
 It serves the existing `_fresh/` build on a free port with a throwaway data file
 and its own in-process SMTP sink, so the booking it makes succeeds and no mail

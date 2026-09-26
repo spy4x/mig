@@ -10,7 +10,8 @@
 
 [**Try it live →**](https://meet.antonshubin.com) ·
 [Self-hosting](docs/self-hosting.md) · [Configuration](docs/configuration.md) ·
-[Embedding](docs/embedding.md) · [Changelog](CHANGELOG.md)
+[Embedding](docs/embedding.md) · [How it works](docs/how-it-works.md) ·
+[Changelog](CHANGELOG.md)
 
 ![A visitor books a meeting: picks a date in the calendar, picks 15:30, types a name and email, confirms, and lands on the "You're booked" page.](docs/screenshots/booking-flow.gif)
 
@@ -30,8 +31,8 @@ I built it for my own site and book my calls through it at
   `cat` and back up. No database, no accounts, no admin UI.
 - **Config is code.** Working hours, days off, slot length and the meeting link
   are environment variables. Change them, restart, done.
-- **Both clocks, everywhere.** Guests see every time in their own time zone.
-  Your emails show your time and the guest's side by side.
+- **Both clocks, everywhere.** Guests see times in their own time zone. Your
+  emails show your time and the guest's side by side.
 - **Invite and cancel built in.** Every confirmation carries an `.ics` invite
   and a signed cancel link. Optional push notifications through NTFY.
 - **Embeds anywhere.** `/embed` drops the whole flow into an iframe on your

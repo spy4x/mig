@@ -40,8 +40,14 @@ docker run -d --name mig -p 8080:8080 -v ./data:/data:z \
 ```
 
 The container runs as uid/gid 1993, so `./data` must be writable by that user.
-Every variable, the Docker Compose file, embedding in your own site and the
-upgrade notes are in the [README](https://github.com/spy4x/mig#readme).
+Every variable is in
+[configuration.md](https://github.com/spy4x/mig/blob/main/docs/configuration.md);
+Docker Compose, Podman and reverse proxies in
+[self-hosting.md](https://github.com/spy4x/mig/blob/main/docs/self-hosting.md);
+embedding in your own site in
+[embedding.md](https://github.com/spy4x/mig/blob/main/docs/embedding.md);
+upgrade notes in the
+[CHANGELOG](https://github.com/spy4x/mig/blob/main/CHANGELOG.md).
 
 ## License
 
