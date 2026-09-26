@@ -1,16 +1,22 @@
 import { define } from "../lib/utils.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
+import { forcedThemeFor } from "../lib/theme.ts";
 
 export default define.page(function Error(
   // deno-lint-ignore no-explicit-any
-  { error, state }: { error?: any; state?: any },
+  { error, state, url }: { error?: any; state?: any; url?: URL },
 ) {
   const cfg = state?.config;
   const message = error?.message ?? "Unexpected error.";
   return (
     <div class="min-h-dvh flex flex-col">
-      {cfg && <Header compact />}
+      {cfg && (
+        <Header
+          compact
+          themeToggle={!url || forcedThemeFor(url, cfg.theme) === null}
+        />
+      )}
       <main class="flex-1 grid place-items-center px-6 py-16">
         <div class="max-w-sm text-center">
           <p class="text-xs font-medium uppercase tracking-[0.18em] text-red-600 dark:text-red-400 mb-3">

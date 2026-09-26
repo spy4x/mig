@@ -1,9 +1,5 @@
 import { define } from "../lib/utils.ts";
-import {
-  parseThemeParam,
-  themeBootstrapScript,
-  type ThemeParam,
-} from "../lib/theme.ts";
+import { forcedThemeFor, themeBootstrapScript } from "../lib/theme.ts";
 
 // Default root layout. Wraps every page in <html>+<body> with theme
 // bootstrap, meta tags, and the mig favicon.
@@ -17,32 +13,6 @@ import {
 // Inline critical CSS prevents the FOUC while Tailwind loads. We
 // intentionally keep this short — full styles arrive via the
 // Vite-bundled stylesheet.
-
-// mig#44 — /embed's forced theme (`?theme=dark|light`) is read straight
-// from the URL here, not threaded in via route state: it has to be
-// resolved before this shared layout renders <html>, and every route
-// already has `url` in its PageProps for free. `auto` (the default,
-// including no param at all, or any other route) keeps today's
-// behaviour untouched: no server-rendered class, no data-theme, and
-// the same client bootstrap script runs. Scoped to `/embed*` — the
-// standalone site has no such query param and must not start
-// honouring one it never advertised.
-//
-// mig#52 — without an explicit `?theme=light|dark`, /embed follows the
-// owner's `THEME` setting the same way: forced server-side when it is
-// `light` or `dark`, today's client bootstrap when it is `auto`. An
-// iframe has no theme toggle, so a visitor's stored preference never
-// overrides `THEME` there; on the standalone site it still does (see
-// lib/theme.ts's themeBootstrapScript).
-function forcedThemeFor(
-  url: URL,
-  configured: ThemeParam,
-): "light" | "dark" | null {
-  if (!url.pathname.startsWith("/embed")) return null;
-  const parsed = parseThemeParam(url.searchParams.get("theme"));
-  if (parsed !== "auto") return parsed;
-  return configured === "auto" ? null : configured;
-}
 
 export default define.page(function App({ Component, state, url }) {
   const cfg = state.config;
