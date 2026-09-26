@@ -290,3 +290,56 @@ Deno.test("POST /api/book: a body that stalls is answered with 408 and books not
     await rm(path);
   }
 });
+
+// The form's validator copies zod's email pattern, which accepts a
+// domain label ending in a hyphen; the shared SMTP sender's address
+// parser refuses it. Such a guest passes the form, the owner's email
+// goes out, the guest's send fails, and the booking is rolled back.
+Deno.test("POST /api/book: a guest address the form accepts but the mail sender refuses rolls the booking back", async () => {
+  const path = `/tmp/mig-book-bad-guest-test-${crypto.randomUUID()}.json`;
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const sentTo: string[] = [];
+  setTransportForTesting({
+    sendMail(message) {
+      sentTo.push(String(message.to));
+      return Promise.resolve({});
+    },
+  });
+  const body = new URLSearchParams({
+    name: "Visitor",
+    email: "visitor@example-.com",
+    notes: "",
+    date: futureWeekday(3, HOST_TZ),
+    slot: "09:00",
+    website: "",
+  });
+  const ctx = {
+    req: new Request("http://localhost/api/book", { method: "POST", body }),
+    info: {
+      remoteAddr: { transport: "tcp", hostname: "192.0.2.1", port: 40003 },
+    },
+    state: {
+      config: fakeConfig(),
+      bookings,
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    },
+  } as unknown as Context<State>;
+  try {
+    const res = await handler.POST!(ctx);
+    assertEquals(res.status, 303);
+    const location = new URL(res.headers.get("location")!);
+    assertEquals(location.pathname, "/");
+    assertEquals(
+      location.searchParams.get("err"),
+      "Something went wrong, so the booking was not created. Please try again in a moment.",
+    );
+    assertEquals(bookings.list().length, 0);
+    // The owner's booking email, then the owner's correction; nothing
+    // reached the refused guest address.
+    assertEquals(sentTo, ["jane@example.com", "jane@example.com"]);
+  } finally {
+    setTransportForTesting({ sendMail: () => Promise.resolve({}) });
+    await rm(path);
+  }
+});
