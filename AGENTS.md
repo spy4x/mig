@@ -175,8 +175,13 @@ leaves the machine. Chromium maps `meet.example.com` to that server and every
 other host name to nothing. Browser time zone and locale are fixed
 (`Europe/Berlin`, `en-US`), never the machine's own; the picked date is the
 first full weekday after today, so the dates in the pictures move with the day
-the command runs. The GIF needs `ffmpeg` (otherwise it keeps the WebM), and PNGs
-over 400 KB are quantised with ImageMagick when it is installed.
+the command runs. The booking-flow GIF is recorded in the dark theme, the
+README's default; headless Chromium records no cursor, so the script draws its
+own pointer into the page (`pointerScript`, re-run on every page load and
+remembering its position in `sessionStorage`), glides it along eased paths and
+shows a ripple on each click. The recording is trimmed to the first painted page
+and encoded at a steady 20 fps. The GIF needs `ffmpeg` (otherwise it keeps the
+WebM), and PNGs over 400 KB are quantised with ImageMagick when it is installed.
 
 Playwright is pinned inside the script (`npm:playwright@1.63.0`), not in
 `deno.json`'s imports: it is a dev-only tool outside the dependency budget. The
