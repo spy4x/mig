@@ -18,8 +18,8 @@
   `deno` before `USER deno`, so a _new_, empty Docker named volume mounted there
   inherits that ownership. A named volume mig already wrote to under an older,
   root-run image stays owned by root — see CHANGELOG's upgrade note. A host bind
-  mount needs to be writable by uid 1993 itself — see README's Docker quick
-  start.
+  mount needs to be writable by uid 1993 itself — see docs/self-hosting.md's
+  Docker section.
 - **CI:** Woodpecker `check` step — `deno install --frozen`, `deno task check`
   (fmt --check + lint + type check), `deno task test`, `deno task build` — on
   every push, pull request, tag and manual run; a tag-only `release` step then

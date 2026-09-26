@@ -7,7 +7,7 @@ Thanks for your interest in mig! Contributions welcome.
 - **Keep it small.** mig is intentionally minimal. PRs that add features outside
   the spec ("what about recurring bookings?", "can it sync with Google
   Calendar?") will be rejected. See [README.md](README.md) for the explicit
-  "don't use it if" list.
+  "skip it if" list.
 - **Don't add dependencies.** Each new `jsr:` or `npm:` package needs a
   justification in the PR description. The existing budget:
   - `fresh` (Fresh framework)

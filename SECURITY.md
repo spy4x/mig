@@ -27,7 +27,8 @@ coordinate disclosure on a timeline that makes sense for the actual exposure.
 
 - [ ] Run mig behind a TLS-terminating reverse proxy (Traefik, Caddy, nginx).
       Don't expose port 8080 to the internet directly, and set
-      `TRUSTED_PROXY_HEADER` (see README's "Behind a reverse proxy").
+      `TRUSTED_PROXY_HEADER` (see docs/self-hosting.md, "Behind a reverse
+      proxy").
 - [ ] Keep `CANCEL_SECRET` ≥ 32 random bytes (`openssl rand -base64 32`). Rotate
       it to invalidate all outstanding cancel links.
   - **WARNING**: rotating `CANCEL_SECRET` cancels nobody — every active booking
@@ -37,7 +38,7 @@ coordinate disclosure on a timeline that makes sense for the actual exposure.
 - [ ] Run the mig container as non-root (default in our Dockerfile — the image
       runs as `deno`, uid/gid 1993).
 - [ ] Mount `/data` as a read-write volume, writable by uid 1993, so bookings
-      survive container restarts (see README's Docker quick start).
+      survive container restarts (see docs/self-hosting.md, "Docker").
 - [ ] Back up the JSON file. It's the only persistent state.
 - [ ] Don't log raw SMTP credentials. mig only logs SMTP errors at startup
       (`mig: SMTP connect failed (host:port): ...`).
