@@ -68,35 +68,43 @@ export interface GridDay {
 }
 
 /**
- * The picked day as the visitor sees it (mig#50): the display-zone date
- * of the FIRST slot shown, the same anchor `formatGridHeader` uses for
- * the zone label (mig#48). Noon of the host day, the old anchor, can
- * fall on another visitor date than every slot below it: a Tokyo host's
- * Sunday 17:00-20:00 is Sunday 03:00-06:00 in New York, while Tokyo's
- * noon is still Saturday there.
+ * The picked day as the visitor sees it (mig#50). `slots` are the
+ * instants of the slots shown, in display order.
  *
- * With no slot to anchor on (`firstSlot` undefined — a blocked or empty
- * day, or slots still loading), it names the picked calendar day
- * itself: the day the visitor clicked in the host-anchored calendar,
- * formatted as a plain date so no zone shifts it to a neighbour.
+ * - When at least one slot falls on the picked date in `displayTz`, it
+ *   is the picked date: the day the visitor clicked in the host's
+ *   calendar. Slots on another day carry their own date note.
+ * - When none does, it is the first slot's own day, so the heading
+ *   never names a day with no slot under it.
+ * - With no slot at all (a blocked or empty day, or slots still
+ *   loading), it is the picked date.
+ *
+ * Noon of the host day, the old anchor, could name a day with no slot
+ * on it: a Tokyo host's Sunday 17:00-20:00 is Sunday 03:00-06:00 in New
+ * York, but Tokyo's noon is Saturday 23:00 there.
+ *
+ * The date is formatted as a plain calendar date, so no zone moves it.
  */
 export function gridDay(
-  firstSlot: Date | undefined,
+  slots: Date[],
   pickedDate: string,
   displayTz: string,
 ): GridDay {
-  const at = firstSlot ?? new Date(`${pickedDate}T12:00:00Z`);
-  const tz = firstSlot ? displayTz : "UTC";
+  const days = slots.map((s) => isoDateInTz(s, displayTz));
+  const date = days.length === 0 || days.includes(pickedDate)
+    ? pickedDate
+    : days[0];
+  const at = new Date(`${date}T12:00:00Z`);
   return {
-    date: firstSlot ? isoDateInTz(firstSlot, displayTz) : pickedDate,
+    date,
     long: new Intl.DateTimeFormat("en-GB", {
-      timeZone: tz,
+      timeZone: "UTC",
       weekday: "long",
       day: "numeric",
       month: "long",
       year: "numeric",
     }).format(at),
-    short: formatShortDateAt(at, tz),
+    short: formatShortDateAt(at, "UTC"),
   };
 }
 

@@ -168,21 +168,26 @@ Deno.test("slotDateLabel comes from the slot's own instant, not noon of the host
   assertEquals(data.slotDateLabel, "Monday, 5 October 2026");
 });
 
-Deno.test("mig#15: picked-day label converts into the visitor's zone, not the host's", async () => {
-  // Ho Chi Minh (UTC+7) / Los Angeles (PDT, UTC-7 in October) is a
-  // 14-hour gap — wide enough that noon on the host's picked day
-  // (Tuesday 6 October) is still the previous evening (Monday 5
-  // October) in the visitor's zone. Regression guard for
-  // routes/embed/index.tsx's selectedDateLabel: reverting it to format
-  // in cfg.hostTz instead of displayTz would silently pass a same-zone
-  // or small-offset test but fail this one.
+Deno.test("mig#15, mig#50: picked-day label converts into the visitor's zone when no slot falls on the clicked day", async () => {
+  // Auckland (UTC+13 from late September) 09:00-10:00 on Tuesday 6
+  // October is 13:00-14:00 on Monday 5 October in Los Angeles (PDT,
+  // UTC-7). No slot is on the clicked Tuesday in the visitor's zone, so
+  // the label names the first slot's Monday (mig#50), and no slot needs
+  // a note under it. Regression guard for routes/embed/index.tsx's
+  // selectedDateLabel: working out the slots' days in cfg.hostTz
+  // instead of displayTz would put every slot on Tuesday.
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&tz=America%2FLos_Angeles`,
+    {
+      hostTz: "Pacific/Auckland",
+      weeklyAvailability: parseWeeklyAvailability("TUE 09:00-10:00"),
+    },
   );
   assertEquals(data.selectedDateLabel, "Monday, 5 October 2026");
+  assertEquals(data.slots.map((s) => s.dateNote), [undefined, undefined]);
 });
 
-Deno.test("mig#15, mig#50: /embed's slot list is sorted by instant and labels a slot whose visitor date differs from the heading's day", async () => {
+Deno.test("mig#15: /embed's slot list is sorted by instant and labels a slot whose visitor date differs from the picked day", async () => {
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&tz=America%2FNew_York`,
   );
@@ -195,18 +200,12 @@ Deno.test("mig#15, mig#50: /embed's slot list is sorted by instant and labels a 
   );
   const sorted = [...instants].sort((a, b) => a - b);
   assertEquals(instants, sorted, "slots must already be instant-sorted");
-  // The heading names the first slot's day (mig#50): 09:00 host-local
-  // is 22:00 on Monday 5 October in New York. Slots on that day carry
-  // no note; from 11:00 host-local (00:00 Tuesday in New York) on,
-  // each slot names its own day.
-  assertEquals(data.selectedDateLabel, "Monday, 5 October 2026");
-  const notes = Object.fromEntries(data.slots.map((s) => [s.time, s.dateNote]));
-  assertEquals(notes["09:00"], undefined);
-  assertEquals(notes["10:30"], undefined);
-  assertEquals(notes["11:00"], "Tue 6 Oct");
-  // 16:30 host-local (the last slot; availability ends 17:00) is 05:30
-  // on Tuesday in New York.
-  assertEquals(notes["16:30"], "Tue 6 Oct");
+  const wrapped = data.slots.find((s) => s.time === "09:00");
+  assertEquals(wrapped?.dateNote, "Mon 5 Oct");
+  // 16:30 host-local (the last slot; availability ends 17:00) is
+  // 05:30 the *same* New York calendar day — no note expected.
+  const sameDay = data.slots.find((s) => s.time === "16:30");
+  assertEquals(sameDay?.dateNote, undefined);
 });
 
 Deno.test("mig#15: /embed with no tz param falls back to the host's zone", async () => {
@@ -531,4 +530,24 @@ Deno.test("mig#50: /embed names the picked calendar day when it has no slots", a
   );
   assertEquals(data.slots, []);
   assertEquals(data.selectedDateLabel, "Sunday, 1 November 2026");
+});
+
+Deno.test("mig#50: /embed names the clicked day when some slots fall on it, and notes only the slots on another day", async () => {
+  // Ho Chi Minh 09:00-17:00 on Tuesday 6 October is 22:00 Monday to
+  // 05:30 Tuesday in New York. Twelve slots are on the clicked Tuesday,
+  // so that is the label; the four Monday-evening ones carry a note.
+  const data = await getEmbedData(
+    `http://localhost/embed?date=${TEST_DATE}&tz=America%2FNew_York`,
+  );
+  assertEquals(data.selectedDateLabel, "Tuesday, 6 October 2026");
+  assertEquals(data.slots.length, 16);
+  assertEquals(
+    data.slots.filter((s) => s.dateNote).map((s) => [s.time, s.dateNote]),
+    [
+      ["09:00", "Mon 5 Oct"],
+      ["09:30", "Mon 5 Oct"],
+      ["10:00", "Mon 5 Oct"],
+      ["10:30", "Mon 5 Oct"],
+    ],
+  );
 });

@@ -333,7 +333,7 @@ export default function BookingFlow(props: BookingFlowProps) {
 
   // The selected slot's own date, from its exact instant, not noon of
   // the host day (mig#15 review) — feeds TimeCard specifically.
-  // `dateLabel` below (the first slot's day) still feeds DateCard,
+  // `dateLabel` below (the picked day, see gridDay) still feeds DateCard,
   // which shows the *picked day*, not a specific time.
   const slotDateLabel: string | null = date.value && slot.value
     ? formatHostDateIn(date.value, slot.value, hostTz, displayTz)
@@ -389,15 +389,14 @@ export default function BookingFlow(props: BookingFlowProps) {
   );
   const gridZoneLabel = header?.label ?? null;
 
-  // The picked day as the visitor sees it (mig#50): the first shown
-  // slot's own date, the same anchor as the zone label above — not
-  // noon of the host day, which a Tokyo host's New York visitor sees
-  // as the day before every slot. While a fetch is loading, the slots
-  // still belong to the previous date, so the picked day itself is
-  // named instead (see gridDay).
+  // The picked day as the visitor sees it (mig#50, see gridDay): the
+  // clicked date when a slot falls on it in the display zone, else the
+  // first slot's day. While a fetch is loading, the slots still belong
+  // to the previous date, so none are passed and the clicked date is
+  // named.
   const day = date.value
     ? gridDay(
-      loading.value ? undefined : orderedSlots[0]?.instant,
+      loading.value ? [] : orderedSlots.map((s) => s.instant),
       date.value,
       displayTz,
     )

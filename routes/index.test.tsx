@@ -450,6 +450,8 @@ Deno.test("mig#50: Tokyo host, New York visitor, 1 November 2026 — the heading
   );
   assertEquals(gridHeading(html), "Sunday, 1 November 2026");
   assertFalse(html.includes("Saturday, 31 October 2026"), "DateCard too");
+  assertFalse(html.includes("Sat 31 Oct"), "the mobile summary bar too");
+  assert(html.includes("Sun 1 Nov"), "the summary bar names Sunday");
   assert(html.includes("03:00, New York, UTC-5"), "expected the 17:00 slot");
   // All three slots are on the heading's day, so no slot's accessible
   // name ends in a date note. ("Sun 1 Nov" itself does appear: the
@@ -473,16 +475,38 @@ Deno.test("mig#50: a day with no slots names the picked calendar day, not the vi
   assertFalse(html.includes("Saturday, 31 October 2026"));
 });
 
-Deno.test("mig#50: with slots on two visitor days, the heading names the first and only the other day's slots carry a note", async () => {
-  // Ho Chi Minh 09:00-17:00 is 22:00 Monday to 05:30 Tuesday in New
-  // York: the heading is Monday, and from 11:00 host time (00:00
-  // Tuesday in New York) each slot names Tuesday.
+Deno.test("mig#50: Ho Chi Minh host, New York visitor — the heading and date card name the clicked day, and only the Monday slots carry a note", async () => {
+  // Ho Chi Minh 09:00-17:00 on Tuesday 6 October is 22:00 Monday to
+  // 05:30 Tuesday in New York. Twelve of the sixteen slots are on the
+  // clicked Tuesday, so the page names Tuesday; the four Monday-evening
+  // slots each carry "Mon 5 Oct".
   const html = await renderIndex(
     `http://localhost/?date=${TEST_DATE}&tz=America/New_York`,
   );
+  assertEquals(gridHeading(html), "Tuesday, 6 October 2026");
+  assertFalse(html.includes("Monday, 5 October 2026"), "DateCard too");
+  const notes = html.match(/New York, UTC-4, \w{3} \d+ \w{3}/g) ?? [];
+  assertEquals(new Set(notes).size, 1, `one note text: ${[...new Set(notes)]}`);
+  assert(notes[0]?.endsWith("Mon 5 Oct"));
+  for (const t of ["22:00", "22:30", "23:00", "23:30"]) {
+    assert(html.includes(`${t}, New York, UTC-4, Mon 5 Oct`), t);
+  }
+  assert(/00:00, New York, UTC-4(?!,)/.test(html), "00:00 Tuesday: no note");
+  assert(/05:30, New York, UTC-4(?!,)/.test(html), "05:30 Tuesday: no note");
+});
+
+Deno.test("mig#50: when no slot falls on the clicked day in the visitor's zone, the heading names the first slot's day", async () => {
+  // Auckland (UTC+13 from late September) 09:00-10:00 on Tuesday 6
+  // October is 16:00-17:00 on Monday 5 October in New York.
+  const html = await renderIndex(
+    `http://localhost/?date=${TEST_DATE}&tz=America/New_York`,
+    {
+      hostTz: "Pacific/Auckland",
+      weeklyAvailability: parseWeeklyAvailability("TUE 09:00-10:00"),
+    },
+  );
   assertEquals(gridHeading(html), "Monday, 5 October 2026");
-  assert(/22:00, New York, UTC-4(?!,)/.test(html), "22:00 Monday: no note");
-  assert(/23:30, New York, UTC-4(?!,)/.test(html), "23:30 Monday: no note");
-  assert(html.includes("00:00, New York, UTC-4, Tue 6 Oct"));
-  assert(html.includes("05:30, New York, UTC-4, Tue 6 Oct"));
+  assertFalse(html.includes("Tuesday, 6 October 2026"), "DateCard too");
+  assert(html.includes("16:00, New York, UTC-4"), "expected the 09:00 slot");
+  assertFalse(/UTC-4, \w{3} \d/.test(html), "no slot needs a date note");
 });

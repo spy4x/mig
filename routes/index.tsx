@@ -189,11 +189,11 @@ export default define.page(function Index(ctx) {
   // with a `?tz=` already set. Only HH:MM shows on the slot itself —
   // the zone renders once, in the grid's header (mig#48) — except when
   // this slot's own offset disagrees with the header's, e.g. a
-  // daylight-saving change landing on it. BookingFlow names the grid
-  // after the first slot's day (mig#50), so a slot on another day in
-  // the display zone carries a `dateNote`, as it does after hydration.
-  const firstDay = date
-    ? gridDay(daySlots[0]?.instant, date, displayTz).date
+  // daylight-saving change landing on it. A slot on another day than
+  // the one BookingFlow names above the grid (gridDay, mig#50) carries
+  // a `dateNote`, as it does after hydration.
+  const gridDate = date
+    ? gridDay(daySlots.map((s) => s.instant), date, displayTz).date
     : null;
   const slots: IndexData["slots"] = daySlots.map((s) => {
     const display = formatSlotDisplay(s.instant, displayTz, header!.offset);
@@ -203,7 +203,7 @@ export default define.page(function Index(ctx) {
       displayHHMM: display.hhmm,
       ariaZoneLabel: display.ariaZoneLabel,
       offsetNote: display.offsetNote,
-      dateNote: isoDateInTz(s.instant, displayTz) !== firstDay
+      dateNote: isoDateInTz(s.instant, displayTz) !== gridDate
         ? formatShortDateAt(s.instant, displayTz)
         : undefined,
     };

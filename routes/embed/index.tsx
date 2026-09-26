@@ -59,7 +59,7 @@ export interface EmbedData {
    *  noon of the host day (mig#15 review) — e.g. "Wednesday, 23
    *  September 2026" for a 09:00 Thursday Ho Chi Minh slot shown to a
    *  New York visitor as 22:00 Wednesday. Feeds TimeCard specifically;
-   *  `selectedDateLabel` (the first slot's day, mig#50) still feeds
+   *  `selectedDateLabel` (the picked day, mig#50) still feeds
    *  DateCard, which shows the *picked day*, not a specific time. */
   slotDateLabel: string | null;
   slots: SlotCell[];
@@ -205,14 +205,11 @@ export const handler = define.handlers({
     let slots: SlotCell[] = [];
     let gridZoneLabel: string | null = null;
     // Date label for the picked day, in the display zone (mig#50): the
-    // first shown slot's own date, the same anchor as the zone label —
-    // the standalone island does the same through `gridDay`. Noon of
-    // the host day, the old anchor, can be the visitor's previous day
-    // while every slot below is on the next. With no slot, the picked
-    // calendar day itself (the calendar grid stays host-anchored, which
-    // mig#15 allows).
+    // clicked date when a slot falls on it, else the first slot's day,
+    // and the clicked date when there is no slot — see gridDay, which
+    // the standalone island uses too.
     let selectedDateLabel: string | null = date
-      ? gridDay(undefined, date, displayTz).long
+      ? gridDay([], date, displayTz).long
       : null;
     if (date && !cfg.blockedDates.has(date)) {
       const dayBookings = ctx.state.bookings.forDate(date);
@@ -255,7 +252,7 @@ export const handler = define.handlers({
         displayTz,
       );
       gridZoneLabel = header?.label ?? null;
-      const day = gridDay(withInstant[0]?.instant, date, displayTz);
+      const day = gridDay(withInstant.map((s) => s.instant), date, displayTz);
       selectedDateLabel = day.long;
 
       slots = withInstant.map((s) => {
