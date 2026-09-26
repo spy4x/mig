@@ -210,33 +210,59 @@ See `.env.example` for the full list of env vars.
 
 ## Configuration
 
-| Env var                | Required | Default | Description                                                                                                                                                         |
-| ---------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HOST_NAME`            | yes      | —       | Owner's display name                                                                                                                                                |
-| `HOST_EMAIL`           | yes      | —       | Owner's email (receives booking + cancel notifications)                                                                                                             |
-| `HOST_TZ`              | yes      | —       | IANA timezone, e.g. `Europe/Berlin`                                                                                                                                 |
-| `MEETING_URL`          | yes      | —       | Static meeting URL embedded in every confirmation                                                                                                                   |
-| `WEEKLY_AVAILABILITY`  | yes      | —       | Comma-separated `DAY HH:MM-HH:MM` list, e.g. `MON-FRI 09:00-17:00` (see below)                                                                                      |
-| `SLOT_DURATION_MIN`    | yes      | —       | Slot length in minutes (e.g. 30)                                                                                                                                    |
-| `CANCEL_SECRET`        | yes      | —       | Random 32+ byte secret for HMAC sign/verify                                                                                                                         |
-| `SMTP_HOST`            | yes      | —       | SMTP server hostname                                                                                                                                                |
-| `SMTP_PORT`            | yes      | `587`   | SMTP port                                                                                                                                                           |
-| `SMTP_USER`            | yes      | —       | SMTP username                                                                                                                                                       |
-| `SMTP_PASSWORD`        | yes      | —       | SMTP password. Wrap in single quotes if it contains shell-special characters.                                                                                       |
-| `SMTP_FROM`            | yes      | —       | From address (`Name <addr@example.com>`)                                                                                                                            |
-| `PUBLIC_URL`           | yes      | —       | Absolute URL where mig is reachable (for links in emails)                                                                                                           |
-| `MIN_NOTICE_HOURS`     | no       | `6`     | Minimum hours from now until first bookable slot                                                                                                                    |
-| `BOOKING_HORIZON_DAYS` | no       | `14`    | Maximum days ahead bookable                                                                                                                                         |
-| `BLOCKED_DATES`        | no       | —       | Blocked dates, see syntax below                                                                                                                                     |
-| `RATE_LIMIT_PER_5MIN`  | no       | `1`     | Max bookings per IP per 5 minutes                                                                                                                                   |
-| `THEME`                | no       | `auto`  | Default theme for a visitor who hasn't picked one with the toggle: `light`, `dark`, or `auto` (follow OS). `/embed` uses it unless `?theme=` is given               |
-| `PORT`                 | no       | `8080`  | HTTP listen port                                                                                                                                                    |
-| `HIDE_BRANDING`        | no       | `false` | `true`/`1`/`yes` hides the "Powered by mig" footer + GitHub link; `false`/`0`/`no`/empty/absent shows it. Case-insensitive, trimmed. Any other value stops startup. |
-| `GITHUB_URL`           | no       | (see)   | Override the URL the footer links to. Defaults to `https://github.com/spy4x/mig`                                                                                    |
-| `NTFY_URL`             | no       | —       | NTFY server base URL (e.g. `https://ntfy.example.com`). All four NTFY vars must be set to enable.                                                                   |
-| `NTFY_TOPIC`           | no       | —       | NTFY topic to publish to.                                                                                                                                           |
-| `NTFY_TOKEN`           | no       | —       | NTFY bearer token.                                                                                                                                                  |
-| `NTFY_MODE`            | no       | `all`   | Which events push: `all`, `errors`, `booking`, or `cancel`.                                                                                                         |
+| Env var                | Required | Default | Description                                                                                                                                                                                                                               |
+| ---------------------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HOST_NAME`            | yes      | —       | Owner's display name                                                                                                                                                                                                                      |
+| `HOST_EMAIL`           | yes      | —       | Owner's email (receives booking + cancel notifications)                                                                                                                                                                                   |
+| `HOST_TZ`              | yes      | —       | IANA timezone, e.g. `Europe/Berlin`                                                                                                                                                                                                       |
+| `MEETING_URL`          | yes      | —       | Static meeting URL embedded in every confirmation                                                                                                                                                                                         |
+| `WEEKLY_AVAILABILITY`  | yes      | —       | Comma-separated `DAY HH:MM-HH:MM` list, e.g. `MON-FRI 09:00-17:00` (see below)                                                                                                                                                            |
+| `SLOT_DURATION_MIN`    | yes      | —       | Slot length in minutes (e.g. 30)                                                                                                                                                                                                          |
+| `CANCEL_SECRET`        | yes      | —       | Random 32+ byte secret for HMAC sign/verify                                                                                                                                                                                               |
+| `SMTP_HOST`            | yes      | —       | SMTP server hostname                                                                                                                                                                                                                      |
+| `SMTP_PORT`            | yes      | `587`   | SMTP port                                                                                                                                                                                                                                 |
+| `SMTP_USER`            | yes      | —       | SMTP username                                                                                                                                                                                                                             |
+| `SMTP_PASSWORD`        | yes      | —       | SMTP password. Wrap in single quotes if it contains shell-special characters.                                                                                                                                                             |
+| `SMTP_FROM`            | yes      | —       | From address (`Name <addr@example.com>`)                                                                                                                                                                                                  |
+| `PUBLIC_URL`           | yes      | —       | Absolute URL where mig is reachable (for links in emails)                                                                                                                                                                                 |
+| `MIN_NOTICE_HOURS`     | no       | `6`     | Minimum hours from now until first bookable slot                                                                                                                                                                                          |
+| `BOOKING_HORIZON_DAYS` | no       | `14`    | Maximum days ahead bookable                                                                                                                                                                                                               |
+| `BLOCKED_DATES`        | no       | —       | Blocked dates, see syntax below                                                                                                                                                                                                           |
+| `RATE_LIMIT_PER_5MIN`  | no       | `1`     | Max bookings per IP per 5 minutes                                                                                                                                                                                                         |
+| `TRUSTED_PROXY_HEADER` | no       | —       | The one header mig reads a visitor's address from, for the rate limit: `cf-connecting-ip`, `x-forwarded-for` or `x-real-ip`. Unset trusts no header. Any other value stops startup. See [Behind a reverse proxy](#behind-a-reverse-proxy) |
+| `THEME`                | no       | `auto`  | Default theme for a visitor who hasn't picked one with the toggle: `light`, `dark`, or `auto` (follow OS). `/embed` uses it unless `?theme=` is given                                                                                     |
+| `PORT`                 | no       | `8080`  | HTTP listen port                                                                                                                                                                                                                          |
+| `HIDE_BRANDING`        | no       | `false` | `true`/`1`/`yes` hides the "Powered by mig" footer + GitHub link; `false`/`0`/`no`/empty/absent shows it. Case-insensitive, trimmed. Any other value stops startup.                                                                       |
+| `GITHUB_URL`           | no       | (see)   | Override the URL the footer links to. Defaults to `https://github.com/spy4x/mig`                                                                                                                                                          |
+| `NTFY_URL`             | no       | —       | NTFY server base URL (e.g. `https://ntfy.example.com`). All four NTFY vars must be set to enable.                                                                                                                                         |
+| `NTFY_TOPIC`           | no       | —       | NTFY topic to publish to.                                                                                                                                                                                                                 |
+| `NTFY_TOKEN`           | no       | —       | NTFY bearer token.                                                                                                                                                                                                                        |
+| `NTFY_MODE`            | no       | `all`   | Which events push: `all`, `errors`, `booking`, or `cancel`.                                                                                                                                                                               |
+
+### Behind a reverse proxy
+
+mig limits bookings per visitor address (`RATE_LIMIT_PER_5MIN`). By default the
+address is the one the connection came from, and mig ignores every forwarding
+header, because a client that connects directly can put any value in them.
+Behind a reverse proxy, the connection comes from the proxy, so every visitor
+shares the proxy's limit. Set `TRUSTED_PROXY_HEADER` to the one header your
+proxy sets:
+
+- `x-real-ip` — Traefik with default settings, or nginx with
+  `proxy_set_header X-Real-IP $remote_addr`.
+- `x-forwarded-for` — mig reads the first address in the list. Use it only when
+  the proxy replaces the header, as Traefik does by default. A proxy that
+  appends to it (nginx's `$proxy_add_x_forwarded_for`) keeps the client's own
+  value first, so the client picks its own address.
+- `cf-connecting-ip` — Cloudflare sets it on every request it forwards. Use it
+  only when the server accepts connections from Cloudflare alone (a firewall
+  limited to Cloudflare's addresses, or a Cloudflare Tunnel). A client that
+  reaches the server directly can send any value, and Traefik passes the header
+  through unchanged.
+
+Name a header your proxy does not set, and a client can pick a new address for
+every request and never be limited. When the trusted header is missing from a
+request, mig falls back to the connection's address.
 
 ### `WEEKLY_AVAILABILITY` syntax
 
