@@ -169,7 +169,7 @@ deno task build && deno task screenshots
 `docs/screenshots/` (the booking-flow GIF, shown first under "Demo video", and
 the confirmation email in a dark mail-client frame) and
 `docs/social-preview.png`, which the owner uploads by hand in the GitHub
-repository settings. The social preview's hero, the light booking page, is taken
+repository settings. The social preview's hero, the dark booking page, is taken
 into the throwaway directory, not the repository. The pictures are placeholders
 only: "Jane Doe", example.com addresses and Europe/Berlin, never real data, so
 rerunning the command is always safe to commit. How the email's mail-client
