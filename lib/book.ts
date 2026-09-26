@@ -42,19 +42,27 @@ function capRedirectField(value: string | undefined): string | undefined {
     : value;
 }
 
+/** The peer's IP address, or `undefined` for a transport without one
+ *  (a Unix socket). */
+function socketHostname(addr: Deno.Addr): string | undefined {
+  return "hostname" in addr ? addr.hostname : undefined;
+}
+
 export async function handleBookingSubmit(
   ctx: Context<State>,
   basePath: string,
 ): Promise<Response> {
   const cfg = ctx.state.config;
-  // `true` trusts CF-Connecting-IP, then X-Forwarded-For's first hop,
-  // then X-Real-IP — mig's own order before mig#57 (the ts-libs default,
-  // `false`, would put every visitor in one "0.0.0.0" bucket, since no
-  // socket address is passed). This trusts headers any client can set:
-  // compose.example.yml publishes port 8080 directly, and a client
-  // there picks its own bucket by sending CF-Connecting-IP. See
-  // https://github.com/spy4x/mig/issues/59 for the fix.
-  const ip = clientIp(ctx.req, undefined, true);
+  // mig#59: only the header TRUSTED_PROXY_HEADER names is read, and the
+  // socket address is the fallback. With the setting unset, no header is
+  // read, so a client connecting directly cannot pick its own bucket by
+  // sending CF-Connecting-IP, X-Forwarded-For or X-Real-IP, and two
+  // clients without those headers no longer share one "0.0.0.0" bucket.
+  const ip = clientIp(
+    ctx.req,
+    socketHostname(ctx.info.remoteAddr),
+    cfg.trustedProxyHeader ?? false,
+  );
 
   function errRedirect(
     message: string,

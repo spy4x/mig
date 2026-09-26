@@ -88,6 +88,10 @@ Deno.test("POST /embed/book: a successful booking redirects to /embed/confirmed,
   });
   const ctx = {
     req,
+    // The socket address handleBookingSubmit falls back to (mig#59).
+    info: {
+      remoteAddr: { transport: "tcp", hostname: "192.0.2.1", port: 40000 },
+    },
     state: {
       config: cfg,
       bookings,
