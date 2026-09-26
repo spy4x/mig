@@ -720,10 +720,10 @@ async function main(): Promise<void> {
       page.locator(`section[aria-labelledby="step-time"] :is(button, a)`)
         .first().waitFor();
 
-    // The social preview's hero: the light booking page with the picked
+    // The social preview's hero: the dark booking page with the picked
     // date's slots. It lands in the throwaway directory, not the README.
     const heroFile = new URL("hero.png", `file://${tmp}/`);
-    const heroCtx = await contextFor("light");
+    const heroCtx = await contextFor("dark");
     const heroPage = await heroCtx.newPage();
     await heroPage.goto(`${PUBLIC_URL}/?date=${date}`, {
       waitUntil: "networkidle",
@@ -853,7 +853,7 @@ async function main(): Promise<void> {
       );
     }
 
-    // The social preview: the product on a neutral background, name and one line.
+    // The social preview: the dark product on a dark background, name and one line.
     const hero = await Deno.readFile(heroFile);
     const heroSrc = `data:image/png;base64,${
       btoa(Array.from(hero, (b) => String.fromCharCode(b)).join(``))
@@ -863,20 +863,20 @@ async function main(): Promise<void> {
       deviceScaleFactor: 1,
       timezoneId: "Europe/Berlin",
       locale: "en-US",
-      colorScheme: "light",
+      colorScheme: "dark",
     });
     const socialPage = await socialCtx.newPage();
     await socialPage.setContent(
       `<!doctype html><html><head><meta charset="utf-8"><style>
-        body { margin: 0; width: 1280px; height: 640px; overflow: hidden; background: #eef0f3;
-          font-family: system-ui, sans-serif; color: #18181b; position: relative; }
+        body { margin: 0; width: 1280px; height: 640px; overflow: hidden; background: #020617;
+          font-family: system-ui, sans-serif; color: #f8fafc; position: relative; }
         .text { position: absolute; left: 72px; top: 0; bottom: 0; width: 420px;
           display: flex; flex-direction: column; justify-content: center; }
         .name { font-size: 112px; font-weight: 800; letter-spacing: -4px; line-height: 1; }
-        .line { font-size: 30px; line-height: 1.3; color: #3f3f46; margin-top: 24px; }
-        .url { font-size: 20px; color: #71717a; margin-top: 32px; }
+        .line { font-size: 30px; line-height: 1.3; color: #cbd5e1; margin-top: 24px; }
+        .url { font-size: 20px; color: #94a3b8; margin-top: 32px; }
         img { position: absolute; left: 540px; top: 72px; width: 880px; border-radius: 14px;
-          box-shadow: 0 24px 60px rgba(24, 24, 27, .18), 0 0 0 1px rgba(24, 24, 27, .08); }
+          box-shadow: 0 24px 60px rgba(0, 0, 0, .5), 0 0 0 1px rgba(148, 163, 184, .18); }
       </style></head><body>
         <div class="text">
           <div class="name">mig</div>
