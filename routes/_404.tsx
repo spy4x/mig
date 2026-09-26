@@ -3,6 +3,14 @@ import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
 import { forcedThemeFor } from "../lib/theme.ts";
 
+// Fresh renders the not-found page with status 200 unless its handler
+// sets another one, so a missing page answered 200 (mig#68). One handler
+// for every method: a POST to a missing path is just as not found.
+export const handler = define.handlers(() => ({
+  data: undefined,
+  status: 404,
+}));
+
 export default define.page(function NotFound({ state, url }) {
   const cfg = state.config;
   return (
