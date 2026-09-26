@@ -26,3 +26,4 @@ _fresh
 # The standalone binary from `deno task compile` (~105 MB) has no place in
 # the image build context.
 /mig
+/mig.exe

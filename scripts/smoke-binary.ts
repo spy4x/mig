@@ -24,31 +24,32 @@ async function main(): Promise<void> {
   const tmp = await Deno.makeTempDir({ prefix: "mig-smoke-binary-" });
   const port = freePort();
   const base = `http://127.0.0.1:${port}`;
-  const server = new Deno.Command(BINARY, {
-    cwd: tmp,
-    clearEnv: true,
-    env: {
-      HOSTNAME: "nowhere.invalid",
-      HOST_NAME: "Jane Doe",
-      HOST_EMAIL: "jane@example.com",
-      HOST_TZ: "Europe/Berlin",
-      MEETING_URL: "https://video.example.com/jane-doe",
-      WEEKLY_AVAILABILITY: "MON-FRI 09:00-17:00",
-      SLOT_DURATION_MIN: "30",
-      CANCEL_SECRET: "placeholder-placeholder-placeholder",
-      SMTP_HOST: "127.0.0.1",
-      SMTP_PORT: "2525",
-      SMTP_USER: "jane@example.com",
-      SMTP_PASSWORD: "placeholder",
-      SMTP_FROM: "Bookings <book@example.com>",
-      PUBLIC_URL: "https://meet.example.com",
-      PORT: String(port),
-      DATA_PATH: `${tmp}/bookings.json`,
-    },
-    stdout: "inherit",
-    stderr: "inherit",
-  }).spawn();
+  let server: Deno.ChildProcess | null = null;
   try {
+    server = new Deno.Command(BINARY, {
+      cwd: tmp,
+      clearEnv: true,
+      env: {
+        HOSTNAME: "nowhere.invalid",
+        HOST_NAME: "Jane Doe",
+        HOST_EMAIL: "jane@example.com",
+        HOST_TZ: "Europe/Berlin",
+        MEETING_URL: "https://video.example.com/jane-doe",
+        WEEKLY_AVAILABILITY: "MON-FRI 09:00-17:00",
+        SLOT_DURATION_MIN: "30",
+        CANCEL_SECRET: "placeholder-placeholder-placeholder",
+        SMTP_HOST: "127.0.0.1",
+        SMTP_PORT: "2525",
+        SMTP_USER: "jane@example.com",
+        SMTP_PASSWORD: "placeholder",
+        SMTP_FROM: "Bookings <book@example.com>",
+        PUBLIC_URL: "https://meet.example.com",
+        PORT: String(port),
+        DATA_PATH: `${tmp}/bookings.json`,
+      },
+      stdout: "inherit",
+      stderr: "inherit",
+    }).spawn();
     await waitForHealth(base, server);
     for (const { path, contains } of CHECKS) {
       const res = await fetch(`${base}${path}`);
@@ -62,12 +63,14 @@ async function main(): Promise<void> {
       console.log(`ok ${path} ${res.status} ${body.length} bytes`);
     }
   } finally {
-    try {
-      server.kill("SIGTERM");
-    } catch {
-      // Already exited.
+    if (server) {
+      try {
+        server.kill("SIGTERM");
+      } catch {
+        // Already exited.
+      }
+      await server.status;
     }
-    await server.status;
     await Deno.remove(tmp, { recursive: true });
   }
 }
