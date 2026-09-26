@@ -59,3 +59,33 @@ document.documentElement.dataset.theme=d3?"dark":"light";
 }
 }catch(_e){}})();`;
 }
+
+// mig#44 — /embed's forced theme (`?theme=dark|light`) is read straight
+// from the URL, not threaded in via route state: routes/_app.tsx has to
+// resolve it before the shared layout renders <html>, and every route
+// already has `url` in its PageProps for free. `auto` (the default,
+// including no param at all, or any other route) keeps today's
+// behaviour untouched: no server-rendered class, no data-theme, and
+// the same client bootstrap script runs. Scoped to `/embed*` — the
+// standalone site has no such query param and must not start
+// honouring one it never advertised.
+//
+// mig#52 — without an explicit `?theme=light|dark`, /embed follows the
+// owner's `THEME` setting the same way: forced server-side when it is
+// `light` or `dark`, today's client bootstrap when it is `auto`. An
+// iframe has no theme toggle, so a visitor's stored preference never
+// overrides `THEME` there; on the standalone site it still does (see
+// themeBootstrapScript above).
+//
+// mig#63 — the not-found and error pages use it too: when it returns a
+// theme, _app.tsx leaves out the bootstrap script, so their theme button
+// would do nothing and they hide it.
+export function forcedThemeFor(
+  url: URL,
+  configured: ThemeParam,
+): "light" | "dark" | null {
+  if (!url.pathname.startsWith("/embed")) return null;
+  const parsed = parseThemeParam(url.searchParams.get("theme"));
+  if (parsed !== "auto") return parsed;
+  return configured === "auto" ? null : configured;
+}

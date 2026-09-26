@@ -1,12 +1,13 @@
 import { define } from "../lib/utils.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
+import { forcedThemeFor } from "../lib/theme.ts";
 
-export default define.page(function NotFound({ state }) {
+export default define.page(function NotFound({ state, url }) {
   const cfg = state.config;
   return (
     <div class="min-h-dvh flex flex-col">
-      <Header compact />
+      <Header compact themeToggle={forcedThemeFor(url, cfg.theme) === null} />
       <main class="flex-1 grid place-items-center px-6 py-16">
         <div class="max-w-sm text-center">
           <p class="text-xs font-medium uppercase tracking-[0.18em] text-brand-600 dark:text-brand-300 mb-3">
