@@ -251,3 +251,34 @@ Deno.test("POST /api/book: an oversized streamed body without Content-Length is 
   assertEquals(res.status, 413);
   assertEquals(stored, 0);
 });
+
+Deno.test("POST /api/book: a body that stalls is answered with 408 and books nothing", async () => {
+  const path = `/tmp/mig-book-stall-test-${crypto.randomUUID()}.json`;
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  // A body that never sends a byte and never ends, as a slow-loris
+  // client would. The bounded read gives up after its 10 s stall budget.
+  const req = new Request("http://localhost/api/book", {
+    method: "POST",
+    body: new ReadableStream<Uint8Array>({ start() {} }),
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+  });
+  const ctx = {
+    req,
+    info: {
+      remoteAddr: { transport: "tcp", hostname: "192.0.2.1", port: 40002 },
+    },
+    state: {
+      config: fakeConfig(),
+      bookings,
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    },
+  } as unknown as Context<State>;
+  try {
+    const res = await handler.POST!(ctx);
+    assertEquals(res.status, 408);
+    assertEquals(bookings.list().length, 0);
+  } finally {
+    await rm(path);
+  }
+});
