@@ -6,7 +6,6 @@
 // "" literal in routes/api/book.ts for "/embed" turns it red.
 
 import { assertEquals } from "@std/assert";
-import nodemailer from "nodemailer";
 import type { Context } from "fresh";
 import type { State } from "../../lib/utils.ts";
 import type { Config } from "../../lib/types.ts";
@@ -65,7 +64,8 @@ async function rm(path: string) {
   }
 }
 
-setTransportForTesting(nodemailer.createTransport({ jsonTransport: true }));
+// Every send resolves at once with no network I/O.
+setTransportForTesting({ sendMail: () => Promise.resolve({}) });
 
 Deno.test("POST /api/book: a successful booking redirects to /confirmed, not /embed/confirmed", async () => {
   const cfg = fakeConfig();

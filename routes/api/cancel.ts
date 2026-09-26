@@ -1,7 +1,7 @@
 // POST /api/cancel — cancel a booking. Form fields: id, token, reason.
 
 import { define } from "../../lib/utils.ts";
-import { verifyCancelToken } from "../../lib/tokens.ts";
+import { verifyOpaqueToken } from "@spy4x/platform/tokens";
 import { sendCancellationEmails } from "../../lib/email.ts";
 import { notifyBookingCancelled } from "../../lib/notify.ts";
 
@@ -27,7 +27,7 @@ export const handler = define.handlers({
         303,
       );
     }
-    const tokenOk = await verifyCancelToken(
+    const tokenOk = await verifyOpaqueToken(
       token,
       booking.cancelTokenHash,
       cfg.cancelSecret,
@@ -71,10 +71,14 @@ export const handler = define.handlers({
       );
     }
 
-    try {
-      await sendCancellationEmails(cfg, updated, cancelledBy, reason);
-    } catch (e) {
-      console.error("mig: cancellation email failed:", e);
+    const sent = await sendCancellationEmails(
+      cfg,
+      updated,
+      cancelledBy,
+      reason,
+    );
+    if (!sent.ok) {
+      console.error("mig: cancellation email failed:", sent.error);
     }
 
     // NTFY push for the cancellation (subject to NTFY_MODE).

@@ -1,10 +1,18 @@
-// SMTP via nodemailer. Sends multipart/alternative (text + HTML) emails,
-// optionally with an ICS attachment.
+// Email: SMTP through @spy4x/email's sender (nodemailer underneath).
+// Sends multipart/alternative (text + HTML) emails, optionally with an
+// ICS attachment. Every send returns a Result instead of throwing.
 
-import nodemailer from "nodemailer";
+import { createSmtpSender, type SmtpTransport } from "@spy4x/email/smtp";
+import {
+  DARK_HTML_SHELL_THEME,
+  escapeHtml as esc,
+  htmlWrap as shellWrap,
+} from "@spy4x/email/html";
+import { type EmailAttachment, icalAttachment } from "@spy4x/email/message";
 import type { Config } from "./types.ts";
 import type { Booking } from "./types.ts";
-import { bookingIcs } from "./invite.ts";
+import { err, ok, type Result } from "./types.ts";
+import { bookingInvite } from "./invite.ts";
 import { isValidTimeZone, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalTimeZoneOr,
@@ -23,11 +31,7 @@ export interface SendEmailOpts {
   subject: string;
   text: string;
   html?: string;
-  attachments?: Array<{
-    filename: string;
-    content: string;
-    contentType: string;
-  }>;
+  attachments?: EmailAttachment[];
 }
 
 export interface RecipientEmails {
@@ -35,67 +39,72 @@ export interface RecipientEmails {
   owner: SendEmailOpts;
 }
 
-let transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
+/** What a send reports: nothing on success, the (password-free)
+ *  reason on failure. */
+export type SendOutcome = Result<void, string>;
 
-function getTransport(config: Config) {
-  if (transporter) return transporter;
-  transporter = nodemailer.createTransport({
-    host: config.smtp.host,
-    port: config.smtp.port,
-    secure: config.smtp.port === 465, // implicit TLS for 465, STARTTLS otherwise
-    auth: {
-      user: config.smtp.user,
-      pass: config.smtp.pass,
-    },
-  });
-  return transporter;
-}
+let transportForTesting: SmtpTransport | null = null;
 
 /** Test-only seam: replace the transport `sendEmail` uses instead of
  *  building one from `config.smtp` (which would otherwise open a real
- *  socket to `config.smtp.host`). Pass a `nodemailer.createTransport({
- *  jsonTransport: true })` transport to make sends resolve instantly
- *  with no network I/O, or `null` to go back to the real transport on
+ *  socket to `config.smtp.host`). Pass an object whose `sendMail`
+ *  resolves or rejects, or `null` to go back to the real transport on
  *  the next send. Never call this outside a test. */
-export function setTransportForTesting(
-  t: ReturnType<typeof nodemailer.createTransport> | null,
-): void {
-  transporter = t;
-}
-
-function parseAddress(from: string): { name: string; addr: string } {
-  const m = from.match(/^\s*(?:"?([^"<]*)"?\s*)?<([^>]+)>\s*$/);
-  if (m) return { name: m[1].trim(), addr: m[2].trim() };
-  return { name: "", addr: from.trim() };
+export function setTransportForTesting(t: SmtpTransport | null): void {
+  transportForTesting = t;
 }
 
 export async function sendEmail(
   config: Config,
   opts: SendEmailOpts,
-): Promise<void> {
-  const t = getTransport(config);
-  const sender = parseAddress(config.smtp.from);
+): Promise<SendOutcome> {
+  const testTransport = transportForTesting;
   try {
-    await t.sendMail({
-      from: sender.name ? `${sender.name} <${sender.addr}>` : sender.addr,
+    const sender = createSmtpSender(
+      {
+        host: config.smtp.host,
+        port: config.smtp.port,
+        user: config.smtp.user,
+        pass: config.smtp.pass,
+        from: config.smtp.from,
+        // mig has always upgraded to TLS only when the relay offers
+        // STARTTLS. Requiring it would stop every booking on a relay
+        // without it (a local postfix, the screenshot script's sink).
+        requireTls: false,
+      },
+      testTransport === null ? undefined : () => testTransport,
+    );
+    const sent = await sender.send({
       to: opts.to,
       subject: opts.subject,
       text: opts.text,
-      html: opts.html ?? opts.text,
-      attachments: opts.attachments?.map((a) => ({
-        filename: a.filename,
-        content: a.content,
-        contentType: a.contentType,
-        encoding: "utf8",
-      })),
+      html: opts.html,
+      attachments: opts.attachments,
     });
+    return sent.ok ? ok(undefined) : err(sent.error);
   } catch (e) {
-    throw new Error(
-      `SMTP send failed (${config.smtp.host}:${config.smtp.port}, to=${opts.to}): ${
-        (e as Error).message
-      }`,
+    // createSmtpSender throws only on a malformed SMTP_* setting, which
+    // lib/config.ts already rejects at startup; the message names the
+    // setting, never the password.
+    return err(
+      `SMTP send failed (${config.smtp.host}): ${(e as Error).message}`,
     );
   }
+}
+
+/** Builds one email and sends it; a throw while building is reported
+ *  as a failed send, since nothing went out either way. */
+async function buildAndSend(
+  config: Config,
+  build: () => SendEmailOpts,
+): Promise<SendOutcome> {
+  let opts: SendEmailOpts;
+  try {
+    opts = build();
+  } catch (e) {
+    return err(`email could not be built: ${(e as Error).message}`);
+  }
+  return await sendEmail(config, opts);
 }
 
 // mig#19: split into two functions, owner then guest, rather than one
@@ -118,22 +127,26 @@ export async function sendEmail(
 // a guest-side failure after a successful owner send is handled by
 // lib/book.ts's correction email and, best-effort, by the NTFY push
 // in lib/notify.ts.
-export async function sendOwnerBookingEmail(
+export function sendOwnerBookingEmail(
   config: Config,
   booking: Booking,
   cancelUrl: string,
-): Promise<void> {
-  const { owner } = buildBookingEmails(config, booking, cancelUrl);
-  await sendEmail(config, owner);
+): Promise<SendOutcome> {
+  return buildAndSend(
+    config,
+    () => buildBookingEmails(config, booking, cancelUrl).owner,
+  );
 }
 
-export async function sendGuestBookingEmail(
+export function sendGuestBookingEmail(
   config: Config,
   booking: Booking,
   cancelUrl: string,
-): Promise<void> {
-  const { guest } = buildBookingEmails(config, booking, cancelUrl);
-  await sendEmail(config, guest);
+): Promise<SendOutcome> {
+  return buildAndSend(
+    config,
+    () => buildBookingEmails(config, booking, cancelUrl).guest,
+  );
 }
 
 export interface CorrectionEmailOpts {
@@ -159,11 +172,19 @@ export interface CorrectionEmailOpts {
 // the rollback's own disk write fails too (lib/book.ts's `rolledBack`
 // goes false), the booking may still be on disk and come back after a
 // restart — `opts.rolledBack` picks the matching wording instead.
-export async function sendBookingCorrectionEmail(
+export function sendBookingCorrectionEmail(
   config: Config,
   booking: Booking,
   opts: CorrectionEmailOpts,
-): Promise<void> {
+): Promise<SendOutcome> {
+  return buildAndSend(config, () => correctionEmail(config, booking, opts));
+}
+
+function correctionEmail(
+  config: Config,
+  booking: Booking,
+  opts: CorrectionEmailOpts,
+): SendEmailOpts {
   const { rolledBack } = opts;
   const ownerWhenShort = formatOwnerClock(
     booking.date,
@@ -178,7 +199,7 @@ export async function sendBookingCorrectionEmail(
     booking.guestTz,
     true,
   );
-  await sendEmail(config, {
+  return {
     to: config.hostEmail,
     subject: rolledBack
       ? `Not booked: ${booking.guestName}, ${ownerWhenShort}`
@@ -191,7 +212,7 @@ export async function sendBookingCorrectionEmail(
     // cancelled booking, but sets no SEQUENCE, so a client may not treat
     // it as replacing the REQUEST. The email body below tells the host to
     // ignore the earlier invite instead.
-  });
+  };
 }
 
 function correctionText(
@@ -272,17 +293,15 @@ export function buildBookingEmails(
   cancelUrl: string,
 ): RecipientEmails {
   const guestTz = guestTimeZone(booking);
-  const guestIcs = bookingIcs(booking, config, cancelUrl, guestTz);
+  const guestIcs = inviteAttachment(
+    bookingInvite(booking, config, cancelUrl, guestTz),
+  );
   // review follow-up: the owner's invite now carries the visitor's
   // clock too, the same way the owner email body already does — see
   // bookingIcs's doc comment. The guest's own ics above passes no
   // `visitorTz`, so its DESCRIPTION is unaffected.
-  const ownerIcs = bookingIcs(
-    booking,
-    config,
-    cancelUrl,
-    booking.hostTz,
-    booking.guestTz,
+  const ownerIcs = inviteAttachment(
+    bookingInvite(booking, config, cancelUrl, booking.hostTz, booking.guestTz),
   );
   const instant = bookingInstant(booking);
   const guestWhen = formatClockShortAt(instant, guestTz);
@@ -299,39 +318,35 @@ export function buildBookingEmails(
       subject: `Booking confirmed: ${guestWhen}`,
       text: guestText(config, booking, cancelUrl),
       html: guestHtml(config, booking, cancelUrl),
-      attachments: [
-        {
-          filename: "meeting.ics",
-          content: guestIcs,
-          contentType: "text/calendar; method=REQUEST",
-        },
-      ],
+      attachments: [guestIcs],
     },
     owner: {
       to: config.hostEmail,
       subject: `New booking: ${booking.guestName} on ${ownerWhen}`,
       text: ownerText(config, booking, cancelUrl),
       html: ownerHtml(config, booking, cancelUrl),
-      attachments: [
-        {
-          filename: "meeting.ics",
-          content: ownerIcs,
-          contentType: "text/calendar; method=REQUEST",
-        },
-      ],
+      attachments: [ownerIcs],
     },
   };
 }
 
+// Guest first, then owner; stops at the first failure, as it did when
+// a failed send threw.
 export async function sendCancellationEmails(
   config: Config,
   booking: Booking,
   cancelledBy: "owner" | "guest",
   reason: string | undefined,
-): Promise<void> {
-  const emails = buildCancellationEmails(config, booking, cancelledBy, reason);
-  await sendEmail(config, emails.guest);
-  await sendEmail(config, emails.owner);
+): Promise<SendOutcome> {
+  let emails: RecipientEmails;
+  try {
+    emails = buildCancellationEmails(config, booking, cancelledBy, reason);
+  } catch (e) {
+    return err(`email could not be built: ${(e as Error).message}`);
+  }
+  const guest = await sendEmail(config, emails.guest);
+  if (!guest.ok) return guest;
+  return await sendEmail(config, emails.owner);
 }
 
 export function buildCancellationEmails(
@@ -625,34 +640,32 @@ function guestTimeZone(booking: Booking): string {
   return canonicalTimeZoneOr(booking.guestTz, booking.hostTz);
 }
 
-function htmlWrap(config: Config, body: string): string {
-  // Constrain to ~480px so the email reads as a letter, not a full
-  // desktop pane. The body's dark background still extends to the
-  // email-client viewport edges, which keeps the dark-mode look
-  // clean without leaving the content dangling in whitespace.
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:24px;background:#0f172a;color:#e2e8f0;
-             font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
-             font-size:16px;line-height:1.6">
-<div style="max-width:480px;margin:0 auto">
-  <div style="margin-bottom:16px">
-    <a href="${
-    esc(config.githubUrl)
-  }" style="color:#f97316;font-weight:600;text-decoration:none">mig</a>
-  </div>
-  ${body}
-  <p style="color:#64748b;font-size:14px;margin-top:24px">— Sent by <a href="${
-    esc(config.githubUrl)
-  }" style="color:#64748b;text-decoration:underline">mig</a></p>
-</div>
-</body></html>`;
+/** An invite as a `meeting.ics` attachment; its Content-Type carries
+ *  the METHOD the calendar body itself declares. */
+function inviteAttachment(
+  invite: ReturnType<typeof bookingInvite>,
+): EmailAttachment {
+  return icalAttachment(invite.event, {
+    ics: invite.options,
+    filename: "meeting.ics",
+  });
 }
 
-function esc(s: string): string {
-  return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+// Constrained to 480px so the email reads as a letter, not a full
+// desktop pane, on the dark shell mig's emails have always used.
+function htmlWrap(config: Config, body: string): string {
+  // The signature is mig's own muted, underlined link, not the
+  // shell's orange one, so it stays quieter than the header.
+  return shellWrap({
+    body,
+    brand: "mig",
+    brandUrl: config.githubUrl,
+    theme: DARK_HTML_SHELL_THEME,
+    maxWidth: 480,
+    signaturePrefix: null,
+    footer:
+      `<p style="color:#64748b;font-size:14px;margin-top:24px">— Sent by <a href="${
+        esc(config.githubUrl)
+      }" style="color:#64748b;text-decoration:underline">mig</a></p>`,
+  });
 }

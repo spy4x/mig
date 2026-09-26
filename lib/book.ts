@@ -10,7 +10,7 @@
 
 import type { Context } from "fresh";
 import type { State } from "./utils.ts";
-import { generateBookingId, newCancelToken } from "./tokens.ts";
+import { monotonicUlid, newOpaqueToken } from "@spy4x/platform/tokens";
 import {
   sendBookingCorrectionEmail,
   sendGuestBookingEmail,
@@ -21,6 +21,7 @@ import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip";
 import { zonedDateTime } from "@spy4x/time/tz";
 import { EARLIEST_DATE, hostSlotInstant } from "./clock.ts";
 import { BookingSchema } from "./validators.ts";
+import { isHoneypotFilled } from "@spy4x/platform/validation/predicates";
 
 /** "" → "/", "/embed" → "/embed" — where a failed submission redirects
  *  back to (the picker root). */
@@ -150,7 +151,9 @@ export async function handleBookingSubmit(
   const input = parsed.data;
 
   // Honeypot — silently accept and pretend to succeed (no booking).
-  if (input.website.trim() !== "") {
+  // Any value counts as filled, whitespace included: a bot that types
+  // " " is still a bot.
+  if (isHoneypotFilled(input.website)) {
     // Redirect to confirmed with a fake id; no email sent, no booking created.
     // Bots think they succeeded and go away.
     const fakeUrl = new URL(`${basePath}/confirmed`, cfg.publicUrl);
@@ -235,10 +238,10 @@ export async function handleBookingSubmit(
   // previous order (email, then persist) got this backwards: the
   // loser of the race still had its email sent before the conflict
   // was ever detected.
-  const { raw: tokenRaw, hash: tokenHash } = await newCancelToken(
+  const { raw: tokenRaw, hash: tokenHash } = await newOpaqueToken(
     cfg.cancelSecret,
   );
-  const bookingId = generateBookingId();
+  const bookingId = monotonicUlid();
   const booking = {
     id: bookingId,
     createdAt: new Date().toISOString(),
@@ -320,19 +323,19 @@ export async function handleBookingSubmit(
   // leaving a booking on disk with no confirmation and no working
   // cancel link. `ownerEmailSucceeded` records whether the owner's
   // "New booking" email actually went out before a later failure, so
-  // the catch block below knows whether it needs to correct that
+  // the failure branch below knows whether it needs to correct that
   // email rather than just roll the booking back silently.
-  let ownerEmailSucceeded = false;
-  try {
-    const cancelUrl = new URL(
-      `/cancel?id=${bookingId}&token=${tokenRaw}`,
-      cfg.publicUrl,
-    ).toString();
-    await sendOwnerBookingEmail(cfg, booking, cancelUrl);
-    ownerEmailSucceeded = true;
-    await sendGuestBookingEmail(cfg, booking, cancelUrl);
-  } catch (e) {
-    const msg = (e as Error).message;
+  const cancelUrl = new URL(
+    `/cancel?id=${bookingId}&token=${tokenRaw}`,
+    cfg.publicUrl,
+  ).toString();
+  const ownerSent = await sendOwnerBookingEmail(cfg, booking, cancelUrl);
+  const ownerEmailSucceeded = ownerSent.ok;
+  const sent = ownerSent.ok
+    ? await sendGuestBookingEmail(cfg, booking, cancelUrl)
+    : ownerSent;
+  if (!sent.ok) {
+    const msg = sent.error;
     console.error("mig: email send failed; rolling back booking:", msg);
     let rolledBack = true;
     try {
@@ -362,8 +365,8 @@ export async function handleBookingSubmit(
     // push sent earlier would always claim "removed, slot free again"
     // even on the rare run where the rollback write itself also
     // fails. Awaited, not fire-and-forget: notify() in lib/notify.ts
-    // already swallows and logs its own transport errors, so awaiting
-    // it adds real latency but no new failure mode.
+    // already logs its own failures and bounds its retries to a few
+    // seconds, so awaiting it adds latency but no new failure mode.
     await notifyBookingEmailFailed(cfg, booking, msg, { rolledBack });
     // mig#19 review round 3: the owner's "New booking" email (and
     // calendar invite) already went out above — correct it, since the
@@ -371,14 +374,15 @@ export async function handleBookingSubmit(
     // configured. No correction when the owner send itself was the
     // one that failed: in that case nobody got anything to correct.
     if (ownerEmailSucceeded) {
-      try {
-        await sendBookingCorrectionEmail(cfg, booking, { rolledBack });
-      } catch (correctionErr) {
+      const corrected = await sendBookingCorrectionEmail(cfg, booking, {
+        rolledBack,
+      });
+      if (!corrected.ok) {
         console.error(
           "mig: correction email FAILED after rollback; booking=" +
             bookingId +
             "; host still has a stale 'New booking' email and invite",
-          correctionErr,
+          corrected.error,
         );
       }
     }

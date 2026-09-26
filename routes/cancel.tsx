@@ -1,5 +1,5 @@
 import { define } from "../lib/utils.ts";
-import { verifyCancelToken } from "../lib/tokens.ts";
+import { verifyOpaqueToken } from "@spy4x/platform/tokens";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
 import { isValidTimeZone } from "@spy4x/time/tz";
@@ -68,7 +68,7 @@ export const handler = define.handlers({
       };
     }
 
-    const ok = await verifyCancelToken(
+    const ok = await verifyOpaqueToken(
       token,
       booking.cancelTokenHash,
       cfg.cancelSecret,

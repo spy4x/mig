@@ -1,9 +1,10 @@
+import type { SmtpTransport } from "@spy4x/email/smtp";
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import nodemailer from "nodemailer";
 import {
   buildBookingEmails,
   buildCancellationEmails,
   sendBookingCorrectionEmail,
+  sendEmail,
   setTransportForTesting,
 } from "./email.ts";
 import type { Booking, Config } from "./types.ts";
@@ -37,7 +38,7 @@ function makeConfig(): Config {
       pass: "placeholder",
       from: "Mig <mig@example.com>",
     },
-    cancelSecret: "placeholder",
+    cancelSecret: "fake-cancel-secret-only-for-tests",
     port: 8080,
     dataPath: "./data/bookings.json",
     hideBranding: false,
@@ -320,8 +321,19 @@ Deno.test("mig#15 review: guest email notes the host-timezone fallback when the 
   );
   assertStringIncludes(
     emails.guest.html!,
-    "Times are shown in the host's timezone.",
+    "Times are shown in the host&#39;s timezone.",
   );
+});
+
+Deno.test("an apostrophe in a guest's name is escaped in the HTML email", () => {
+  const emails = buildBookingEmails(
+    makeHoChiMinhConfig(),
+    { ...makeCrossZoneBooking(), guestName: "Dara O'Brien" },
+    "https://mig.example.com/cancel",
+  );
+  assertStringIncludes(emails.owner.html!, "Dara O&#39;Brien");
+  assertEquals(emails.owner.html!.includes("O'Brien"), false);
+  assertStringIncludes(emails.owner.text, "Dara O'Brien");
 });
 
 // ─── mig#27: sendBookingCorrectionEmail must tell the truth about the rollback ──
@@ -334,26 +346,19 @@ interface RecordedMail {
 }
 
 /** Test-only transport: records every email sent to it and resolves
- *  each one immediately, no network I/O — a custom `send()` transport,
- *  same "recording transport" spirit as lib/book.test.ts's
- *  recordingTransport (which is also not jsonTransport-backed). */
-function recordingTransport(sent: RecordedMail[]) {
-  return nodemailer.createTransport({
-    name: "email-test-recording-transport",
-    version: "1.0.0",
-    send(
-      mail: { data: RecordedMail; message: { getEnvelope(): unknown } },
-      callback: (err: Error | null, info?: unknown) => void,
-    ) {
+ *  each one immediately, no network I/O. */
+function recordingTransport(sent: RecordedMail[]): SmtpTransport {
+  return {
+    sendMail(message) {
       sent.push({
-        to: mail.data.to,
-        subject: mail.data.subject,
-        text: mail.data.text,
-        html: mail.data.html,
+        to: String(message.to),
+        subject: message.subject,
+        text: message.text === undefined ? undefined : String(message.text),
+        html: message.html === undefined ? undefined : String(message.html),
       });
-      callback(null, { envelope: mail.message.getEnvelope() });
+      return Promise.resolve({});
     },
-  });
+  };
 }
 
 // mig#31: the round-3 reviewer of #30 changed several sentences in this
@@ -396,10 +401,8 @@ The guest's confirmation email failed to send, so the booking was removed and th
              font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
              font-size:16px;line-height:1.6">
 <div style="max-width:480px;margin:0 auto">
-  <div style="margin-bottom:16px">
-    <a href="https://github.com/spy4x/mig" style="color:#f97316;font-weight:600;text-decoration:none">mig</a>
-  </div>
-  
+<div style="margin-bottom:16px"><a href="https://github.com/spy4x/mig" style="color:#f97316;font-weight:600;text-decoration:none">mig</a></div>
+
     <p>Hi Host,</p>
     <p>The booking below was <strong>NOT</strong> created after all.</p>
     <table style="border-collapse:collapse;margin:16px 0">
@@ -413,7 +416,8 @@ The guest's confirmation email failed to send, so the booking was removed and th
     &ldquo;New booking&rdquo; email and calendar invite you received a
     moment ago.</p>
   
-  <p style="color:#64748b;font-size:14px;margin-top:24px">— Sent by <a href="https://github.com/spy4x/mig" style="color:#64748b;text-decoration:underline">mig</a></p>
+<p style="color:#64748b;font-size:14px;margin-top:24px">— Sent by <a href="https://github.com/spy4x/mig" style="color:#64748b;text-decoration:underline">mig</a></p>
+
 </div>
 </body></html>`,
     );
@@ -458,10 +462,8 @@ The guest's confirmation email failed to send, and removing the booking failed t
              font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
              font-size:16px;line-height:1.6">
 <div style="max-width:480px;margin:0 auto">
-  <div style="margin-bottom:16px">
-    <a href="https://github.com/spy4x/mig" style="color:#f97316;font-weight:600;text-decoration:none">mig</a>
-  </div>
-  
+<div style="margin-bottom:16px"><a href="https://github.com/spy4x/mig" style="color:#f97316;font-weight:600;text-decoration:none">mig</a></div>
+
     <p>Hi Host,</p>
     <p>The booking below was <strong>NOT</strong> confirmed.</p>
     <table style="border-collapse:collapse;margin:16px 0">
@@ -476,7 +478,8 @@ The guest's confirmation email failed to send, and removing the booking failed t
     booking&rdquo; email and calendar invite you received a moment
     ago.</p>
   
-  <p style="color:#64748b;font-size:14px;margin-top:24px">— Sent by <a href="https://github.com/spy4x/mig" style="color:#64748b;text-decoration:underline">mig</a></p>
+<p style="color:#64748b;font-size:14px;margin-top:24px">— Sent by <a href="https://github.com/spy4x/mig" style="color:#64748b;text-decoration:underline">mig</a></p>
+
 </div>
 </body></html>`,
     );
@@ -522,6 +525,44 @@ Deno.test("sendBookingCorrectionEmail: rolledBack false HTML-escapes the booking
     const html = sent[0].html ?? "";
     assertStringIncludes(html, "id&lt;&amp;&quot;&gt;");
     assertEquals(html.includes(booking.id), false, `html: ${html}`);
+  } finally {
+    setTransportForTesting(null);
+  }
+});
+
+Deno.test("a failed send never carries the SMTP password in its error", async () => {
+  const config = makeConfig();
+  const pass = "not-a-real-password-0123";
+  setTransportForTesting({
+    sendMail: () =>
+      Promise.reject(new Error(`535 auth failed for user:${pass} (${pass})`)),
+  });
+  try {
+    const sent = await sendEmail(
+      { ...config, smtp: { ...config.smtp, pass } },
+      { to: "visitor@example.com", subject: "Hi", text: "Hi" },
+    );
+    assertEquals(sent.ok, false);
+    if (sent.ok) return;
+    assertEquals(sent.error.includes(pass), false, sent.error);
+    assertStringIncludes(sent.error, "<REDACTED:CREDENTIAL>");
+  } finally {
+    setTransportForTesting(null);
+  }
+});
+
+Deno.test("a send the transport rejects returns a failed result instead of throwing", async () => {
+  setTransportForTesting({
+    sendMail: () => Promise.reject(new Error("connection refused")),
+  });
+  try {
+    const sent = await sendEmail(makeConfig(), {
+      to: "visitor@example.com",
+      subject: "Hi",
+      text: "Hi",
+    });
+    assertEquals(sent.ok, false);
+    if (!sent.ok) assertStringIncludes(sent.error, "connection refused");
   } finally {
     setTransportForTesting(null);
   }
