@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-26
+
+### Fixed
+
+- On `/embed` with a forced theme (`THEME=light` or `dark`, or
+  `?theme=light|dark`), the "page not found" and error pages no longer show a
+  theme button that does nothing (#63).
+
 ## [0.7.0] - 2026-09-26
 
 ### Security
@@ -409,7 +417,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/spy4x/mig/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/spy4x/mig/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/spy4x/mig/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/spy4x/mig/compare/v0.5.0...v0.6.0
