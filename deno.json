@@ -28,7 +28,7 @@
     "@spy4x/email": "jsr:@spy4x/email@1.6.0",
     "@spy4x/integrations": "jsr:@spy4x/integrations@1.6.0",
     "@spy4x/net": "jsr:@spy4x/net@1.6.0",
-    "@spy4x/preact-signals": "jsr:@spy4x/preact-signals@0.1.4",
+    "@spy4x/preact-signals": "jsr:@spy4x/preact-signals@0.1.5",
     "@tailwindcss/vite": "npm:@tailwindcss/vite@^4.1.18",
     "@fresh/plugin-vite": "jsr:@fresh/plugin-vite@^1.0.8",
     "fresh": "jsr:@fresh/core@^2.3.3",

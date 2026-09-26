@@ -16,7 +16,7 @@
     "jsr:@spy4x/platform@1.4.0": "1.4.0",
     "jsr:@spy4x/platform@1.6.0": "1.6.0",
     "jsr:@spy4x/platform@^1.6.0": "1.6.0",
-    "jsr:@spy4x/preact-signals@0.1.4": "0.1.4",
+    "jsr:@spy4x/preact-signals@0.1.5": "0.1.5",
     "jsr:@spy4x/time@1.6.0": "1.6.0",
     "jsr:@spy4x/time@^1.6.0": "1.6.0",
     "jsr:@spy4x/validation@1.4.0": "1.4.0",
@@ -53,7 +53,6 @@
     "npm:@babel/preset-react@^7.27.1": "7.29.7_@babel+core@7.29.7",
     "npm:@opentelemetry/api@^1.9.0": "1.9.1",
     "npm:@preact/signals-core@1.12.1": "1.12.1",
-    "npm:@preact/signals@2.5.1": "2.5.1_preact@10.29.8",
     "npm:@preact/signals@^2.5.1": "2.11.2_preact@10.29.8_preact-render-to-string@6.7.0",
     "npm:@preact/signals@^2.9.0": "2.11.2_preact@10.29.8_preact-render-to-string@6.7.0",
     "npm:@prefresh/vite@^2.4.8": "2.4.12_preact@10.29.8_vite@7.3.6",
@@ -181,13 +180,12 @@
         "npm:arktype@2.2.3"
       ]
     },
-    "@spy4x/preact-signals@0.1.4": {
-      "integrity": "eda7156e7d5d66abb72ca76526578f0ae56749928b62255ad20403fef188ef85",
+    "@spy4x/preact-signals@0.1.5": {
+      "integrity": "010589a6540f7b4c0679b7d86fa8e2d12438d300b23f31a972472c4bb91896c0",
       "dependencies": [
         "jsr:@spy4x/platform@1.4.0",
         "jsr:@spy4x/validation@1.4.0",
         "npm:@preact/signals-core",
-        "npm:@preact/signals@2.5.1",
         "npm:@preact/signals@^2.9.0",
         "npm:arktype@2.2.3",
         "npm:preact@10.29.8",
@@ -906,13 +904,6 @@
     },
     "@preact/signals@2.11.2_preact@10.29.8_preact-render-to-string@6.7.0": {
       "integrity": "sha512-rVTRTt/T0HIRgbugwS5FigbfF/kfdEFYFtiqxa+lbpqTajepqnR0firuAS2iNdHyejWB7Yc9p9QePkVNBtTAwg==",
-      "dependencies": [
-        "@preact/signals-core@1.14.4",
-        "preact"
-      ]
-    },
-    "@preact/signals@2.5.1_preact@10.29.8": {
-      "integrity": "sha512-VPjk5YFt7i11Fi4UK0tzaEe5xLwfhUxXL3l89ocxQ5aPz7bRo8M5+N73LjBMPklyXKYKz6YsNo4Smp8n6nplng==",
       "dependencies": [
         "@preact/signals-core@1.14.4",
         "preact"
@@ -1644,7 +1635,7 @@
       "jsr:@spy4x/integrations@1.6.0",
       "jsr:@spy4x/net@1.6.0",
       "jsr:@spy4x/platform@1.6.0",
-      "jsr:@spy4x/preact-signals@0.1.4",
+      "jsr:@spy4x/preact-signals@0.1.5",
       "jsr:@spy4x/time@1.6.0",
       "jsr:@std/assert@1",
       "npm:@preact/signals@^2.9.0",
