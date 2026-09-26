@@ -25,8 +25,9 @@
   every push, pull request, tag and manual run; a tag-only `release` step then
   builds and publishes the Docker image.
 - **Storage:** JSON file (`./data/bookings.json`) + in-process async mutex
-- **Email:** SMTP via `nodemailer`
-- **IDs:** ULID (Crockford base32, time-sortable)
+- **Email:** SMTP via `@spy4x/email` (`nodemailer` underneath, pinned by that
+  package)
+- **IDs:** ULID (Crockford base32, time-sortable), from `@spy4x/platform/tokens`
 
 ## Invariants
 
@@ -35,9 +36,10 @@
 - **Configuration is code.** All booking behaviour (working hours, blocked
   dates, slot duration, notice horizon, meeting URL, SMTP creds) lives in
   environment variables. Changing behaviour = restarting the container.
-- **Stateless cancel tokens.** Cancellation links carry a SHA-256 HMAC of a
-  random token; the raw token goes only in the email. No per-booking revoke —
-  rotate `CANCEL_SECRET` to invalidate all.
+- **Stateless cancel tokens.** A booking stores
+  `sha256(raw token + CANCEL_SECRET)` (`@spy4x/platform/tokens`); the raw token
+  goes only in the email. `CANCEL_SECRET` needs at least 32 printable ASCII
+  characters. No per-booking revoke — rotate `CANCEL_SECRET` to invalidate all.
 - **No background jobs.** Everything is request/response. No cron, no reminder
   worker. v1 has no reminder emails.
 - **Single instance only.** In-memory mutex serialises writes within the
@@ -73,9 +75,9 @@ src/
 │   ├── config.ts            — env parsing + arktype validation
 │   ├── config-issue.ts      — formats one startup error line, never the value
 │   ├── availability.ts      — weekly pattern + blocked-dates parser
-│   ├── bookings.ts          — JSON store + AsyncMutex
-│   ├── tokens.ts            — ULID + HMAC sign/verify
-│   ├── email.ts             — SMTP via nodemailer
+│   ├── bookings.ts          — JSON store (mutex + atomic write: @spy4x/platform)
+│   ├── email.ts             — email content; sending via @spy4x/email
+│   ├── notify.ts            — ntfy pushes (client: @spy4x/integrations), NTFY_MODE
 │   ├── email-pattern.ts     — zod 3.25.76's email regex, copied verbatim
 │   ├── invite.ts            — booking → .ics invite (writer: @spy4x/time/ics)
 │   ├── clock.ts             — mig's zone labels + canonical zone names
@@ -106,10 +108,13 @@ src/
 - **No third-party deps without justification.** `deno.json`'s imports are the
   budget: Fresh (`fresh`, `@fresh/plugin-vite`), Preact (`preact`,
   `preact-render-to-string`, `@preact/signals`), Tailwind (`tailwindcss`,
-  `@tailwindcss/vite`), `vite`, `nodemailer`, `arktype`, `@std/assert`,
-  `@std/ulid`, and the owner's own `@spy4x/time` (zone math, the `.ics` writer)
-  and `@spy4x/platform` (rate limiter), pinned exactly. Anything else needs a
-  comment.
+  `@tailwindcss/vite`), `vite`, `arktype`, `@std/assert`, and the owner's own
+  shared libraries, pinned exactly: `@spy4x/time` (zone math, the `.ics`
+  writer), `@spy4x/platform` (rate limiter, tokens, mutex, atomic JSON write,
+  input predicates, `Result`), `@spy4x/email` (SMTP sender, HTML shell),
+  `@spy4x/integrations` (ntfy client) and `@spy4x/net` (bounded request body).
+  Before writing a helper, check whether one of those already has it. Anything
+  else needs a comment.
 - **Concurrency:** every mutation goes through `bookings.mutate()` which
   acquires the in-process mutex. Never read-then-write the JSON directly.
 
