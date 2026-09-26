@@ -3,6 +3,8 @@
 // flash of wrong-coloured content.
 //
 // `mode` is the user's stored preference (`light`, `dark`, or `auto`).
+// With nothing stored, it is the owner's `THEME` setting (mig#52),
+// passed in as `defaultMode`; `auto` there keeps following the system.
 // We expose `__migTheme()` on `window` so the ThemeToggle island can
 // mutate the stored mode + update the DOM without round-tripping the
 // server. `data-theme` is also set on <html> for any consumer that wants
@@ -20,11 +22,19 @@ export function parseThemeParam(raw: string | null): ThemeParam {
   return raw === "light" || raw === "dark" ? raw : "auto";
 }
 
-export function themeBootstrapScript(): string {
+/** The inline `<head>` script that applies the theme before first
+ *  paint and exposes `window.__migTheme` for the ThemeToggle island.
+ *  A visitor's stored `mig-theme` value (`light`, `dark` or `auto`)
+ *  always wins; with nothing stored, `defaultMode` (the owner's
+ *  `THEME`, mig#52) decides, and `auto` follows `prefers-color-scheme`.
+ *  `defaultMode` goes through `parseThemeParam` before it is written
+ *  into the script, so only one of the three literals can reach it. */
+export function themeBootstrapScript(defaultMode: ThemeParam = "auto"): string {
+  const d = parseThemeParam(defaultMode);
   return `(function(){try{
 var K="mig-theme";
 var s=localStorage.getItem(K);
-var m=(s==="light"||s==="dark")?s:"auto";
+var m=(s==="light"||s==="dark"||s==="auto")?s:"${d}";
 var prefersDark=matchMedia("(prefers-color-scheme: dark)").matches;
 var dark=m==="dark"||(m==="auto"&&prefersDark);
 document.documentElement.classList.toggle("dark",dark);

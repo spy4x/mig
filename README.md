@@ -229,7 +229,7 @@ See `.env.example` for the full list of env vars.
 | `BOOKING_HORIZON_DAYS` | no       | `14`    | Maximum days ahead bookable                                                                                                                                         |
 | `BLOCKED_DATES`        | no       | —       | Blocked dates, see syntax below                                                                                                                                     |
 | `RATE_LIMIT_PER_5MIN`  | no       | `1`     | Max bookings per IP per 5 minutes                                                                                                                                   |
-| `THEME`                | no       | `auto`  | `light`, `dark`, or `auto` (follow OS)                                                                                                                              |
+| `THEME`                | no       | `auto`  | Default theme for a visitor who hasn't picked one with the toggle: `light`, `dark`, or `auto` (follow OS). `/embed` uses it unless `?theme=` is given               |
 | `PORT`                 | no       | `8080`  | HTTP listen port                                                                                                                                                    |
 | `HIDE_BRANDING`        | no       | `false` | `true`/`1`/`yes` hides the "Powered by mig" footer + GitHub link; `false`/`0`/`no`/empty/absent shows it. Case-insensitive, trimmed. Any other value stops startup. |
 | `GITHUB_URL`           | no       | (see)   | Override the URL the footer links to. Defaults to `https://github.com/spy4x/mig`                                                                                    |
@@ -314,9 +314,10 @@ theme on its own. Tell it explicitly with `?theme=`:
 
 - `?theme=dark` / `?theme=light` — force that theme inside the embed, regardless
   of the visitor's OS or anything stored in `localStorage`.
-- `?theme=auto` (the default — same as omitting the param entirely) — today's
-  behaviour: the stored preference (shared with the standalone site, since both
-  live on the same origin), then `prefers-color-scheme`.
+- `?theme=auto` (the default — same as omitting the param entirely) — the
+  owner's `THEME` setting when it is `light` or `dark`; with `THEME=auto`, the
+  stored preference (shared with the standalone site, since both live on the
+  same origin), then `prefers-color-scheme`.
 
 Any other value falls back to `auto` rather than erroring. Once forced, the
 theme survives the whole flow — every link (date, time, change), the confirm
