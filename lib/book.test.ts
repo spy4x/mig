@@ -760,8 +760,11 @@ Deno.test("a rate-limited redirect caps an oversized date or tz instead of carry
   );
   assertEquals(first.status, 303);
 
-  const hugeDate = "2".repeat(200_000);
-  const hugeTz = "America/New_York".repeat(20_000);
+  // Far past the 100-character cap, yet under the 64 KiB body limit
+  // (mig#73), which would otherwise refuse the request before any
+  // redirect is built.
+  const hugeDate = "2".repeat(20_000);
+  const hugeTz = "America/New_York".repeat(1_000);
   const fields = validFields(hugeDate, "09:00", { guestTz: hugeTz });
 
   const res = await handleBookingSubmit(
@@ -862,7 +865,8 @@ Deno.test("a validation-failure redirect caps an oversized slot, like date and t
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
-  const hugeSlot = "9".repeat(200_000);
+  // Under the 64 KiB body limit (mig#73), far past the 100-char cap.
+  const hugeSlot = "9".repeat(20_000);
 
   try {
     const ctx = stubContext({

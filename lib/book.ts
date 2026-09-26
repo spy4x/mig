@@ -22,6 +22,11 @@ import { zonedDateTime } from "@spy4x/time/tz";
 import { EARLIEST_DATE, hostSlotInstant } from "./clock.ts";
 import { BookingSchema } from "./validators.ts";
 import { isHoneypotFilled } from "@spy4x/platform/validation/predicates";
+import {
+  BodyReadTimeoutError,
+  parseBoundedFormData,
+  PayloadTooLargeError,
+} from "@spy4x/net/bounded-body";
 
 /** "" → "/", "/embed" → "/embed" — where a failed submission redirects
  *  back to (the picker root). */
@@ -42,6 +47,12 @@ function capRedirectField(value: string | undefined): string | undefined {
     ? value.slice(0, MAX_REDIRECT_FIELD_LEN)
     : value;
 }
+
+// The booking form is a handful of short fields plus notes of at most
+// 500 characters. Even 500 four-byte characters, percent-encoded, stay
+// under 6 KB, so 64 KiB leaves room for any real submission while an
+// oversized body is refused before it is buffered.
+export const MAX_BOOKING_BODY_BYTES = 64 * 1024;
 
 /** The peer's IP address, or `undefined` for a transport without one
  *  (a Unix socket). */
@@ -88,7 +99,20 @@ export async function handleBookingSubmit(
   // below: a rate-limited request never got far enough to confirm the
   // slot is still free, unlike the failure modes below that already
   // checked it moments earlier.
-  const form = await ctx.req.formData();
+  let form: FormData;
+  try {
+    form = await parseBoundedFormData(ctx.req, {
+      maxBytes: MAX_BOOKING_BODY_BYTES,
+    });
+  } catch (e) {
+    if (e instanceof PayloadTooLargeError) {
+      return new Response("Request body too large.", { status: 413 });
+    }
+    if (e instanceof BodyReadTimeoutError) {
+      return new Response("Request body timed out.", { status: 408 });
+    }
+    throw e;
+  }
   // Raw, unvalidated — used only to carry state back on a failed
   // redirect (mig#15 review). `date` and `tz` always ride along: the
   // route re-validates both on the way back in, so passing the raw
