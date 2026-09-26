@@ -41,9 +41,9 @@
   day) — showing them in that true chronological order, rather than
   always Morning-then-Evening, is what stops a visitor from booking
   what looks like "later" but is actually earlier. Each slot whose
-  visitor-local date differs from the picked day also carries its own
-  `dateNote` ("Wed 23 Sep"), since even a correctly-ordered "Evening"
-  heading doesn't say *which* evening.
+  visitor-local date differs from the heading's day (`gridDay` below,
+  mig#50) also carries its own `dateNote` ("Wed 23 Sep"), since even a
+  correctly-ordered "Evening" heading doesn't say *which* evening.
 
   Periods (based on the time being displayed):
     morning   05:00–11:59
@@ -51,7 +51,62 @@
     evening   17:00–04:59 (wraps midnight)
 */
 
+import { isoDateInTz } from "@spy4x/time/tz";
+import { formatShortDateAt } from "../lib/clock.ts";
 import { pickerHref } from "../lib/picker-links.ts";
+
+/** The day a slot grid's heading names, in three forms. */
+export interface GridDay {
+  /** YYYY-MM-DD, in the display zone. A slot whose own visitor-local
+   *  date differs from this carries a `dateNote`. */
+  date: string;
+  /** "Sunday, 1 November 2026" — the grid heading, DateCard, and the
+   *  "No available times on …" line. */
+  long: string;
+  /** "Sun 1 Nov" — the mobile SummaryBar. */
+  short: string;
+}
+
+/**
+ * The picked day as the visitor sees it (mig#50). `slots` are the
+ * instants of the slots shown, in display order.
+ *
+ * - When at least one slot falls on the picked date in `displayTz`, it
+ *   is the picked date: the day the visitor clicked in the host's
+ *   calendar. Slots on another day carry their own date note.
+ * - When none does, it is the first slot's own day, so the heading
+ *   never names a day with no slot under it.
+ * - With no slot at all (a blocked or empty day, or slots still
+ *   loading), it is the picked date.
+ *
+ * Noon of the host day, the old anchor, could name a day with no slot
+ * on it: a Tokyo host's Sunday 17:00-20:00 is Sunday 03:00-06:00 in New
+ * York, but Tokyo's noon is Saturday 23:00 there.
+ *
+ * The date is formatted as a plain calendar date, so no zone moves it.
+ */
+export function gridDay(
+  slots: Date[],
+  pickedDate: string,
+  displayTz: string,
+): GridDay {
+  const days = slots.map((s) => isoDateInTz(s, displayTz));
+  const date = days.length === 0 || days.includes(pickedDate)
+    ? pickedDate
+    : days[0];
+  const at = new Date(`${date}T12:00:00Z`);
+  return {
+    date,
+    long: new Intl.DateTimeFormat("en-GB", {
+      timeZone: "UTC",
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(at),
+    short: formatShortDateAt(at, "UTC"),
+  };
+}
 
 interface SlotCell {
   time: string; // host-local HH:MM, authoritative
@@ -73,8 +128,8 @@ interface SlotCell {
    *  next to the time so that slot is never ambiguous. */
   offsetNote?: string;
   /** "Wed 23 Sep" — set only when this slot's visitor-local date
-   *  differs from the picked day (mig#15 review). Rendered as a small
-   *  second line on the chip. */
+   *  differs from the heading's day, `gridDay(...).date` (mig#15
+   *  review, mig#50). Rendered as a small second line on the chip. */
   dateNote?: string;
 }
 
@@ -300,9 +355,17 @@ function SlotButton(
     );
   }
 
+  // `aria-current="false"` (mig#50): Fresh's server renderer marks
+  // every `<a>` whose path matches the page's own with
+  // `aria-current="true"` and `data-ancestor`, and every slot link
+  // points back at this page with only its query string changed, so a
+  // screen reader announced each one as "current". Fresh leaves a link
+  // alone when `aria-current` is already set; only the selected slot's
+  // chip above is current.
   return (
     <a
       href={pickerHref(basePath, { date, slot: slot.time }, tz, theme)}
+      aria-current="false"
       aria-label={fullLabel}
       class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
     >

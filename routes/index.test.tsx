@@ -374,3 +374,139 @@ Deno.test("mig#57: standalone / ignores a month before 1980", async () => {
   assertFalse(lastBefore.includes("December 1979"));
   assert(first.includes("January 1980"), "expected January 1980's grid");
 });
+
+// ─── mig#50: daylight-saving days and the grid's date heading ────────
+
+// Every "HH:MM, Berlin, UTC±N" clock on the page, in order, once each:
+// the slot's own accessible name (its `aria-label`, or the `sr-only`
+// text of a past slot, which renders as a plain chip).
+function berlinSlotClocks(html: string): string[] {
+  return [...new Set(html.match(/\d\d:\d\d, Berlin, UTC[+-]\d+/g) ?? [])];
+}
+
+// The slot grid's own date heading (TimeSlots.tsx's `<h3>`).
+function gridHeading(html: string): string | null {
+  const m = html.match(
+    /<h3 class="text-sm font-medium text-ink-muted">([^<]*)<\/h3>/,
+  );
+  return m ? m[1] : null;
+}
+
+Deno.test("mig#50: Berlin host and visitor on 29 March 2026 — the 00:00 and 01:00 slots show different times", async () => {
+  // Clocks jump from 02:00 (UTC+1) to 03:00 (UTC+2) at 01:00 UTC. The
+  // conversion used to take the offset after the change for the slots
+  // before it, so 00:00 and 01:00 both rendered as "00:00, UTC+1".
+  const html = await renderIndex(
+    "http://localhost/?date=2026-03-29&tz=Europe/Berlin",
+    {
+      hostTz: "Europe/Berlin",
+      weeklyAvailability: parseWeeklyAvailability("SUN 00:00-04:00"),
+    },
+  );
+  assertEquals(berlinSlotClocks(html), [
+    "00:00, Berlin, UTC+1",
+    "00:30, Berlin, UTC+1",
+    "01:00, Berlin, UTC+1",
+    "01:30, Berlin, UTC+1",
+    "03:00, Berlin, UTC+2",
+    "03:30, Berlin, UTC+2",
+  ]);
+});
+
+Deno.test("mig#50: Berlin host and visitor on 25 October 2026 — every slot shows its own time and offset", async () => {
+  // Clocks fall back from 03:00 (UTC+2) to 02:00 (UTC+1) at 01:00 UTC.
+  // 02:00 and 02:30 happen twice that night; mig books the first,
+  // summer-time one.
+  const html = await renderIndex(
+    "http://localhost/?date=2026-10-25&tz=Europe/Berlin",
+    {
+      hostTz: "Europe/Berlin",
+      weeklyAvailability: parseWeeklyAvailability("SUN 00:00-04:00"),
+    },
+  );
+  assertEquals(berlinSlotClocks(html), [
+    "00:00, Berlin, UTC+2",
+    "00:30, Berlin, UTC+2",
+    "01:00, Berlin, UTC+2",
+    "01:30, Berlin, UTC+2",
+    "02:00, Berlin, UTC+2",
+    "02:30, Berlin, UTC+2",
+    "03:00, Berlin, UTC+1",
+    "03:30, Berlin, UTC+1",
+  ]);
+});
+
+Deno.test("mig#50: Tokyo host, New York visitor, 1 November 2026 — the heading names the slots' own day", async () => {
+  // Tokyo's Sunday 17:00-20:00 is Sunday 03:00-06:00 in New York, but
+  // Tokyo's noon is still Saturday 23:00 there — the heading's old
+  // anchor.
+  const html = await renderIndex(
+    "http://localhost/?date=2026-11-01&tz=America/New_York",
+    {
+      hostTz: "Asia/Tokyo",
+      weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
+      slotDurationMin: 60,
+    },
+  );
+  assertEquals(gridHeading(html), "Sunday, 1 November 2026");
+  assertFalse(html.includes("Saturday, 31 October 2026"), "DateCard too");
+  assertFalse(html.includes("Sat 31 Oct"), "the mobile summary bar too");
+  assert(html.includes("Sun 1 Nov"), "the summary bar names Sunday");
+  assert(html.includes("03:00, New York, UTC-5"), "expected the 17:00 slot");
+  // All three slots are on the heading's day, so no slot's accessible
+  // name ends in a date note. ("Sun 1 Nov" itself does appear: the
+  // mobile summary bar's short form of the heading.)
+  assertFalse(/UTC-5, \w{3} \d/.test(html), "no slot needs a date note");
+});
+
+Deno.test("mig#50: a day with no slots names the picked calendar day, not the visitor's day at the host's noon", async () => {
+  const html = await renderIndex(
+    "http://localhost/?date=2026-11-01&tz=America/New_York",
+    {
+      hostTz: "Asia/Tokyo",
+      weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
+      blockedDates: new Set(["2026-11-01"]),
+    },
+  );
+  assert(
+    html.includes("No available times on Sunday, 1 November 2026."),
+    "expected the empty-day line to name the picked day",
+  );
+  assertFalse(html.includes("Saturday, 31 October 2026"));
+});
+
+Deno.test("mig#50: Ho Chi Minh host, New York visitor — the heading and date card name the clicked day, and only the Monday slots carry a note", async () => {
+  // Ho Chi Minh 09:00-17:00 on Tuesday 6 October is 22:00 Monday to
+  // 05:30 Tuesday in New York. Twelve of the sixteen slots are on the
+  // clicked Tuesday, so the page names Tuesday; the four Monday-evening
+  // slots each carry "Mon 5 Oct".
+  const html = await renderIndex(
+    `http://localhost/?date=${TEST_DATE}&tz=America/New_York`,
+  );
+  assertEquals(gridHeading(html), "Tuesday, 6 October 2026");
+  assertFalse(html.includes("Monday, 5 October 2026"), "DateCard too");
+  const notes = html.match(/New York, UTC-4, \w{3} \d+ \w{3}/g) ?? [];
+  assertEquals(new Set(notes).size, 1, `one note text: ${[...new Set(notes)]}`);
+  assert(notes[0]?.endsWith("Mon 5 Oct"));
+  for (const t of ["22:00", "22:30", "23:00", "23:30"]) {
+    assert(html.includes(`${t}, New York, UTC-4, Mon 5 Oct`), t);
+  }
+  assert(/00:00, New York, UTC-4(?!,)/.test(html), "00:00 Tuesday: no note");
+  assert(/05:30, New York, UTC-4(?!,)/.test(html), "05:30 Tuesday: no note");
+});
+
+Deno.test("mig#50: when no slot falls on the clicked day in the visitor's zone, the heading names the first slot's day", async () => {
+  // Auckland (UTC+13 from late September) 09:00-10:00 on Tuesday 6
+  // October is 16:00-17:00 on Monday 5 October in New York.
+  const html = await renderIndex(
+    `http://localhost/?date=${TEST_DATE}&tz=America/New_York`,
+    {
+      hostTz: "Pacific/Auckland",
+      weeklyAvailability: parseWeeklyAvailability("TUE 09:00-10:00"),
+    },
+  );
+  assertEquals(gridHeading(html), "Monday, 5 October 2026");
+  assertFalse(html.includes("Tuesday, 6 October 2026"), "DateCard too");
+  assert(html.includes("16:00, New York, UTC-4"), "expected the 09:00 slot");
+  assertFalse(/UTC-4, \w{3} \d/.test(html), "no slot needs a date note");
+});

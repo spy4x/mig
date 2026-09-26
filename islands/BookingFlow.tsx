@@ -1,7 +1,7 @@
 import { useEffect } from "preact/hooks";
 import { useSignal } from "@preact/signals";
 import { Calendar } from "../components/Calendar.tsx";
-import { TimeSlots } from "../components/TimeSlots.tsx";
+import { gridDay, TimeSlots } from "../components/TimeSlots.tsx";
 import { DateCard } from "../components/DateCard.tsx";
 import { TimeCard } from "../components/TimeCard.tsx";
 import { BookingForm } from "../components/BookingForm.tsx";
@@ -92,24 +92,6 @@ interface BookingFlowProps {
 // Use @spy4x/time/tz and lib/clock.ts directly — neither has a
 // validation-library dependency, and both are already bundled into the
 // client via Calendar's imports.
-
-// Compact "Thu, 28 Aug" used in the mobile SummaryBar. Mirrors
-// TimeCard's display so the two stay in lockstep.
-function formatDateShortInTz(
-  date: string,
-  time: string,
-  hostTz: string,
-  displayTz: string,
-): string {
-  const dt = zonedDateTime(date, time, hostTz);
-  const fmt = new Intl.DateTimeFormat("en-GB", {
-    timeZone: displayTz,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-  return fmt.format(dt).replace(/^([^,]+),/, "$1");
-}
 
 // "HH:MM, City, UTC±N" in the visitor's TZ, formatted from a
 // host-local (date, time) — mig#15: every time shown to a person
@@ -349,18 +331,10 @@ export default function BookingFlow(props: BookingFlowProps) {
   // separately to each, is the point.
   const links = pickerLinks(linkTz);
 
-  const dateLabel: string | null = date.value
-    ? formatHostDateIn(date.value, "12:00", hostTz, displayTz)
-    : null;
-
-  const dateLabelShort: string | null = date.value
-    ? formatDateShortInTz(date.value, "12:00", hostTz, displayTz)
-    : null;
-
   // The selected slot's own date, from its exact instant, not noon of
   // the host day (mig#15 review) — feeds TimeCard specifically.
-  // `dateLabel` above (noon-based) still feeds DateCard, which shows
-  // the *picked calendar day*, not a specific time.
+  // `dateLabel` below (the picked day, see gridDay) still feeds DateCard,
+  // which shows the *picked day*, not a specific time.
   const slotDateLabel: string | null = date.value && slot.value
     ? formatHostDateIn(date.value, slot.value, hostTz, displayTz)
     : null;
@@ -415,6 +389,21 @@ export default function BookingFlow(props: BookingFlowProps) {
   );
   const gridZoneLabel = header?.label ?? null;
 
+  // The picked day as the visitor sees it (mig#50, see gridDay): the
+  // clicked date when a slot falls on it in the display zone, else the
+  // first slot's day. While a fetch is loading, the slots still belong
+  // to the previous date, so none are passed and the clicked date is
+  // named.
+  const day = date.value
+    ? gridDay(
+      loading.value ? [] : orderedSlots.map((s) => s.instant),
+      date.value,
+      displayTz,
+    )
+    : null;
+  const dateLabel: string | null = day?.long ?? null;
+  const dateLabelShort: string | null = day?.short ?? null;
+
   // Re-derive every slot's visitor-TZ HH:MM + own offset for display
   // (mig#15, mig#48). SSR + `/embed` + pre-hydration leave
   // `displayHHMM` unset, so TimeSlots falls back to the host-local
@@ -430,7 +419,7 @@ export default function BookingFlow(props: BookingFlowProps) {
         displayHHMM: display.hhmm,
         ariaZoneLabel: display.ariaZoneLabel,
         offsetNote: display.offsetNote,
-        dateNote: visitorDate !== date.value
+        dateNote: visitorDate !== day!.date
           ? formatShortDateAt(s.instant, displayTz)
           : undefined,
       };

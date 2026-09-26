@@ -7,6 +7,7 @@
 
 import { assert, assertEquals, assertFalse } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
+import { App } from "fresh";
 import { TimeSlots } from "./TimeSlots.tsx";
 
 Deno.test("renders a slot's date note at opacity-80, not opacity-70", () => {
@@ -144,3 +145,52 @@ Deno.test("a booked (unavailable) slot's full time is in visually hidden text, n
     "expected the visible chip to be aria-hidden (not read twice alongside the sr-only text)",
   );
 });
+
+// ─── mig#50: Fresh's active-link marking ─────────────────────────────
+
+// Rendered through Fresh's own server renderer (`ctx.render`), not
+// `renderToString`: the marking comes from a Preact hook Fresh installs
+// for its render only, so a plain `renderToString` never shows it. Every
+// slot link points at the page's own path, and Fresh marks such a link
+// 'aria-current="true"' + `data-ancestor` unless it already has an
+// `aria-current` of its own.
+async function renderThroughFresh(path: string): Promise<string> {
+  const basePath = path === "/" ? "" : path;
+  const app = new App().get(path, (ctx) =>
+    ctx.render(
+      <TimeSlots
+        date="2026-11-01"
+        dateLabel="Sunday, 1 November 2026"
+        slots={[
+          { time: "17:00", available: true },
+          { time: "18:00", available: true },
+          { time: "19:00", available: true },
+        ]}
+        selectedSlot="18:00"
+        basePath={basePath}
+      />,
+    ));
+  const res = await app.handler()(
+    new Request(`http://localhost${path}?date=2026-11-01`),
+  );
+  return await res.text();
+}
+
+for (const path of ["/", "/embed"]) {
+  Deno.test(`mig#50: on ${path}, only the selected slot is marked current, never a slot link`, async () => {
+    const html = await renderThroughFresh(path);
+    const links = html.match(/<a [^>]*>/g) ?? [];
+    assertEquals(links.length, 2, "expected the two unselected slots as links");
+    for (const a of links) {
+      assertFalse(a.includes('aria-current="true"'), a);
+      assertFalse(a.includes('aria-current="page"'), a);
+      assertFalse(a.includes("data-ancestor"), a);
+      assertFalse(a.includes("data-current"), a);
+    }
+    const current = html.match(/<[a-z]+ [^>]*aria-current="true"[^>]*>/g) ?? [];
+    assertEquals(current.length, 1, "expected exactly one current element");
+    const [only] = current;
+    assert(only?.startsWith("<span"), only);
+    assert(only?.includes('title="Selected"'), only);
+  });
+}
