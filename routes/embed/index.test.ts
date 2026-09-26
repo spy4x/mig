@@ -182,7 +182,7 @@ Deno.test("mig#15: picked-day label converts into the visitor's zone, not the ho
   assertEquals(data.selectedDateLabel, "Monday, 5 October 2026");
 });
 
-Deno.test("mig#15: /embed's slot list is sorted by instant and labels a slot whose visitor date differs from the picked day", async () => {
+Deno.test("mig#15, mig#50: /embed's slot list is sorted by instant and labels a slot whose visitor date differs from the heading's day", async () => {
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&tz=America%2FNew_York`,
   );
@@ -195,12 +195,18 @@ Deno.test("mig#15: /embed's slot list is sorted by instant and labels a slot who
   );
   const sorted = [...instants].sort((a, b) => a - b);
   assertEquals(instants, sorted, "slots must already be instant-sorted");
-  const wrapped = data.slots.find((s) => s.time === "09:00");
-  assertEquals(wrapped?.dateNote, "Mon 5 Oct");
-  // 16:30 host-local (the last slot; availability ends 17:00) is
-  // 05:30 the *same* New York calendar day — no note expected.
-  const sameDay = data.slots.find((s) => s.time === "16:30");
-  assertEquals(sameDay?.dateNote, undefined);
+  // The heading names the first slot's day (mig#50): 09:00 host-local
+  // is 22:00 on Monday 5 October in New York. Slots on that day carry
+  // no note; from 11:00 host-local (00:00 Tuesday in New York) on,
+  // each slot names its own day.
+  assertEquals(data.selectedDateLabel, "Monday, 5 October 2026");
+  const notes = Object.fromEntries(data.slots.map((s) => [s.time, s.dateNote]));
+  assertEquals(notes["09:00"], undefined);
+  assertEquals(notes["10:30"], undefined);
+  assertEquals(notes["11:00"], "Tue 6 Oct");
+  // 16:30 host-local (the last slot; availability ends 17:00) is 05:30
+  // on Tuesday in New York.
+  assertEquals(notes["16:30"], "Tue 6 Oct");
 });
 
 Deno.test("mig#15: /embed with no tz param falls back to the host's zone", async () => {
@@ -491,4 +497,38 @@ Deno.test("mig#57: /embed ignores a month before 1980", async () => {
   assertFalse(santiago.html.includes("July 1916"));
   assertFalse(lastBefore.html.includes("December 1979"));
   assert(first.html.includes("January 1980"), "expected January 1980's grid");
+});
+
+// ─── mig#50: the picked day's label ──────────────────────────────────
+
+Deno.test("mig#50: /embed with a Tokyo host and a New York visitor labels 1 November 2026 with the slots' own day", async () => {
+  // Tokyo's Sunday 17:00-20:00 is Sunday 03:00-06:00 in New York, while
+  // Tokyo's noon — the label's old anchor — is Saturday 23:00 there.
+  const data = await getEmbedData(
+    "http://localhost/embed?date=2026-11-01&tz=America%2FNew_York",
+    {
+      hostTz: "Asia/Tokyo",
+      weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
+      slotDurationMin: 60,
+    },
+  );
+  assertEquals(data.selectedDateLabel, "Sunday, 1 November 2026");
+  assertEquals(data.slots.map((s) => s.dateNote), [
+    undefined,
+    undefined,
+    undefined,
+  ]);
+});
+
+Deno.test("mig#50: /embed names the picked calendar day when it has no slots", async () => {
+  const data = await getEmbedData(
+    "http://localhost/embed?date=2026-11-01&tz=America%2FNew_York",
+    {
+      hostTz: "Asia/Tokyo",
+      weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
+      blockedDates: new Set(["2026-11-01"]),
+    },
+  );
+  assertEquals(data.slots, []);
+  assertEquals(data.selectedDateLabel, "Sunday, 1 November 2026");
 });

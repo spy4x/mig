@@ -41,9 +41,9 @@
   day) — showing them in that true chronological order, rather than
   always Morning-then-Evening, is what stops a visitor from booking
   what looks like "later" but is actually earlier. Each slot whose
-  visitor-local date differs from the picked day also carries its own
-  `dateNote` ("Wed 23 Sep"), since even a correctly-ordered "Evening"
-  heading doesn't say *which* evening.
+  visitor-local date differs from the heading's day (`gridDay` below,
+  mig#50) also carries its own `dateNote` ("Wed 23 Sep"), since even a
+  correctly-ordered "Evening" heading doesn't say *which* evening.
 
   Periods (based on the time being displayed):
     morning   05:00–11:59
@@ -51,7 +51,54 @@
     evening   17:00–04:59 (wraps midnight)
 */
 
+import { isoDateInTz } from "@spy4x/time/tz";
+import { formatShortDateAt } from "../lib/clock.ts";
 import { pickerHref } from "../lib/picker-links.ts";
+
+/** The day a slot grid's heading names, in three forms. */
+export interface GridDay {
+  /** YYYY-MM-DD, in the display zone. A slot whose own visitor-local
+   *  date differs from this carries a `dateNote`. */
+  date: string;
+  /** "Sunday, 1 November 2026" — the grid heading, DateCard, and the
+   *  "No available times on …" line. */
+  long: string;
+  /** "Sun 1 Nov" — the mobile SummaryBar. */
+  short: string;
+}
+
+/**
+ * The picked day as the visitor sees it (mig#50): the display-zone date
+ * of the FIRST slot shown, the same anchor `formatGridHeader` uses for
+ * the zone label (mig#48). Noon of the host day, the old anchor, can
+ * fall on another visitor date than every slot below it: a Tokyo host's
+ * Sunday 17:00-20:00 is Sunday 03:00-06:00 in New York, while Tokyo's
+ * noon is still Saturday there.
+ *
+ * With no slot to anchor on (`firstSlot` undefined — a blocked or empty
+ * day, or slots still loading), it names the picked calendar day
+ * itself: the day the visitor clicked in the host-anchored calendar,
+ * formatted as a plain date so no zone shifts it to a neighbour.
+ */
+export function gridDay(
+  firstSlot: Date | undefined,
+  pickedDate: string,
+  displayTz: string,
+): GridDay {
+  const at = firstSlot ?? new Date(`${pickedDate}T12:00:00Z`);
+  const tz = firstSlot ? displayTz : "UTC";
+  return {
+    date: firstSlot ? isoDateInTz(firstSlot, displayTz) : pickedDate,
+    long: new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(at),
+    short: formatShortDateAt(at, tz),
+  };
+}
 
 interface SlotCell {
   time: string; // host-local HH:MM, authoritative
@@ -73,8 +120,8 @@ interface SlotCell {
    *  next to the time so that slot is never ambiguous. */
   offsetNote?: string;
   /** "Wed 23 Sep" — set only when this slot's visitor-local date
-   *  differs from the picked day (mig#15 review). Rendered as a small
-   *  second line on the chip. */
+   *  differs from the heading's day, `gridDay(...).date` (mig#15
+   *  review, mig#50). Rendered as a small second line on the chip. */
   dateNote?: string;
 }
 

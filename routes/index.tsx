@@ -2,12 +2,14 @@ import { define } from "../lib/utils.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
 import BookingFlow from "../islands/BookingFlow.tsx";
+import { gridDay } from "../components/TimeSlots.tsx";
 import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
 import { isoDateInTz, minToHHMM, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalValidTimeZoneOrNull,
   EARLIEST_DATE,
   formatGridHeader,
+  formatShortDateAt,
   formatSlotDisplay,
   hostSlotInstant,
   isCalendarDateTime,
@@ -24,6 +26,7 @@ interface IndexData {
       displayHHMM?: string;
       ariaZoneLabel?: string;
       offsetNote?: string;
+      dateNote?: string;
     }
   >;
   error: string | null;
@@ -140,9 +143,8 @@ export default define.page(function Index(ctx) {
 
   // Every slot's instant, host-chronological order (mig#48 review) —
   // this route doesn't reorder slots across a visitor-local midnight
-  // the way /embed and BookingFlow do (it renders no `dateNote`
-  // without JS, so that reordering has nothing to serve here), so
-  // display order is exactly this push order. `formatGridHeader`
+  // the way /embed and BookingFlow do after mount, so display order
+  // before hydration is exactly this push order. `formatGridHeader`
   // below takes the FIRST of these — the first slot actually shown —
   // not an arbitrary anchor like noon of the host day, which can
   // label the header with an offset no visible slot has.
@@ -187,7 +189,12 @@ export default define.page(function Index(ctx) {
   // with a `?tz=` already set. Only HH:MM shows on the slot itself —
   // the zone renders once, in the grid's header (mig#48) — except when
   // this slot's own offset disagrees with the header's, e.g. a
-  // daylight-saving change landing on it.
+  // daylight-saving change landing on it. BookingFlow names the grid
+  // after the first slot's day (mig#50), so a slot on another day in
+  // the display zone carries a `dateNote`, as it does after hydration.
+  const firstDay = date
+    ? gridDay(daySlots[0]?.instant, date, displayTz).date
+    : null;
   const slots: IndexData["slots"] = daySlots.map((s) => {
     const display = formatSlotDisplay(s.instant, displayTz, header!.offset);
     return {
@@ -196,6 +203,9 @@ export default define.page(function Index(ctx) {
       displayHHMM: display.hhmm,
       ariaZoneLabel: display.ariaZoneLabel,
       offsetNote: display.offsetNote,
+      dateNote: isoDateInTz(s.instant, displayTz) !== firstDay
+        ? formatShortDateAt(s.instant, displayTz)
+        : undefined,
     };
   });
 

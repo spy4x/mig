@@ -374,3 +374,64 @@ Deno.test("mig#57: standalone / ignores a month before 1980", async () => {
   assertFalse(lastBefore.includes("December 1979"));
   assert(first.includes("January 1980"), "expected January 1980's grid");
 });
+
+// ─── mig#50: daylight-saving days and the grid's date heading ────────
+
+// The slot grid's own date heading (TimeSlots.tsx's `<h3>`).
+function gridHeading(html: string): string | null {
+  const m = html.match(
+    /<h3 class="text-sm font-medium text-ink-muted">([^<]*)<\/h3>/,
+  );
+  return m ? m[1] : null;
+}
+
+Deno.test("mig#50: Tokyo host, New York visitor, 1 November 2026 — the heading names the slots' own day", async () => {
+  // Tokyo's Sunday 17:00-20:00 is Sunday 03:00-06:00 in New York, but
+  // Tokyo's noon is still Saturday 23:00 there — the heading's old
+  // anchor.
+  const html = await renderIndex(
+    "http://localhost/?date=2026-11-01&tz=America/New_York",
+    {
+      hostTz: "Asia/Tokyo",
+      weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
+      slotDurationMin: 60,
+    },
+  );
+  assertEquals(gridHeading(html), "Sunday, 1 November 2026");
+  assertFalse(html.includes("Saturday, 31 October 2026"), "DateCard too");
+  assert(html.includes("03:00, New York, UTC-5"), "expected the 17:00 slot");
+  // All three slots are on the heading's day, so no slot's accessible
+  // name ends in a date note. ("Sun 1 Nov" itself does appear: the
+  // mobile summary bar's short form of the heading.)
+  assertFalse(/UTC-5, \w{3} \d/.test(html), "no slot needs a date note");
+});
+
+Deno.test("mig#50: a day with no slots names the picked calendar day, not the visitor's day at the host's noon", async () => {
+  const html = await renderIndex(
+    "http://localhost/?date=2026-11-01&tz=America/New_York",
+    {
+      hostTz: "Asia/Tokyo",
+      weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
+      blockedDates: new Set(["2026-11-01"]),
+    },
+  );
+  assert(
+    html.includes("No available times on Sunday, 1 November 2026."),
+    "expected the empty-day line to name the picked day",
+  );
+  assertFalse(html.includes("Saturday, 31 October 2026"));
+});
+
+Deno.test("mig#50: with slots on two visitor days, the heading names the first and only the other day's slots carry a note", async () => {
+  // Ho Chi Minh 09:00-17:00 is 22:00 Monday to 05:30 Tuesday in New
+  // York: the heading is Monday, and from 11:00 host time (00:00
+  // Tuesday in New York) each slot names Tuesday.
+  const html = await renderIndex(
+    `http://localhost/?date=${TEST_DATE}&tz=America/New_York`,
+  );
+  assertEquals(gridHeading(html), "Monday, 5 October 2026");
+  assert(/22:00, New York, UTC-4(?!,)/.test(html), "22:00 Monday: no note");
+  assert(/23:30, New York, UTC-4(?!,)/.test(html), "23:30 Monday: no note");
+  assert(html.includes("00:00, New York, UTC-4, Tue 6 Oct"));
+  assert(html.includes("05:30, New York, UTC-4, Tue 6 Oct"));
+});
