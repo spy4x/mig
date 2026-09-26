@@ -567,3 +567,20 @@ Deno.test("a send the transport rejects returns a failed result instead of throw
     setTransportForTesting(null);
   }
 });
+
+Deno.test("the invite attachment's Content-Type carries a charset and the calendar's METHOD", () => {
+  const emails = buildBookingEmails(
+    makeHoChiMinhConfig(),
+    makeCrossZoneBooking(),
+    "https://mig.example.com/cancel",
+  );
+  for (const email of [emails.guest, emails.owner]) {
+    const [invite] = email.attachments ?? [];
+    assertEquals(invite.filename, "meeting.ics");
+    assertEquals(
+      invite.contentType,
+      "text/calendar; charset=utf-8; method=REQUEST",
+    );
+    assertStringIncludes(invite.content, "METHOD:REQUEST");
+  }
+});

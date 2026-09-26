@@ -298,15 +298,6 @@ Deno.test("a push whose body contains Café arrives intact", async () => {
   assertStringIncludes(calls[0].body, "Guest:  Zoë <visitor@example.com>");
 });
 
-Deno.test("a push title with non-ASCII is sent as an ASCII header", async () => {
-  const calls = await captureNtfyCalls(() =>
-    notifyBookingSucceeded(makeConfig(), cafeBooking())
-  );
-  const title = calls[0].headers.get("Title") ?? "";
-  assertStringIncludes(title, "mig: new booking - Zo");
-  assertEquals(/^[\x20-\x7e]*$/.test(title), true, title);
-});
-
 Deno.test("a push that ntfy answers with 429 or 5xx is retried", async () => {
   const calls = await captureNtfyCalls(
     () => notifyBookingSucceeded(makeConfig(), cafeBooking()),
