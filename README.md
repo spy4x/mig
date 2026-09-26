@@ -120,5 +120,4 @@ Licensed under [AGPL-3.0](LICENSE). Copyright (C) 2026 Anton Shubin.
 
 ---
 
-Made by Anton Shubin ·
-[antonshubin.com/tools/mig](https://antonshubin.com/tools/mig)
+Made by Anton Shubin · [antonshubin.com/tools](https://antonshubin.com/tools)
