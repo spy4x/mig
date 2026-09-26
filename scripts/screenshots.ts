@@ -387,9 +387,9 @@ function emailPage(
     <div class="sender">
       <div class="avatar">${esc(fromName.trim().charAt(0).toUpperCase())}</div>
       <div>
-        <div><span class="name">${
-    esc(fromName)
-  }</span> <span class="addr">&lt;${esc(fromAddress)}&gt;</span></div>
+        <div><span class="name">${esc(fromName)}</span>${
+    fromAddress ? ` <span class="addr">&lt;${esc(fromAddress)}&gt;</span>` : ""
+  }</div>
         <div class="meta">to ${esc(mail.to)}</div>
       </div>
     </div>
