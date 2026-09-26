@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-26
+
+### Fixed
+
+- `THEME` takes effect. With nothing stored, a visitor sees the owner's `THEME`,
+  and a theme the visitor picked still wins; `/embed` without `?theme=light` or
+  `?theme=dark` follows `THEME` (#52). Upgrade note: if you set `THEME` earlier,
+  when it did nothing, your pages and embeds now use it, including an embed
+  whose address carries `?theme=auto`.
+- The day named above the time grid, in the date card and in the mobile summary
+  bar is the day the visitor clicked whenever one of its slots falls on that day
+  in the visitor's time zone, and otherwise the first slot's day. Before, it was
+  the visitor's date at the host's noon, so a Tokyo host's Sunday evening could
+  be labelled Saturday for a visitor in New York (#50).
+- Slot, calendar-day, month and "Change" links are no longer announced as
+  "current" by screen readers; only the selected day keeps that mark (#50).
+
 ## [0.6.0] - 2026-09-26
 
 ### Added
@@ -365,7 +382,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/spy4x/mig/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/spy4x/mig/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/spy4x/mig/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/spy4x/mig/compare/v0.4.0...v0.4.1
