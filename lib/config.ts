@@ -27,6 +27,11 @@ const ConfigSchema = type({
   BOOKING_HORIZON_DAYS: "1 <= number.integer <= 365",
   BLOCKED_DATES: "string",
   RATE_LIMIT_PER_5MIN: "number.integer > 0",
+  // mig#59: the one proxy header the rate limiter reads the client's
+  // address from. Empty (the default) trusts no header: the limiter
+  // keys on the socket address alone, which a client cannot forge.
+  TRUSTED_PROXY_HEADER:
+    "'' | 'cf-connecting-ip' | 'x-forwarded-for' | 'x-real-ip'",
   THEME: "'light' | 'dark' | 'auto'",
   SMTP_HOST: "string > 0",
   SMTP_PORT: "number.integer > 0",
@@ -123,6 +128,14 @@ function parseConfig(): Config {
     BOOKING_HORIZON_DAYS: withDefault(env, "BOOKING_HORIZON_DAYS", 14, Number),
     BLOCKED_DATES: withDefault(env, "BLOCKED_DATES", "", identity),
     RATE_LIMIT_PER_5MIN: withDefault(env, "RATE_LIMIT_PER_5MIN", 1, Number),
+    // Header names are case-insensitive, so `CF-Connecting-IP` as the
+    // operator copies it from a proxy's docs is accepted too.
+    TRUSTED_PROXY_HEADER: withDefault(
+      env,
+      "TRUSTED_PROXY_HEADER",
+      "",
+      (raw) => raw.trim().toLowerCase(),
+    ),
     THEME: withDefault(env, "THEME", "auto", identity),
     SMTP_HOST: env.SMTP_HOST,
     SMTP_PORT: withDefault(env, "SMTP_PORT", 587, Number),
@@ -215,6 +228,9 @@ function parseConfig(): Config {
     bookingHorizonDays: r.BOOKING_HORIZON_DAYS,
     blockedDates,
     rateLimitPer5Min: r.RATE_LIMIT_PER_5MIN,
+    trustedProxyHeader: r.TRUSTED_PROXY_HEADER === ""
+      ? undefined
+      : r.TRUSTED_PROXY_HEADER,
     theme: r.THEME,
     smtp: {
       host: r.SMTP_HOST,

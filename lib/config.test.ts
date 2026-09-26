@@ -593,3 +593,59 @@ Deno.test("config: a BLOCKED_DATES malformed date inside a range is named by pos
   );
   assertRawValueNotLeaked(stderr, marker);
 });
+
+// mig#59: TRUSTED_PROXY_HEADER names the one header the rate limiter
+// trusts. Unset or empty trusts none; anything else stops startup rather
+// than silently trusting nothing (or everything).
+Deno.test("config: TRUSTED_PROXY_HEADER unset trusts no header", async () => {
+  const value = await runConfigField(VALID_ENV, "trustedProxyHeader ?? null");
+  assertEquals(value, null);
+});
+
+Deno.test("config: TRUSTED_PROXY_HEADER empty trusts no header", async () => {
+  const value = await runConfigField(
+    { ...VALID_ENV, TRUSTED_PROXY_HEADER: " " },
+    "trustedProxyHeader ?? null",
+  );
+  assertEquals(value, null);
+});
+
+for (const header of ["cf-connecting-ip", "x-forwarded-for", "x-real-ip"]) {
+  Deno.test(`config: TRUSTED_PROXY_HEADER=${header} is accepted`, async () => {
+    const value = await runConfigField(
+      { ...VALID_ENV, TRUSTED_PROXY_HEADER: header },
+      "trustedProxyHeader",
+    );
+    assertEquals(value, header);
+  });
+}
+
+Deno.test("config: TRUSTED_PROXY_HEADER is case-insensitive and trimmed", async () => {
+  const value = await runConfigField(
+    { ...VALID_ENV, TRUSTED_PROXY_HEADER: " CF-Connecting-IP " },
+    "trustedProxyHeader",
+  );
+  assertEquals(value, "cf-connecting-ip");
+});
+
+for (
+  const raw of [
+    "Forwarded",
+    "x-client-ip",
+    "true",
+    "cf-connecting-ip,x-real-ip",
+  ]
+) {
+  Deno.test(`config: TRUSTED_PROXY_HEADER=${raw} stops startup, not echoed`, async () => {
+    const { code, stderr } = await runConfig({
+      ...VALID_ENV,
+      TRUSTED_PROXY_HEADER: raw,
+    });
+    assertEquals(code, 1);
+    assertStringIncludes(
+      stderr,
+      "  TRUSTED_PROXY_HEADER: must be cf-connecting-ip, x-forwarded-for, x-real-ip or empty",
+    );
+    assertRawValueNotLeaked(stderr, raw);
+  });
+}

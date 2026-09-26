@@ -14,6 +14,8 @@
 // `"toString"`.
 const FIXED_MESSAGES: Record<string, string> = {
   HIDE_BRANDING: "must be true, false, 1, 0, yes, no or empty",
+  TRUSTED_PROXY_HEADER:
+    "must be cf-connecting-ip, x-forwarded-for, x-real-ip or empty",
 };
 
 /** Renders one arktype issue as a single startup-log line, naming the

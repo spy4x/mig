@@ -1,5 +1,7 @@
 // Shared types across lib/, routes/, islands/.
 
+import type { TrustedProxyHeader } from "@spy4x/platform/rate-limit/client-ip";
+
 export type BookingStatus = "active" | "cancelled";
 
 export interface Booking {
@@ -40,6 +42,10 @@ export interface Config {
   bookingHorizonDays: number;
   blockedDates: Set<string>; // YYYY-MM-DD strings, host-local
   rateLimitPer5Min: number;
+  /** The one proxy header the rate limiter reads the client's address
+   *  from (`TRUSTED_PROXY_HEADER`). Absent: no header is trusted, and
+   *  the socket address is the client's address. */
+  trustedProxyHeader?: TrustedProxyHeader;
   theme: "light" | "dark" | "auto";
   smtp: {
     host: string;
