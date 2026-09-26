@@ -447,11 +447,18 @@ memory; reloaded from disk on cold start and after every mutation).
 ## Compile (standalone binary)
 
 ```bash
+deno install
 deno task compile
 ./mig
 ```
 
-The binary is ~80 MB stripped and has zero runtime dependencies.
+`deno task compile` builds the app and packs it, with the Deno runtime, into one
+file, `./mig`, about 105 MB (almost all of it the Deno runtime). It needs
+nothing else installed. It reads the same environment variables as the Docker
+image, and stores bookings at `DATA_PATH` (default `./data/bookings.json`,
+relative to the directory you start it from). It is built for the machine you
+run the task on; CI builds the Linux x86-64 one on every push and checks that it
+serves the booking page.
 
 ## License
 

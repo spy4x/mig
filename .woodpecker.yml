@@ -9,6 +9,8 @@ steps:
       - deno task check
       - deno task test
       - deno task build
+      - deno task compile
+      - deno task smoke:binary
 
   # Publishes antonshubin/mig to Docker Hub when a v<digit>* tag is pushed. Talks
   # to the agent's Docker daemon through its socket, so the repository must be

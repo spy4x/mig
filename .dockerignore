@@ -23,3 +23,6 @@ node_modules
 # Don't ship stale build output into a fresh build. Same merge
 # failure mode as node_modules above.
 _fresh
+# The standalone binary from `deno task compile` (~105 MB) has no place in
+# the image build context.
+/mig
