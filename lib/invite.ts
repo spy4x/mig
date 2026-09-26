@@ -4,7 +4,12 @@
 // mig-specific parts live here — which zone the DESCRIPTION's "When:"
 // line reads in, and what the event carries (mig#57).
 
-import { generateIcs, IcsEventStatus } from "@spy4x/time/ics";
+import {
+  generateIcs,
+  type IcsEvent,
+  IcsEventStatus,
+  type IcsOptions,
+} from "@spy4x/time/ics";
 import { zonedDateTime } from "@spy4x/time/tz";
 import type { Booking, Config } from "./types.ts";
 import {
@@ -44,6 +49,28 @@ export function bookingIcs(
   visitorTz?: string,
   now = new Date(),
 ): string {
+  const { event, options } = bookingInvite(
+    booking,
+    config,
+    cancelUrl,
+    displayTz,
+    visitorTz,
+    now,
+  );
+  return generateIcs(event, options);
+}
+
+/** The event and calendar options `bookingIcs` writes, for a caller
+ *  that hands them to another writer (lib/email.ts's `icalAttachment`).
+ *  Same parameters as `bookingIcs`. */
+export function bookingInvite(
+  booking: Booking,
+  config: Config,
+  cancelUrl: string,
+  displayTz = booking.hostTz,
+  visitorTz?: string,
+  now = new Date(),
+): { event: IcsEvent; options: IcsOptions } {
   const start = zonedDateTime(booking.date, booking.time, booking.hostTz);
   displayTz = canonicalTimeZoneOr(displayTz, booking.hostTz);
   const end = new Date(
@@ -111,8 +138,8 @@ export function bookingIcs(
 
   // `now` is DTSTAMP: the moment this invite was written. A parameter
   // so a test can pin it; `@spy4x/time/ics` never reads the clock itself.
-  return generateIcs(
-    {
+  return {
+    event: {
       uid: `${booking.id}@mig`,
       start,
       end,
@@ -129,6 +156,6 @@ export function bookingIcs(
         rsvp: true,
       }],
     },
-    { prodid: PRODID, dtstamp: now },
-  );
+    options: { prodid: PRODID, dtstamp: now },
+  };
 }

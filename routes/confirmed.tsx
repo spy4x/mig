@@ -15,7 +15,7 @@ export default define.page<typeof handler>(function Confirmed({ data, state }) {
 
   return (
     <div class="min-h-dvh flex flex-col">
-      <Header compact />
+      <Header compact defaultTheme={cfg.theme} />
       <ConfirmedView
         {...data}
         hostName={cfg.hostName}

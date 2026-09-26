@@ -11,6 +11,7 @@ import {
   notifyBookingCancelled,
   notifyBookingEmailFailed,
   notifyBookingSucceeded,
+  setNtfyClientOptionsForTesting,
 } from "./notify.ts";
 
 function makeConfig(): Config {
@@ -42,7 +43,7 @@ function makeConfig(): Config {
       pass: "placeholder",
       from: "Mig <mig@example.com>",
     },
-    cancelSecret: "placeholder",
+    cancelSecret: "fake-cancel-secret-only-for-tests",
     port: 8080,
     dataPath: "./data/bookings.json",
     hideBranding: false,
@@ -233,4 +234,120 @@ Deno.test("email-failed NTFY push pins the rollback-failed title, priority, and 
     Deno.env.delete("NTFY_TOKEN");
     Deno.env.delete("NTFY_MODE");
   }
+});
+
+// ─── mig#73: the shared ntfy client ──────────────────────────────────
+
+interface NtfyCall {
+  body: string;
+  headers: Headers;
+}
+
+/** Runs `send` with NTFY_* set to `env`, a fetch stub that answers each
+ *  call with the next status in `statuses` (200 once they run out) and
+ *  a sleep that returns at once, and returns every request it saw. */
+async function captureNtfyCalls(
+  send: () => Promise<void>,
+  opts: { statuses?: number[]; env?: Record<string, string> } = {},
+): Promise<NtfyCall[]> {
+  const originalFetch = globalThis.fetch;
+  const statuses = [...(opts.statuses ?? [])];
+  const calls: NtfyCall[] = [];
+  globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
+    calls.push({
+      body: String(init?.body ?? ""),
+      headers: new Headers(init?.headers),
+    });
+    return Promise.resolve(
+      new Response(null, { status: statuses.shift() ?? 200 }),
+    );
+  }) as typeof fetch;
+  const env = opts.env ?? {
+    NTFY_URL: "https://ntfy.example.com",
+    NTFY_TOPIC: "mig-test",
+    NTFY_TOKEN: "test-token",
+  };
+  for (const [key, value] of Object.entries(env)) Deno.env.set(key, value);
+  setNtfyClientOptionsForTesting({ sleep: () => Promise.resolve() });
+  try {
+    await send();
+  } finally {
+    setNtfyClientOptionsForTesting({});
+    globalThis.fetch = originalFetch;
+    for (const key of ["NTFY_URL", "NTFY_TOPIC", "NTFY_TOKEN", "NTFY_MODE"]) {
+      Deno.env.delete(key);
+    }
+  }
+  return calls;
+}
+
+function cafeBooking(): Booking {
+  return {
+    ...makeCrossZoneBooking("America/New_York"),
+    guestName: "Zoë",
+    notes: "Café ☕ at 10",
+  };
+}
+
+Deno.test("a push whose body contains Café arrives intact", async () => {
+  const calls = await captureNtfyCalls(() =>
+    notifyBookingSucceeded(makeConfig(), cafeBooking())
+  );
+  assertEquals(calls.length, 1);
+  assertStringIncludes(calls[0].body, "Notes:  Café ☕ at 10");
+  assertStringIncludes(calls[0].body, "Guest:  Zoë <visitor@example.com>");
+});
+
+Deno.test("a push that ntfy answers with 429 or 5xx is retried", async () => {
+  const calls = await captureNtfyCalls(
+    () => notifyBookingSucceeded(makeConfig(), cafeBooking()),
+    { statuses: [429, 503] },
+  );
+  assertEquals(calls.length, 3);
+});
+
+Deno.test("a push stops after three attempts when ntfy keeps failing", async () => {
+  const calls = await captureNtfyCalls(
+    () => notifyBookingSucceeded(makeConfig(), cafeBooking()),
+    { statuses: [503, 503, 503, 503, 503] },
+  );
+  assertEquals(calls.length, 3);
+});
+
+Deno.test("NTFY_URL and NTFY_TOPIC without NTFY_TOKEN push without an Authorization header", async () => {
+  const calls = await captureNtfyCalls(
+    () => notifyBookingSucceeded(makeConfig(), cafeBooking()),
+    { env: { NTFY_URL: "https://ntfy.example.com", NTFY_TOPIC: "mig-test" } },
+  );
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0].headers.get("Authorization"), null);
+});
+
+Deno.test("NTFY_TOKEN is sent as a bearer token", async () => {
+  const calls = await captureNtfyCalls(() =>
+    notifyBookingSucceeded(makeConfig(), cafeBooking())
+  );
+  assertEquals(calls[0].headers.get("Authorization"), "Bearer test-token");
+});
+
+Deno.test("NTFY_MODE=errors still suppresses a booking push", async () => {
+  const calls = await captureNtfyCalls(
+    () => notifyBookingSucceeded(makeConfig(), cafeBooking()),
+    {
+      env: {
+        NTFY_URL: "https://ntfy.example.com",
+        NTFY_TOPIC: "mig-test",
+        NTFY_MODE: "errors",
+      },
+    },
+  );
+  assertEquals(calls.length, 0);
+});
+
+Deno.test("a malformed NTFY_URL sends nothing and does not throw", async () => {
+  const calls = await captureNtfyCalls(
+    () => notifyBookingSucceeded(makeConfig(), cafeBooking()),
+    { env: { NTFY_URL: "not a url", NTFY_TOPIC: "mig-test" } },
+  );
+  assertEquals(calls.length, 0);
 });

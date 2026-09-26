@@ -10,7 +10,7 @@
 
 import type { Context } from "fresh";
 import type { State } from "./utils.ts";
-import { generateBookingId, newCancelToken } from "./tokens.ts";
+import { monotonicUlid, newOpaqueToken } from "@spy4x/platform/tokens";
 import {
   sendBookingCorrectionEmail,
   sendGuestBookingEmail,
@@ -21,6 +21,12 @@ import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip";
 import { zonedDateTime } from "@spy4x/time/tz";
 import { EARLIEST_DATE, hostSlotInstant } from "./clock.ts";
 import { BookingSchema } from "./validators.ts";
+import { isHoneypotFilled } from "@spy4x/platform/validation/predicates";
+import {
+  BodyReadTimeoutError,
+  parseBoundedFormData,
+  PayloadTooLargeError,
+} from "@spy4x/net/bounded-body";
 
 /** "" → "/", "/embed" → "/embed" — where a failed submission redirects
  *  back to (the picker root). */
@@ -42,6 +48,23 @@ function capRedirectField(value: string | undefined): string | undefined {
     : value;
 }
 
+// The booking form is a handful of short fields plus notes of at most
+// 500 characters. Even 500 four-byte characters, percent-encoded, stay
+// under 6 KB, so 64 KiB leaves room for any real submission while an
+// oversized body is refused before it is buffered.
+export const MAX_BOOKING_BODY_BYTES = 64 * 1024;
+
+// How long a booking body may go without sending a byte before the
+// read gives up with 408, so a slow client cannot hold a request open.
+export const BOOKING_BODY_TIMEOUT_MS = 10_000;
+
+/** Knobs for `handleBookingSubmit`; the routes pass none. */
+export interface BookingSubmitOptions {
+  /** Stall budget for reading the body, in milliseconds. Tests pass a
+   *  short one; the default is `BOOKING_BODY_TIMEOUT_MS`. */
+  bodyTimeoutMs?: number;
+}
+
 /** The peer's IP address, or `undefined` for a transport without one
  *  (a Unix socket). */
 function socketHostname(addr: Deno.Addr): string | undefined {
@@ -51,6 +74,7 @@ function socketHostname(addr: Deno.Addr): string | undefined {
 export async function handleBookingSubmit(
   ctx: Context<State>,
   basePath: string,
+  options: BookingSubmitOptions = {},
 ): Promise<Response> {
   const cfg = ctx.state.config;
   // mig#59: only the header TRUSTED_PROXY_HEADER names is read, and the
@@ -87,7 +111,21 @@ export async function handleBookingSubmit(
   // below: a rate-limited request never got far enough to confirm the
   // slot is still free, unlike the failure modes below that already
   // checked it moments earlier.
-  const form = await ctx.req.formData();
+  let form: FormData;
+  try {
+    form = await parseBoundedFormData(ctx.req, {
+      maxBytes: MAX_BOOKING_BODY_BYTES,
+      timeoutMs: options.bodyTimeoutMs ?? BOOKING_BODY_TIMEOUT_MS,
+    });
+  } catch (e) {
+    if (e instanceof PayloadTooLargeError) {
+      return new Response("Request body too large.", { status: 413 });
+    }
+    if (e instanceof BodyReadTimeoutError) {
+      return new Response("Request body timed out.", { status: 408 });
+    }
+    throw e;
+  }
   // Raw, unvalidated — used only to carry state back on a failed
   // redirect (mig#15 review). `date` and `tz` always ride along: the
   // route re-validates both on the way back in, so passing the raw
@@ -150,7 +188,9 @@ export async function handleBookingSubmit(
   const input = parsed.data;
 
   // Honeypot — silently accept and pretend to succeed (no booking).
-  if (input.website.trim() !== "") {
+  // Any value counts as filled, whitespace included: a bot that types
+  // " " is still a bot.
+  if (isHoneypotFilled(input.website)) {
     // Redirect to confirmed with a fake id; no email sent, no booking created.
     // Bots think they succeeded and go away.
     const fakeUrl = new URL(`${basePath}/confirmed`, cfg.publicUrl);
@@ -235,10 +275,10 @@ export async function handleBookingSubmit(
   // previous order (email, then persist) got this backwards: the
   // loser of the race still had its email sent before the conflict
   // was ever detected.
-  const { raw: tokenRaw, hash: tokenHash } = await newCancelToken(
+  const { raw: tokenRaw, hash: tokenHash } = await newOpaqueToken(
     cfg.cancelSecret,
   );
-  const bookingId = generateBookingId();
+  const bookingId = monotonicUlid();
   const booking = {
     id: bookingId,
     createdAt: new Date().toISOString(),
@@ -320,19 +360,19 @@ export async function handleBookingSubmit(
   // leaving a booking on disk with no confirmation and no working
   // cancel link. `ownerEmailSucceeded` records whether the owner's
   // "New booking" email actually went out before a later failure, so
-  // the catch block below knows whether it needs to correct that
+  // the failure branch below knows whether it needs to correct that
   // email rather than just roll the booking back silently.
-  let ownerEmailSucceeded = false;
-  try {
-    const cancelUrl = new URL(
-      `/cancel?id=${bookingId}&token=${tokenRaw}`,
-      cfg.publicUrl,
-    ).toString();
-    await sendOwnerBookingEmail(cfg, booking, cancelUrl);
-    ownerEmailSucceeded = true;
-    await sendGuestBookingEmail(cfg, booking, cancelUrl);
-  } catch (e) {
-    const msg = (e as Error).message;
+  const cancelUrl = new URL(
+    `/cancel?id=${bookingId}&token=${tokenRaw}`,
+    cfg.publicUrl,
+  ).toString();
+  const ownerSent = await sendOwnerBookingEmail(cfg, booking, cancelUrl);
+  const ownerEmailSucceeded = ownerSent.ok;
+  const sent = ownerSent.ok
+    ? await sendGuestBookingEmail(cfg, booking, cancelUrl)
+    : ownerSent;
+  if (!sent.ok) {
+    const msg = sent.error;
     console.error("mig: email send failed; rolling back booking:", msg);
     let rolledBack = true;
     try {
@@ -362,8 +402,8 @@ export async function handleBookingSubmit(
     // push sent earlier would always claim "removed, slot free again"
     // even on the rare run where the rollback write itself also
     // fails. Awaited, not fire-and-forget: notify() in lib/notify.ts
-    // already swallows and logs its own transport errors, so awaiting
-    // it adds real latency but no new failure mode.
+    // already logs its own failures and bounds its retries to a few
+    // seconds, so awaiting it adds latency but no new failure mode.
     await notifyBookingEmailFailed(cfg, booking, msg, { rolledBack });
     // mig#19 review round 3: the owner's "New booking" email (and
     // calendar invite) already went out above — correct it, since the
@@ -371,14 +411,15 @@ export async function handleBookingSubmit(
     // configured. No correction when the owner send itself was the
     // one that failed: in that case nobody got anything to correct.
     if (ownerEmailSucceeded) {
-      try {
-        await sendBookingCorrectionEmail(cfg, booking, { rolledBack });
-      } catch (correctionErr) {
+      const corrected = await sendBookingCorrectionEmail(cfg, booking, {
+        rolledBack,
+      });
+      if (!corrected.ok) {
         console.error(
           "mig: correction email FAILED after rollback; booking=" +
             bookingId +
             "; host still has a stale 'New booking' email and invite",
-          correctionErr,
+          corrected.error,
         );
       }
     }

@@ -6,7 +6,30 @@ import { parseWeeklyAvailability } from "./availability.ts";
 import { parseBlockedDates } from "./availability.ts";
 import { Email } from "./email-pattern.ts";
 import { formatConfigIssue } from "./config-issue.ts";
+import { parseAddress } from "@spy4x/email/address";
+import { MIN_SECRET_LENGTH } from "@spy4x/platform/tokens";
 import type { Config } from "./types.ts";
+
+// @spy4x/platform/tokens refuses a secret that is shorter than 32
+// characters once trimmed, or that holds anything but printable ASCII —
+// and it refuses at the first booking, not at startup. Checked here with
+// the same rule, so a bad CANCEL_SECRET stops the process instead.
+const CancelSecret = type("string").narrow((value) => {
+  const trimmed = value.trim();
+  return trimmed.length >= MIN_SECRET_LENGTH && /^[\x20-\x7e]+$/.test(trimmed);
+});
+
+// The SMTP sender parses SMTP_FROM on every send and refuses a
+// malformed mailbox or a control character (a CR or LF in the display
+// name would inject a header). Checked here with the same parser.
+const SmtpFrom = type("string").narrow((value) => {
+  try {
+    parseAddress(value);
+    return true;
+  } catch {
+    return false;
+  }
+});
 
 // Field-level shape + constraints, applied to the already-defaulted/
 // coerced candidate built below. A field with a `.default()` in the
@@ -38,8 +61,8 @@ const ConfigSchema = type({
   SMTP_USER: "string > 0",
   // Homelab convention is SMTP_PASSWORD (matches servers/{cloud,home}/.env).
   SMTP_PASSWORD: "string > 0",
-  SMTP_FROM: "string > 0",
-  CANCEL_SECRET: "string >= 16",
+  SMTP_FROM: SmtpFrom,
+  CANCEL_SECRET: CancelSecret,
   PORT: "number.integer > 0",
   DATA_PATH: "string",
   HIDE_BRANDING: "boolean",

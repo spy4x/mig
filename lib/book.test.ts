@@ -7,8 +7,8 @@
 // about, just on the write path instead of the read path. Every test
 // below asserts the `Location` header's pathname, not just "success".
 
+import type { SmtpTransport } from "@spy4x/email/smtp";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import nodemailer from "nodemailer";
 import type { Context } from "fresh";
 import type { State } from "./utils.ts";
 import type { Config } from "./types.ts";
@@ -140,26 +140,15 @@ function locationPath(res: Response): string {
   return new URL(loc).pathname + new URL(loc).search;
 }
 
-// Every test sends real mail through nodemailer's built-in JSON
-// transport (no network I/O, resolves instantly) instead of the real
-// SMTP host in fakeConfig().smtp — see lib/bookings.test.ts and
-// lib/email.test.ts for the same "temp file / no real I/O" spirit,
-// applied here to the network boundary lib/email.ts owns.
-function defaultTransport() {
-  return nodemailer.createTransport({ jsonTransport: true });
+// Every test sends mail through a fake transport (no network I/O,
+// resolves instantly) instead of the real SMTP host in
+// fakeConfig().smtp — see lib/bookings.test.ts and lib/email.test.ts
+// for the same "temp file / no real I/O" spirit, applied here to the
+// network boundary lib/email.ts owns.
+function defaultTransport(): SmtpTransport {
+  return { sendMail: () => Promise.resolve({}) };
 }
 setTransportForTesting(defaultTransport());
-
-// A minimal shape of the object nodemailer's `Mailer.sendMail` passes
-// to a transport plugin's `send(mail, callback)` — see
-// json-transport/index.js in the nodemailer package for the same
-// `mail.data.to` / `mail.message.getEnvelope()` access pattern this
-// mirrors.
-interface TestMail {
-  data: { to?: string; subject?: string; text?: string };
-  message: { getEnvelope(): unknown };
-}
-type TestSendCallback = (err: Error | null, info?: unknown) => void;
 
 /** Test-only transport (mig#19): records every `to` address it is
  *  asked to send to, and resolves immediately — no artificial delay.
@@ -168,27 +157,19 @@ type TestSendCallback = (err: Error | null, info?: unknown) => void;
  *  waited on; removed rather than fixed, since the race the test
  *  needs doesn't come from timing at all (see the comment on that
  *  test). */
-function recordingTransport(sentTo: string[]) {
-  return nodemailer.createTransport({
-    name: "recording-test-transport",
-    version: "1.0.0",
-    send(mail: TestMail, callback: TestSendCallback) {
-      sentTo.push(String(mail.data.to));
-      callback(null, { envelope: mail.message.getEnvelope() });
+function recordingTransport(sentTo: string[]): SmtpTransport {
+  return {
+    sendMail(message) {
+      sentTo.push(String(message.to));
+      return Promise.resolve({});
     },
-  });
+  };
 }
 
 /** Test-only transport (mig#19): every send fails immediately, the
  *  same way a real SMTP error reaches `lib/email.ts`'s `sendEmail`. */
-function failingTransport(message: string) {
-  return nodemailer.createTransport({
-    name: "failing-test-transport",
-    version: "1.0.0",
-    send(_mail: TestMail, callback: TestSendCallback) {
-      callback(new Error(message));
-    },
-  });
+function failingTransport(message: string): SmtpTransport {
+  return { sendMail: () => Promise.reject(new Error(message)) };
 }
 
 /** Test-only transport (mig#19 review round 1): fails only the send
@@ -206,22 +187,19 @@ function failingAddressTransport(
   sentTo: string[],
   sentSubjects?: string[],
   sentTexts?: string[],
-) {
-  return nodemailer.createTransport({
-    name: "failing-address-test-transport",
-    version: "1.0.0",
-    send(mail: TestMail, callback: TestSendCallback) {
-      const to = String(mail.data.to);
+): SmtpTransport {
+  return {
+    sendMail(message) {
+      const to = String(message.to);
       if (to === addressToFail) {
-        callback(new Error(`simulated SMTP failure for ${to}`));
-        return;
+        return Promise.reject(new Error(`simulated SMTP failure for ${to}`));
       }
       sentTo.push(to);
-      sentSubjects?.push(String(mail.data.subject ?? ""));
-      sentTexts?.push(String(mail.data.text ?? ""));
-      callback(null, { envelope: mail.message.getEnvelope() });
+      sentSubjects?.push(String(message.subject ?? ""));
+      sentTexts?.push(String(message.text ?? ""));
+      return Promise.resolve({});
     },
-  });
+  };
 }
 
 /** Test-only transport (mig#19 review round 3): the very first send
@@ -233,22 +211,24 @@ function failingAddressTransport(
  *  correction that also targets it, so a bug that skipped the
  *  `ownerEmailSucceeded` guard would still show up as "nothing sent"
  *  there. */
-function failFirstSendTransport(sentTo: string[], sentSubjects: string[]) {
+function failFirstSendTransport(
+  sentTo: string[],
+  sentSubjects: string[],
+): SmtpTransport {
   let calls = 0;
-  return nodemailer.createTransport({
-    name: "fail-first-send-test-transport",
-    version: "1.0.0",
-    send(mail: TestMail, callback: TestSendCallback) {
+  return {
+    sendMail(message) {
       calls++;
       if (calls === 1) {
-        callback(new Error("simulated SMTP failure for the first send"));
-        return;
+        return Promise.reject(
+          new Error("simulated SMTP failure for the first send"),
+        );
       }
-      sentTo.push(String(mail.data.to));
-      sentSubjects.push(String(mail.data.subject ?? ""));
-      callback(null, { envelope: mail.message.getEnvelope() });
+      sentTo.push(String(message.to));
+      sentSubjects.push(String(message.subject ?? ""));
+      return Promise.resolve({});
     },
-  });
+  };
 }
 
 /** Test-only (mig#19 review round 1): makes `store`'s very next
@@ -780,8 +760,11 @@ Deno.test("a rate-limited redirect caps an oversized date or tz instead of carry
   );
   assertEquals(first.status, 303);
 
-  const hugeDate = "2".repeat(200_000);
-  const hugeTz = "America/New_York".repeat(20_000);
+  // Far past the 100-character cap, yet under the 64 KiB body limit
+  // (mig#73), which would otherwise refuse the request before any
+  // redirect is built.
+  const hugeDate = "2".repeat(20_000);
+  const hugeTz = "America/New_York".repeat(1_000);
   const fields = validFields(hugeDate, "09:00", { guestTz: hugeTz });
 
   const res = await handleBookingSubmit(
@@ -828,6 +811,31 @@ Deno.test('handleBookingSubmit: honeypot under "" redirects to /confirmed', asyn
   await rm(path);
 });
 
+Deno.test("handleBookingSubmit: a honeypot of only spaces is rejected like any other filled one", async () => {
+  const cfg = fakeConfig();
+  const path = tmpDataPath();
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    fields: validFields(date, "09:00", { website: "   " }),
+  });
+
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const path2 = locationPath(res);
+  assertEquals(path2.startsWith("/confirmed?id=fake"), true, path2);
+  assertEquals(
+    bookings.list().length,
+    0,
+    "a whitespace honeypot must not create a booking",
+  );
+  await rm(path);
+});
+
 Deno.test('handleBookingSubmit: honeypot under "/embed" redirects to /embed/confirmed', async () => {
   const cfg = fakeConfig();
   const path = tmpDataPath();
@@ -857,7 +865,8 @@ Deno.test("a validation-failure redirect caps an oversized slot, like date and t
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
-  const hugeSlot = "9".repeat(200_000);
+  // Under the 64 KiB body limit (mig#73), far past the 100-char cap.
+  const hugeSlot = "9".repeat(20_000);
 
   try {
     const ctx = stubContext({

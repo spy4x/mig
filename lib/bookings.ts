@@ -5,11 +5,17 @@
 //   - Writes: serialised through mutex; mutate() runs user fn under
 //     lock, atomically writes to disk (temp file + rename).
 //
-// Crash safety: temp-file rename(2) is atomic on POSIX. If we crash
-// after writing temp file but before rename, the next process start
-// reads the old file intact (temp is overwritten on next write).
-// If we crash mid-rename, the kernel still gives us a complete file.
+// Crash safety: `atomicWriteJson` (@spy4x/platform) writes a temp file
+// named `<path>.<pid>.<sequence>.tmp` and renames it over the real one;
+// rename(2) is atomic on POSIX, so a reader sees the old file or the new
+// one, never half of either. A write that fails removes its temp file.
 
+import { AsyncMutex } from "@spy4x/platform/universal/concurrency";
+import {
+  atomicWriteJson,
+  readJsonFile,
+} from "@spy4x/platform/server/atomic-json";
+import { denoFileSystem } from "@spy4x/platform/server/deno-fs";
 import type { Booking } from "./types.ts";
 import { isCalendarDateTime } from "./clock.ts";
 
@@ -38,31 +44,6 @@ export function rollOverStoredWallClock(booking: Booking): Booking {
   return { ...booking, date: iso.slice(0, 10), time: iso.slice(11, 16) };
 }
 
-export class AsyncMutex {
-  private locked = false;
-  private waiters: Array<() => void> = [];
-
-  acquire(): Promise<() => void> {
-    if (!this.locked) {
-      this.locked = true;
-      return Promise.resolve(() => this.release());
-    }
-    return new Promise<() => void>((resolve) => {
-      this.waiters.push(() => resolve(() => this.release()));
-    });
-  }
-
-  private release(): void {
-    const next = this.waiters.shift();
-    if (next) {
-      // Lock stays held; we hand it to the next waiter.
-      next();
-    } else {
-      this.locked = false;
-    }
-  }
-}
-
 export interface BookingsStoreOptions {
   filePath: string;
 }
@@ -72,6 +53,7 @@ export class BookingsStore {
   private mutex = new AsyncMutex();
   private loaded = false;
   private filePath: string;
+  private writeSequence = 0;
 
   constructor(opts: BookingsStoreOptions) {
     this.filePath = opts.filePath;
@@ -82,38 +64,29 @@ export class BookingsStore {
   }
 
   private async load(): Promise<void> {
-    try {
-      const text = await Deno.readTextFile(this.filePath);
-      const parsed = JSON.parse(text);
-      if (!Array.isArray(parsed)) {
-        throw new Error("bookings.json must be a JSON array");
-      }
-      this.bookings = (parsed as Booking[]).map(rollOverStoredWallClock);
-    } catch (e) {
-      if (e instanceof Deno.errors.NotFound) {
-        this.bookings = [];
-        // Ensure parent dir exists + write empty file
-        await this.persist();
-      } else {
-        throw e;
-      }
+    const read = await readJsonFile<unknown>(denoFileSystem, this.filePath);
+    if (read.kind === "missing") {
+      this.bookings = [];
+      // Creates the parent directory and an empty file.
+      await this.persist();
+    } else if (read.kind === "invalid") {
+      throw new Error(`${this.filePath} is not valid JSON: ${read.reason}`);
+    } else if (!Array.isArray(read.value)) {
+      throw new Error("bookings.json must be a JSON array");
+    } else {
+      this.bookings = (read.value as Booking[]).map(rollOverStoredWallClock);
     }
     this.loaded = true;
   }
 
-  // Atomic write: temp file + rename. Creates parent dir if missing.
+  // Atomic write: temp file + rename, parent directory created if
+  // missing. The temp name carries the pid and a per-store counter, so
+  // two writes can never share one.
   private async persist(): Promise<void> {
-    const dir = this.filePath.slice(0, this.filePath.lastIndexOf("/"));
-    if (dir) {
-      try {
-        await Deno.mkdir(dir, { recursive: true });
-      } catch (e) {
-        if (!(e instanceof Deno.errors.AlreadyExists)) throw e;
-      }
-    }
-    const tmp = this.filePath + ".tmp";
-    await Deno.writeTextFile(tmp, JSON.stringify(this.bookings, null, 2));
-    await Deno.rename(tmp, this.filePath);
+    await atomicWriteJson(denoFileSystem, this.filePath, this.bookings, {
+      pid: Deno.pid,
+      sequence: this.writeSequence++,
+    });
   }
 
   // Lock-free snapshot read.

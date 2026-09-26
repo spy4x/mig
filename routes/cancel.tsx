@@ -1,5 +1,5 @@
 import { define } from "../lib/utils.ts";
-import { verifyCancelToken } from "../lib/tokens.ts";
+import { verifyOpaqueToken } from "@spy4x/platform/tokens";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
 import { isValidTimeZone } from "@spy4x/time/tz";
@@ -68,7 +68,7 @@ export const handler = define.handlers({
       };
     }
 
-    const ok = await verifyCancelToken(
+    const ok = await verifyOpaqueToken(
       token,
       booking.cancelTokenHash,
       cfg.cancelSecret,
@@ -169,7 +169,7 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
       cancelledAtLabel && !cancelKnownGuestTz;
     return (
       <div class="min-h-dvh flex flex-col">
-        <Header compact />
+        <Header compact defaultTheme={cfg.theme} />
         <main class="flex-1 grid place-items-center px-6 py-16">
           <div class="max-w-sm text-center">
             <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
@@ -222,7 +222,7 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
 
   return (
     <div class="min-h-dvh flex flex-col">
-      <Header compact />
+      <Header compact defaultTheme={cfg.theme} />
       <main class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
         <div class="max-w-md w-full">
           <div class="rounded-2xl border border-line bg-surface-raised overflow-hidden">

@@ -1,63 +1,78 @@
-// Theme bootstrap helper. Renders a tiny inline script in <head> so the
-// page paints in the right theme before Tailwind/CSS arrives, with no
-// flash of wrong-coloured content.
+// Theme on first paint. `themeScript()` renders the inline <head> script
+// that paints the stored theme before CSS arrives, with no flash of the
+// wrong palette. The painting itself is @spy4x/preact-signals'
+// `themeBootstrapScript`; the ThemeToggle island attaches the matching
+// `createThemeStore` with the same key and default, which then follows
+// system changes and stores the visitor's choice. `/embed` has no
+// islands, so there the script itself keeps following the system
+// (`followSystem`).
 //
-// `mode` is the user's stored preference (`light`, `dark`, or `auto`).
-// With nothing stored, it is the owner's `THEME` setting (mig#52),
-// passed in as `defaultMode`; `auto` there keeps following the system.
-// We expose `__migTheme()` on `window` so the ThemeToggle island can
-// mutate the stored mode + update the DOM without round-tripping the
-// server. `data-theme` is also set on <html> for any consumer that wants
-// to react to it via CSS attribute selectors.
+// mig's own vocabulary is `light`, `dark` or `auto` (THEME, `?theme=`);
+// the shared store says `system` for `auto`.
+
+import {
+  themeBootstrapScript,
+  type ThemePreference,
+  ThemeValue,
+} from "@spy4x/preact-signals/theme";
 
 export type ThemeParam = "light" | "dark" | "auto";
+
+/** Where a visitor's choice is kept, as before the shared store. */
+export const THEME_STORAGE_KEY = "mig-theme";
 
 /** Parses `/embed`'s `?theme=` query param (mig#44). Anything other
  *  than exactly `"light"` or `"dark"` — missing, empty, or any other
  *  string — resolves to `"auto"`, today's default behaviour (stored
- *  preference, then `prefers-color-scheme`; see `themeBootstrapScript`
+ *  preference, then `prefers-color-scheme`; see `themeScript`
  *  below). The raw value is never reflected back into the page
  *  unescaped: only this parsed, three-way result is ever used. */
 export function parseThemeParam(raw: string | null): ThemeParam {
   return raw === "light" || raw === "dark" ? raw : "auto";
 }
 
-/** The inline `<head>` script that applies the theme before first
- *  paint and exposes `window.__migTheme` for the ThemeToggle island.
- *  A visitor's stored `mig-theme` value (`light`, `dark` or `auto`)
- *  always wins; with nothing stored, `defaultMode` (the owner's
- *  `THEME`, mig#52) decides, and `auto` follows `prefers-color-scheme`.
- *  `defaultMode` goes through `parseThemeParam` before it is written
- *  into the script, so only one of the three literals can reach it. */
-export function themeBootstrapScript(defaultMode: ThemeParam = "auto"): string {
-  const d = parseThemeParam(defaultMode);
-  return `(function(){try{
-var K="mig-theme";
-var s=localStorage.getItem(K);
-var m=(s==="light"||s==="dark"||s==="auto")?s:"${d}";
-var prefersDark=matchMedia("(prefers-color-scheme: dark)").matches;
-var dark=m==="dark"||(m==="auto"&&prefersDark);
-document.documentElement.classList.toggle("dark",dark);
-document.documentElement.dataset.theme=dark?"dark":"light";
-window.__migTheme={mode:function(){return m},apply:function(next){
-if(next!=="light"&&next!=="dark"&&next!=="auto")return m;
-m=next;
-try{localStorage.setItem(K,next)}catch(_e){}
-var d2=next==="dark"||(next==="auto"&&matchMedia("(prefers-color-scheme: dark)").matches);
-document.documentElement.classList.toggle("dark",d2);
-document.documentElement.dataset.theme=d2?"dark":"light";
-return next;
-}};
-if(matchMedia){
-var mq=matchMedia("(prefers-color-scheme: dark)");
-mq.addEventListener("change",function(){
-if(m!=="auto")return;
-var d3=mq.matches;
-document.documentElement.classList.toggle("dark",d3);
-document.documentElement.dataset.theme=d3?"dark":"light";
-});
+/** mig's `THEME` value as the shared store's preference; anything
+ *  unknown is `auto`, so `system`. */
+export function themePreference(mode: ThemeParam): ThemePreference {
+  const parsed = parseThemeParam(mode);
+  if (parsed === "light") return ThemeValue.LIGHT;
+  if (parsed === "dark") return ThemeValue.DARK;
+  return ThemeValue.SYSTEM;
 }
-}catch(_e){}})();`;
+
+// Before the shared store, "follow the system" was stored as `auto`.
+// The shared script does not know that value and would paint the
+// owner's THEME instead, so a stored `auto` is rewritten to `system`
+// first, and that visitor keeps following their system.
+const MIGRATE_STORED_AUTO =
+  `(function(){try{if(localStorage.getItem("${THEME_STORAGE_KEY}")==="auto")` +
+  `localStorage.setItem("${THEME_STORAGE_KEY}","system")}catch(e){}})();`;
+
+/** The inline `<head>` script: migrate a stored `auto`, then paint the
+ *  stored theme, or the owner's `THEME` (mig#52) when nothing is
+ *  stored. `defaultMode` goes through `themePreference`, so only one
+ *  of three literals can reach the script.
+ *
+ *  `followSystem` is for a page without the ThemeToggle island: the
+ *  script then also repaints on an OS theme change while the stored
+ *  preference is `system`. A page with the island leaves it off, since
+ *  the island's store already does that and also knows a choice the
+ *  browser refused to store. */
+export function themeScript(
+  defaultMode: ThemeParam = "auto",
+  { followSystem = false }: { followSystem?: boolean } = {},
+): string {
+  return MIGRATE_STORED_AUTO + themeBootstrapScript({
+    storageKey: THEME_STORAGE_KEY,
+    defaultPreference: themePreference(defaultMode),
+    followSystem,
+  });
+}
+
+/** Whether the page at `url` renders without the ThemeToggle island:
+ *  every `/embed` page. */
+export function pageHasNoThemeToggle(url: URL): boolean {
+  return url.pathname === "/embed" || url.pathname.startsWith("/embed/");
 }
 
 // mig#44 — /embed's forced theme (`?theme=dark|light`) is read straight
@@ -75,7 +90,7 @@ document.documentElement.dataset.theme=d3?"dark":"light";
 // `light` or `dark`, today's client bootstrap when it is `auto`. An
 // iframe has no theme toggle, so a visitor's stored preference never
 // overrides `THEME` there; on the standalone site it still does (see
-// themeBootstrapScript above).
+// themeScript above).
 //
 // mig#63 — the not-found and error pages use it too: when it returns a
 // theme, _app.tsx leaves out the bootstrap script, so their theme button

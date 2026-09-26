@@ -16,6 +16,9 @@ const FIXED_MESSAGES: Record<string, string> = {
   HIDE_BRANDING: "must be true, false, 1, 0, yes, no or empty",
   TRUSTED_PROXY_HEADER:
     "must be cf-connecting-ip, x-forwarded-for, x-real-ip or empty",
+  CANCEL_SECRET:
+    "must be at least 32 printable ASCII characters, not counting spaces at either end",
+  SMTP_FROM: "must be an address or Name <address>, with no control characters",
 };
 
 /** Renders one arktype issue as a single startup-log line, naming the

@@ -5,7 +5,7 @@
 
 import type { Context } from "fresh";
 import type { State } from "./utils.ts";
-import { verifyCancelToken } from "./tokens.ts";
+import { verifyOpaqueToken } from "@spy4x/platform/tokens";
 
 export interface ConfirmedBooking {
   id: string;
@@ -41,7 +41,7 @@ export async function loadConfirmedData(
     return { state: "expired", mode: "booked", booking: null };
   }
 
-  const ok = await verifyCancelToken(
+  const ok = await verifyOpaqueToken(
     token,
     booking.cancelTokenHash,
     cfg.cancelSecret,

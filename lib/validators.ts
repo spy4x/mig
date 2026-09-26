@@ -16,22 +16,11 @@
 import { type } from "arktype";
 import { Email } from "./email-pattern.ts";
 import { isValidTimeZone } from "@spy4x/time/tz";
+import {
+  hasHeaderControlCharacters,
+  hasTextControlCharacters,
+} from "@spy4x/platform/validation/predicates";
 import { canonicalTimeZone, isCalendarDateTime } from "./clock.ts";
-
-function hasHeaderControlCharacters(value: string): boolean {
-  return [...value].some((character) => {
-    const code = character.codePointAt(0)!;
-    return code <= 31 || code === 127;
-  });
-}
-
-function hasTextControlCharacters(value: string): boolean {
-  return [...value].some((character) => {
-    const code = character.codePointAt(0)!;
-    return (code <= 31 && code !== 9 && code !== 10 && code !== 13) ||
-      code === 127;
-  });
-}
 
 export interface BookingData {
   name: string;

@@ -1,70 +1,88 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
+import {
+  createThemeStore,
+  type ThemePreference,
+  ThemeValue,
+} from "@spy4x/preact-signals/theme";
 import { Moon, Sun, ThemeAuto } from "../components/icons.tsx";
+import {
+  THEME_STORAGE_KEY,
+  type ThemeParam,
+  themePreference,
+} from "../lib/theme.ts";
 
 /*
   Theme toggle island.
 
-  Cycles through auto → light → dark → auto. The actual mutation lives
-  in `window.__migTheme` (set up by lib/theme.ts at first paint), so
-  the button just calls into that — no class juggling here.
+  Cycles through system → light → dark → system. The state lives in
+  @spy4x/preact-signals' theme store, attached on mount with the same
+  storage key and default as lib/theme.ts's first-paint script; it
+  stores the choice, repaints and follows system changes.
 
   Why a cycle, not a tri-state dropdown: the affordance is small (one
   icon button in the header). A cycle lets the user see + control the
-  setting without ever opening a popover. The order is auto first
+  setting without ever opening a popover. The order is system first
   because that's the safe default.
 
-  Why "auto" is rendered with the moon icon: it follows the system, so
-  we show whichever the OS currently is. Sun = light, moon = dark, the
-  half-moon "auto" icon = following.
+  Sun = light, moon = dark, the half-moon "auto" icon = following the
+  system.
 */
 
-type Mode = "light" | "dark" | "auto";
-
-declare global {
-  var __migTheme: {
-    mode: () => Mode;
-    apply: (m: Mode) => Mode;
-  } | undefined;
+export function nextPreference(p: ThemePreference): ThemePreference {
+  return p === ThemeValue.SYSTEM
+    ? ThemeValue.LIGHT
+    : p === ThemeValue.LIGHT
+    ? ThemeValue.DARK
+    : ThemeValue.SYSTEM;
 }
 
-function nextMode(m: Mode): Mode {
-  return m === "auto" ? "light" : m === "light" ? "dark" : "auto";
-}
-
-function label(m: Mode): string {
-  return m === "auto"
+function label(p: ThemePreference): string {
+  return p === ThemeValue.SYSTEM
     ? "Theme: follows system. Click for light."
-    : m === "light"
+    : p === ThemeValue.LIGHT
     ? "Theme: light. Click for dark."
     : "Theme: dark. Click for auto.";
 }
 
-function Icon({ mode }: { mode: Mode }) {
-  if (mode === "light") return <Sun />;
-  if (mode === "dark") return <Moon />;
+function Icon({ preference }: { preference: ThemePreference }) {
+  if (preference === ThemeValue.LIGHT) return <Sun />;
+  if (preference === ThemeValue.DARK) return <Moon />;
   return <ThemeAuto />;
 }
 
-export default function ThemeToggle() {
-  // We can't read localStorage during SSR, so we render a stable
-  // "auto" placeholder until hydration. After hydration we sync to
-  // the real mode and start responding to clicks + system changes.
-  const [mode, setMode] = useState<Mode>("auto");
+interface ThemeToggleProps {
+  /** The owner's `THEME`: the preference when the visitor stored none. */
+  defaultTheme: ThemeParam;
+}
+
+export default function ThemeToggle({ defaultTheme }: ThemeToggleProps) {
+  // Creating the store reads nothing, so this is safe during SSR;
+  // `attach()` in the effect is the first read of storage.
+  const store = useMemo(
+    () =>
+      createThemeStore({
+        storageKey: THEME_STORAGE_KEY,
+        defaultPreference: themePreference(defaultTheme),
+      }),
+    [defaultTheme],
+  );
+  const [preference, setPreference] = useState<ThemePreference>(
+    ThemeValue.SYSTEM,
+  );
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    const detach = store.attach();
+    // The store's signals come from the same @preact/signals copy as
+    // this island (deno.json maps the package's own pinned import to
+    // mig's); an explicit subscription keeps the island's state in step.
+    const unsubscribe = store.preference.subscribe(setPreference);
     setMounted(true);
-    const api = globalThis.__migTheme;
-    if (api) setMode(api.mode());
-  }, []);
-
-  function onClick() {
-    const api = globalThis.__migTheme;
-    if (!api) return;
-    const next = nextMode(mode);
-    api.apply(next);
-    setMode(next);
-  }
+    return () => {
+      unsubscribe();
+      detach();
+    };
+  }, [store]);
 
   // Until mounted, render a placeholder with the same dimensions so the
   // layout doesn't shift when the real button hydrates.
@@ -79,7 +97,7 @@ export default function ThemeToggle() {
         class={`${base} opacity-0`}
         tabIndex={-1}
       >
-        <Icon mode="auto" />
+        <Icon preference={ThemeValue.SYSTEM} />
       </button>
     );
   }
@@ -87,12 +105,12 @@ export default function ThemeToggle() {
   return (
     <button
       type="button"
-      aria-label={label(mode)}
-      title={label(mode)}
-      onClick={onClick}
+      aria-label={label(preference)}
+      title={label(preference)}
+      onClick={() => store.set(nextPreference(store.preference.value))}
       class={base}
     >
-      <Icon mode={mode} />
+      <Icon preference={preference} />
     </button>
   );
 }
