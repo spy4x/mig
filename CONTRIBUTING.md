@@ -18,10 +18,12 @@ Thanks for your interest in mig! Contributions welcome.
   - `tailwindcss` (utility classes)
   - `@tailwindcss/vite` (Vite plugin)
   - `vite` (build tool)
-  - `nodemailer` (SMTP)
   - `arktype` (validation)
   - `@std/assert` (tests)
-  - `@std/ulid` (IDs)
+  - `@spy4x/email` (SMTP), `@spy4x/integrations` (ntfy), `@spy4x/net` (bounded
+    request bodies), `@spy4x/platform` (tokens, file lock, atomic write, rate
+    limit), `@spy4x/time` (time zones, `.ics`), `@spy4x/preact-signals` (theme
+    store)
 - **One logical change per commit.** Angular commit convention
   (`feat(scope): ...`, `fix(scope): ...`).
 - **Run `deno task check` before committing.** Lint, format, and type-check must
@@ -48,7 +50,7 @@ conventions.
 - Unit tests in `*.test.ts` next to the file under test
 - `deno test -A` runs everything
 - `lib/availability.test.ts`, `lib/bookings.test.ts`, `lib/invite.test.ts`,
-  `lib/clock.test.ts`, `lib/tokens.test.ts` are the starting points.
+  `lib/clock.test.ts`, `lib/config.test.ts` are the starting points.
 
 ## Pull request flow
 

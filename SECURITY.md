@@ -52,7 +52,7 @@ coordinate disclosure on a timeline that makes sense for the actual exposure.
 
 - Spam protection (honeypot + per-IP rate limit).
 - Tampering with cancel links (HMAC-SHA-256 of random token).
-- Email injection (arktype-validated fields; SMTP via nodemailer).
+- Email injection (arktype-validated fields; SMTP via `@spy4x/email`).
 - Booking slot conflicts (atomic mutex around read-modify-write).
 
 **Out of scope:**
