@@ -1,5 +1,9 @@
 import { define } from "../lib/utils.ts";
-import { parseThemeParam, themeBootstrapScript } from "../lib/theme.ts";
+import {
+  parseThemeParam,
+  themeBootstrapScript,
+  type ThemeParam,
+} from "../lib/theme.ts";
 
 // Default root layout. Wraps every page in <html>+<body> with theme
 // bootstrap, meta tags, and the mig favicon.
@@ -23,10 +27,21 @@ import { parseThemeParam, themeBootstrapScript } from "../lib/theme.ts";
 // the same client bootstrap script runs. Scoped to `/embed*` — the
 // standalone site has no such query param and must not start
 // honouring one it never advertised.
-function forcedThemeFor(url: URL): "light" | "dark" | null {
+//
+// mig#52 — without an explicit `?theme=light|dark`, /embed follows the
+// owner's `THEME` setting the same way: forced server-side when it is
+// `light` or `dark`, today's client bootstrap when it is `auto`. An
+// iframe has no theme toggle, so a visitor's stored preference never
+// overrides `THEME` there; on the standalone site it still does (see
+// lib/theme.ts's themeBootstrapScript).
+function forcedThemeFor(
+  url: URL,
+  configured: ThemeParam,
+): "light" | "dark" | null {
   if (!url.pathname.startsWith("/embed")) return null;
   const parsed = parseThemeParam(url.searchParams.get("theme"));
-  return parsed === "auto" ? null : parsed;
+  if (parsed !== "auto") return parsed;
+  return configured === "auto" ? null : configured;
 }
 
 export default define.page(function App({ Component, state, url }) {
@@ -35,7 +50,7 @@ export default define.page(function App({ Component, state, url }) {
   const description =
     `${cfg.hostName} — ${cfg.slotDurationMin}-minute video call. Pick a time that works for you.`;
   const canonical = new URL(url.pathname, cfg.publicUrl).toString();
-  const forcedTheme = forcedThemeFor(url);
+  const forcedTheme = forcedThemeFor(url, cfg.theme);
 
   return (
     <html
@@ -118,7 +133,9 @@ html,body{margin:0;background:var(--color-surface);color:var(--color-ink);font-f
         }
         {forcedTheme === null && (
           <script
-            dangerouslySetInnerHTML={{ __html: themeBootstrapScript() }}
+            dangerouslySetInnerHTML={{
+              __html: themeBootstrapScript(cfg.theme),
+            }}
           />
         )}
       </head>

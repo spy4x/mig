@@ -54,11 +54,14 @@ const FAKE_CONFIG: Config = {
 // either way. Only `state.config` and `url` are read by App — the
 // rest are unused stand-ins so the call satisfies the type, same as
 // routes/embed/embed.test.tsx's fakePageProps.
-function fakeAppProps(path: string): ComponentProps<typeof App> {
+function fakeAppProps(
+  path: string,
+  theme: Config["theme"] = "auto",
+): ComponentProps<typeof App> {
   const req = new Request(`http://localhost${path}`);
   const props: PageProps<never, State> = {
     data: undefined as never,
-    state: { config: FAKE_CONFIG } as unknown as State,
+    state: { config: { ...FAKE_CONFIG, theme } } as unknown as State,
     config: {} as unknown as PageProps<never, State>["config"],
     url: new URL(req.url),
     req,
@@ -199,4 +202,41 @@ Deno.test("App: theme=auto still renders the script that reads/writes mig-theme"
   const html = renderToString(<App {...fakeAppProps("/embed?theme=auto")} />);
   assert(html.includes("mig-theme"));
   assert(html.includes("localStorage"));
+});
+
+// ─── mig#52: the owner's THEME setting ──────────────────────────────
+
+Deno.test("App: THEME=dark makes /embed without ?theme= render dark before any script runs", () => {
+  for (const path of ["/embed", "/embed?theme=auto", "/embed/confirmed"]) {
+    const html = renderToString(<App {...fakeAppProps(path, "dark")} />);
+    const tag = htmlTag(html);
+    assert(/class="[^"]*\bdark\b[^"]*"/.test(tag), `${path}: ${tag}`);
+    assert(tag.includes('data-theme="dark"'), `${path}: ${tag}`);
+    assertFalse(html.includes("__migTheme"), path);
+  }
+});
+
+Deno.test("App: THEME=light makes /embed without ?theme= render light", () => {
+  const tag = htmlTag(
+    renderToString(<App {...fakeAppProps("/embed", "light")} />),
+  );
+  assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag);
+  assert(tag.includes('data-theme="light"'), tag);
+});
+
+Deno.test("App: an explicit /embed?theme= wins over THEME", () => {
+  const tag = htmlTag(
+    renderToString(<App {...fakeAppProps("/embed?theme=light", "dark")} />),
+  );
+  assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag);
+  assert(tag.includes('data-theme="light"'), tag);
+});
+
+Deno.test("App: THEME=dark on the standalone site is the bootstrap script's default, not forced", () => {
+  // Forcing it server-side would override a visitor's stored
+  // preference; the script applies THEME only when nothing is stored.
+  const html = renderToString(<App {...fakeAppProps("/", "dark")} />);
+  const tag = htmlTag(html);
+  assertFalse(tag.includes("data-theme="), tag);
+  assert(html.includes('?s:"dark"'), "script default must be dark");
 });
