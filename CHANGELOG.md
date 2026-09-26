@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `deno task compile` now produces a binary that serves mig. Before, `./mig`
+  exited at once without listening on any port, although the README offered it
+  as a way to run mig. CI now builds the binary and checks that it serves the
+  booking page, `/embed`, `/health` and the stylesheet.
+
 ## [0.7.2] - 2026-09-26
 
 ### Fixed

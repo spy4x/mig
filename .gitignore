@@ -26,6 +26,9 @@ data/
 .deno/
 deno_dir/
 bin/
+# Standalone binary from `deno task compile`
+/mig
+/mig.exe
 _fresh.old/
 _fresh.bak/
 

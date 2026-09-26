@@ -49,6 +49,7 @@
 src/
 ├── main.ts                  — production entry (deno serve)
 ├── dev.ts                   — dev entry (vite)
+├── binary.ts                — `deno task compile` entry, serves the embedded _fresh/
 ├── deno.json                — Fresh imports, tasks, lint config
 ├── routes/
 │   ├── _app.tsx             — HTML shell, theme bootstrap
@@ -154,7 +155,8 @@ deno task build        # production build → _fresh/
 deno task start        # serve the build
 deno task check        # fmt + lint + type-check
 deno task test         # unit tests
-deno task compile      # deno compile → single binary
+deno task compile      # build + deno compile (binary.ts) → ./mig
+deno task smoke:binary # start ./mig and check it serves pages
 ```
 
 ## Screenshots
@@ -206,6 +208,8 @@ repeating their commands, so the pipeline can't drift from `deno task check`:
 - `deno task check` (fmt --check + lint + type check)
 - `deno task test`
 - `deno task build`
+- `deno task compile` + `deno task smoke:binary` (the standalone binary starts
+  and serves pages)
 
 `check` runs on push, pull request, tag and `manual` events, so it can also be
 started by hand from the Woodpecker UI.
