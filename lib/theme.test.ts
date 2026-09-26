@@ -76,3 +76,63 @@ Deno.test("theme script: an unknown THEME value is written into the script as au
   assertEquals(script.includes("alert"), false);
   assertEquals(run("nonsense" as ThemeParam, null, true).dark, true);
 });
+
+// /embed has no ThemeToggle island, so its script must follow a live
+// OS change itself.
+function runLive(followSystem: boolean, stored: string | null) {
+  const store = new Map<string, string>();
+  if (stored !== null) store.set(THEME_STORAGE_KEY, stored);
+  const classes = new Set<string>();
+  const listeners: Array<() => void> = [];
+  const media = {
+    matches: false,
+    addEventListener: (_type: string, listener: () => void) =>
+      listeners.push(listener),
+  };
+  new Function(
+    "localStorage",
+    "matchMedia",
+    "document",
+    themeScript("dark", { followSystem }),
+  )(
+    {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => store.set(k, v),
+    },
+    () => media,
+    {
+      documentElement: {
+        classList: {
+          toggle: (c: string, on: boolean) =>
+            on ? classes.add(c) : classes.delete(c),
+        },
+      },
+    },
+  );
+  return {
+    dark: () => classes.has("dark"),
+    osTurnsDark() {
+      media.matches = true;
+      for (const listener of listeners) listener();
+    },
+  };
+}
+
+Deno.test("theme script: with followSystem, a stored auto repaints when the OS turns dark", () => {
+  const page = runLive(true, "auto");
+  assertEquals(page.dark(), false);
+  page.osTurnsDark();
+  assertEquals(page.dark(), true);
+});
+
+Deno.test("theme script: with followSystem, a stored light stays light when the OS turns dark", () => {
+  const page = runLive(true, "light");
+  page.osTurnsDark();
+  assertEquals(page.dark(), false);
+});
+
+Deno.test("theme script: without followSystem, the page keeps its first paint when the OS turns dark", () => {
+  const page = runLive(false, "system");
+  page.osTurnsDark();
+  assertEquals(page.dark(), false);
+});

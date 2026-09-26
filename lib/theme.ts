@@ -3,7 +3,9 @@
 // wrong palette. The painting itself is @spy4x/preact-signals'
 // `themeBootstrapScript`; the ThemeToggle island attaches the matching
 // `createThemeStore` with the same key and default, which then follows
-// system changes and stores the visitor's choice.
+// system changes and stores the visitor's choice. `/embed` has no
+// islands, so there the script itself keeps following the system
+// (`followSystem`).
 //
 // mig's own vocabulary is `light`, `dark` or `auto` (THEME, `?theme=`);
 // the shared store says `system` for `auto`.
@@ -49,12 +51,28 @@ const MIGRATE_STORED_AUTO =
 /** The inline `<head>` script: migrate a stored `auto`, then paint the
  *  stored theme, or the owner's `THEME` (mig#52) when nothing is
  *  stored. `defaultMode` goes through `themePreference`, so only one
- *  of three literals can reach the script. */
-export function themeScript(defaultMode: ThemeParam = "auto"): string {
+ *  of three literals can reach the script.
+ *
+ *  `followSystem` is for a page without the ThemeToggle island: the
+ *  script then also repaints on an OS theme change while the stored
+ *  preference is `system`. A page with the island leaves it off, since
+ *  the island's store already does that and also knows a choice the
+ *  browser refused to store. */
+export function themeScript(
+  defaultMode: ThemeParam = "auto",
+  { followSystem = false }: { followSystem?: boolean } = {},
+): string {
   return MIGRATE_STORED_AUTO + themeBootstrapScript({
     storageKey: THEME_STORAGE_KEY,
     defaultPreference: themePreference(defaultMode),
+    followSystem,
   });
+}
+
+/** Whether the page at `url` renders without the ThemeToggle island:
+ *  every `/embed` page. */
+export function pageHasNoThemeToggle(url: URL): boolean {
+  return url.pathname === "/embed" || url.pathname.startsWith("/embed/");
 }
 
 // mig#44 — /embed's forced theme (`?theme=dark|light`) is read straight

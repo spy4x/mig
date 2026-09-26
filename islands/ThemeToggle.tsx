@@ -73,8 +73,9 @@ export default function ThemeToggle({ defaultTheme }: ThemeToggleProps) {
 
   useEffect(() => {
     const detach = store.attach();
-    // `subscribe`, not an auto-tracked read: the store's signals may be
-    // a different copy of @preact/signals than this island renders with.
+    // The store's signals come from the same @preact/signals copy as
+    // this island (deno.json maps the package's own pinned import to
+    // mig's); an explicit subscription keeps the island's state in step.
     const unsubscribe = store.preference.subscribe(setPreference);
     setMounted(true);
     return () => {

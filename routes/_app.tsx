@@ -1,5 +1,9 @@
 import { define } from "../lib/utils.ts";
-import { forcedThemeFor, themeScript } from "../lib/theme.ts";
+import {
+  forcedThemeFor,
+  pageHasNoThemeToggle,
+  themeScript,
+} from "../lib/theme.ts";
 
 // Default root layout. Wraps every page in <html>+<body> with theme
 // bootstrap, meta tags, and the mig favicon.
@@ -104,7 +108,9 @@ html,body{margin:0;background:var(--color-surface);color:var(--color-ink);font-f
         {forcedTheme === null && (
           <script
             dangerouslySetInnerHTML={{
-              __html: themeScript(cfg.theme),
+              __html: themeScript(cfg.theme, {
+                followSystem: pageHasNoThemeToggle(url),
+              }),
             }}
           />
         )}

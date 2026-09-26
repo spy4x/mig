@@ -240,3 +240,17 @@ Deno.test("App: THEME=dark on the standalone site is the bootstrap script's defa
   assertFalse(tag.includes("data-theme="), tag);
   assert(html.includes('?s:"dark"'), "script default must be dark");
 });
+
+// /embed renders no ThemeToggle island, so only there does the inline
+// script keep following a live OS theme change itself.
+Deno.test("App: only /embed pages render a theme script that follows a live OS change", () => {
+  for (const path of ["/embed", "/embed?theme=auto", "/embed/confirmed"]) {
+    const html = renderToString(<App {...fakeAppProps(path)} />);
+    assert(html.includes(`addEventListener("change"`), path);
+  }
+  for (const path of ["/", "/confirmed", "/cancel", "/embedded"]) {
+    const html = renderToString(<App {...fakeAppProps(path)} />);
+    assert(html.includes("mig-theme"), path);
+    assertFalse(html.includes(`addEventListener("change"`), path);
+  }
+});
