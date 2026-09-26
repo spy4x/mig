@@ -24,8 +24,8 @@ const VALID_ENV: Record<string, string> = {
   SMTP_PASSWORD: "not-a-real-secret",
   SMTP_FROM: "Bookings <book@example.com>",
   // Not a real secret — a fixed fixture string, long enough to satisfy the
-  // >=16-char constraint under test.
-  CANCEL_SECRET: "test-cancel-secret-not-real-000",
+  // >=32-char constraint under test.
+  CANCEL_SECRET: "test-cancel-secret-not-real-00000",
 };
 
 const CONFIG_SCRIPT_PATH = new URL("./config.ts", import.meta.url);
@@ -243,20 +243,73 @@ Deno.test("config: SLOT_DURATION_MIN accepts 480, rejects 481", async () => {
   assertStringIncludes(at481.stderr, "SLOT_DURATION_MIN");
 });
 
-// Pins the CANCEL_SECRET minimum at 16 characters, not 15.
-Deno.test("config: CANCEL_SECRET accepts 16 chars, rejects 15", async () => {
-  const at16 = await runConfig({
+// mig#73: @spy4x/platform/tokens needs 32 characters, so a shorter
+// secret must stop startup instead of failing the first booking.
+Deno.test("config: CANCEL_SECRET accepts 32 chars, rejects 31", async () => {
+  const at32 = await runConfig({
     ...VALID_ENV,
-    CANCEL_SECRET: "a".repeat(16),
+    CANCEL_SECRET: "a".repeat(32),
   });
-  assertEquals(at16.code, 0, at16.stderr);
+  assertEquals(at32.code, 0, at32.stderr);
 
-  const at15 = await runConfig({
+  const at31 = await runConfig({
     ...VALID_ENV,
-    CANCEL_SECRET: "a".repeat(15),
+    CANCEL_SECRET: "a".repeat(31),
   });
-  assertEquals(at15.code, 1);
-  assertStringIncludes(at15.stderr, "CANCEL_SECRET");
+  assertEquals(at31.code, 1);
+  assertStringIncludes(
+    at31.stderr,
+    "CANCEL_SECRET: must be at least 32 printable ASCII characters",
+  );
+});
+
+Deno.test("config: CANCEL_SECRET padded to 32 with spaces is rejected", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    CANCEL_SECRET: ` ${"a".repeat(30)} `,
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "CANCEL_SECRET");
+});
+
+Deno.test("config: CANCEL_SECRET with a non-ASCII character is rejected, not echoed", async () => {
+  const secret = `${"a".repeat(32)}é`;
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    CANCEL_SECRET: secret,
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "CANCEL_SECRET");
+  assertEquals(stderr.includes(secret), false, stderr);
+});
+
+Deno.test("config: SMTP_FROM with a CR or LF in the display name stops startup", async () => {
+  for (
+    const from of [
+      "Book\rings <book@example.com>",
+      "Book\nBcc: x@example.com <book@example.com>",
+    ]
+  ) {
+    const { code, stderr } = await runConfig({ ...VALID_ENV, SMTP_FROM: from });
+    assertEquals(code, 1, JSON.stringify(from));
+    assertStringIncludes(
+      stderr,
+      "SMTP_FROM: must be an address or Name <address>",
+    );
+  }
+});
+
+Deno.test("config: SMTP_FROM as a bare address or Name <address> is accepted", async () => {
+  for (
+    const from of [
+      "book@example.com",
+      "Bookings <book@example.com>",
+      '"Jane, Bookings" <book@example.com>',
+    ]
+  ) {
+    const { code, stderr } = await runConfig({ ...VALID_ENV, SMTP_FROM: from });
+    assertEquals(code, 0, `${from}: ${stderr}`);
+  }
 });
 
 // Pins the PORT default at 8080, not 8081.
