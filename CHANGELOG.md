@@ -6,8 +6,50 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-27
+
+### Upgrade notes
+
+- `CANCEL_SECRET` must now be at least 32 characters long, printable ASCII only,
+  not counting spaces at either end; before, 16 were enough. A shorter secret
+  stops mig at startup with a message that names the rule, never the value.
+  Generate a new one with `openssl rand -base64 32`. Changing the secret
+  invalidates every cancel link already sent, so if yours is 32 characters or
+  more, keep it: links sent by earlier versions keep working (#73).
+- `SMTP_FROM` is now checked at startup. A value the mail sender cannot parse,
+  or a display name with a line break in it, stops mig with an error instead of
+  failing at the first booking (#73).
+- STARTTLS stays opportunistic, as before: mig still sends through a relay that
+  does not offer it.
+
+### Changed
+
+- mig now uses the shared `@spy4x/*` libraries instead of its own copies for
+  sending email, ntfy pushes, cancel tokens, the bookings file lock and atomic
+  write, input checks and the theme toggle. Fixes made there now reach mig
+  (#73).
+- `NTFY_TOKEN` is optional: `NTFY_URL` and `NTFY_TOPIC` alone now send pushes
+  without authentication. Before, a missing token silently turned pushes off.
+- The README opens with the booking-flow demo video and keeps only the
+  confirmation email picture, now in a dark mail-client frame. The details moved
+  to `docs/`, and the README's last line links to
+  [antonshubin.com/tools/mig](https://antonshubin.com/tools/mig) (#76, #81).
+- The social preview picture is dark.
+
 ### Fixed
 
+- A push notification keeps non-ASCII text: "Café" no longer arrives as "Caf?".
+- ntfy answers of 429 or 5xx, and network errors, are retried up to three times
+  within five seconds.
+- A booking form with a honeypot field filled with only spaces is now caught as
+  a bot.
+- A booking form body over 64 KiB is refused with 413, and one that stalls for
+  10 seconds with 408, on both `POST /api/book` and `POST /embed/book`.
+- A failed write of the bookings file no longer leaves a temp file behind.
+- An apostrophe in a guest's name or notes is escaped in HTML emails, and an
+  SMTP error can no longer carry the SMTP password.
+- A guest address that the form accepts but the mail sender refuses now rolls
+  the booking back like any other failed guest email.
 - `deno task compile` now produces a binary that serves mig. Before, `./mig`
   exited at once without listening on any port, although the README offered it
   as a way to run mig. CI now builds the binary and checks that it serves the
@@ -438,7 +480,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/spy4x/mig/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/spy4x/mig/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/spy4x/mig/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/spy4x/mig/compare/v0.6.1...v0.7.0

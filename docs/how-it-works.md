@@ -72,7 +72,7 @@ Request → Fresh route → lib/* (pure) → bookings.mutate() (mutex)
                                             ↓
                                   JSON file (atomic write)
                                             ↓
-                                  nodemailer → SMTP → owner + guest
+                                  @spy4x/email → SMTP → owner + guest
 ```
 
 Mutations are serialised by an `AsyncMutex`. Reads are lock-free (memoised in
