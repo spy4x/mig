@@ -112,9 +112,16 @@ src/
   shared libraries, pinned exactly: `@spy4x/time` (zone math, the `.ics`
   writer), `@spy4x/platform` (rate limiter, tokens, mutex, atomic JSON write,
   input predicates, `Result`), `@spy4x/email` (SMTP sender, HTML shell),
-  `@spy4x/integrations` (ntfy client) and `@spy4x/net` (bounded request body).
-  Before writing a helper, check whether one of those already has it. Anything
-  else needs a comment.
+  `@spy4x/integrations` (ntfy client), `@spy4x/net` (bounded request body) and
+  `@spy4x/preact-signals` (the theme store and its first-paint script). Before
+  writing a helper, check whether one of those already has it. Anything else
+  needs a comment.
+- **One `@preact/signals`.** `@spy4x/preact-signals` imports
+  `npm:@preact/signals@2.5.1` exactly. A second copy next to mig's own hooks
+  into Preact twice and server rendering throws "Cycle detected", so `deno.json`
+  maps that exact specifier to mig's `@preact/signals`. Bumping
+  `@spy4x/preact-signals` means checking which version it now imports and moving
+  that mapping with it.
 - **Concurrency:** every mutation goes through `bookings.mutate()` which
   acquires the in-process mutex. Never read-then-write the JSON directly.
 
