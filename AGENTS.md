@@ -95,8 +95,9 @@ src/
 
 - **Idiomatic TypeScript:** `deno fmt` clean, `deno lint` clean, `deno check`
   clean. Never commit with failures.
-- **Indent:** 2 spaces, double quotes, no semis, 100-col.
-- **Money/IDs as strings** — never numbers.
+- **Indent:** 2 spaces, double quotes, no semis, 100-col. Double quotes override
+  the global "backticks for strings" rule; backticks only for interpolation.
+- **IDs as strings** — never numbers.
 - **Functional over OO.** Small pure functions; class only when state genuinely
   needs encapsulation (`AsyncMutex`, `BookingsStore`).
 - **Errors as data** — return `{ ok: true, value } | { ok: false, error }` for
@@ -209,46 +210,17 @@ repeating their commands, so the pipeline can't drift from `deno task check`:
 `check` runs on push, pull request, tag and `manual` events, so it can also be
 started by hand from the Woodpecker UI.
 
-`deno install` runs as `deno install --frozen`. Without `--frozen`, a
-`deno.lock` that no longer matches `deno.json` gets silently rewritten instead
-of failing the build, so a drifted lock could reach `main` unnoticed. Verified
-in `denoland/deno:debian-2.9.5`, the step's own image: with the checked-in lock,
-`deno --version`, `deno install --frozen`, `deno task check`, `deno task test`
-and `deno task build` all pass, and `deno.lock` is byte-identical (`cmp`) before
-and after; with `deno.json` given an import the lock has no entry for,
-`deno install --frozen` alone exits non-zero and never reaches the later
-commands.
+`deno install` always runs with `--frozen`: without it, a `deno.lock` that no
+longer matches `deno.json` is silently rewritten instead of failing the build.
 
-**The Dockerfile's build stage honours `deno.lock` too**, the same way CI does.
-It used to delete `deno.lock`, exclude it from the build context via
-`.dockerignore`, and pull `vite`, `tailwindcss`, `preact`, `@preact/signals` and
-`nodemailer` with a separate `npm install` by `^` range — so the published image
-could carry different dependency versions than the ones CI tested and the lock
-recorded — and it did: that path resolved `@preact/signals@2.11.2` where
-`deno.lock` records `2.11.1`. Since CI's own `check` step already runs
-`deno install --frozen` then `deno task build` inside the exact same
-`denoland/deno:debian-2.9.5` image as the build stage, with no Node.js or npm,
-the build stage now does the same: it keeps `deno.lock` in the build context and
-runs `deno install --frozen` before `deno task build`, dropping the Node.js/npm
-install and the npm-install workaround entirely. `deno install --frozen` builds
-its own `/src/node_modules` (a `.deno/`-backed store) in the build stage — see
-`.dockerignore`'s `node_modules` entry for why a host-managed one must still
-stay out of the build context. Verified with a real `docker build` from a clean
-`git archive` checkout (so a host `node_modules`/`_fresh` can't leak in, same
-risk `.dockerignore` guards against): the build exits 0 with no Node.js or npm
-installed anywhere in the image; the resolved `vite`, `preact`, `tailwindcss`
-and `nodemailer` versions inside the build stage equal `deno.lock`'s recorded
-versions exactly; a container from the built image answers `/`, `/embed` and
-`/health` with 200, `/` is a full page (not the 77-byte empty-`<body>` failure
-mode), and the footer shows the injected `MIG_VERSION`; and, with `deno.json`
-given an import range the lock has no entry for, `docker build` fails at the
-`deno install --frozen` step instead of silently building different versions
-than CI tested, while an unchanged copy still builds. The runtime stage's layers
-(base image, `_fresh/` + `static/` copy, env/healthcheck/CMD) are unchanged, so
-the published image's own footprint doesn't change — the win is a build stage
-that can no longer silently drift from what CI already tested, and a smaller,
-faster one besides (no `apt-get install` of Node.js/npm and their several
-hundred transitive dependencies, no separate npm resolution).
+**The Dockerfile's build stage honours `deno.lock` the same way.** It keeps
+`deno.lock` in the build context and runs `deno install --frozen` before
+`deno task build`, in the same image as CI, with no Node.js or npm. So the
+published image carries exactly the versions CI tested. An earlier build stage
+ran its own `npm install` by `^` range and shipped a different `@preact/signals`
+than the lock recorded; never reintroduce a separate install. `.dockerignore`
+keeps a host `node_modules` out of the build context, because
+`deno install --frozen` builds its own there.
 
 `release` runs after `check` on a `v<digit>` tag and publishes `antonshubin/mig`
 to Docker Hub: `v1.2.3` and `latest`, built with `MIG_VERSION=1.2.3`. A
