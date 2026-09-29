@@ -257,7 +257,7 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
                   name="reason"
                   rows={3}
                   maxLength={500}
-                  placeholder="Let the other person know why (optional)."
+                  placeholder="Let the other person know why."
                   class="resize-y"
                 />
               </Field>
