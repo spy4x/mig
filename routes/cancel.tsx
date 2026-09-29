@@ -1,3 +1,6 @@
+import { Button } from "@spy4x/preact-ui/button";
+import { Field } from "@spy4x/preact-ui/field";
+import { Textarea } from "@spy4x/preact-ui/input";
 import { define } from "../lib/utils.ts";
 import { verifyOpaqueToken } from "@spy4x/platform/tokens";
 import { Header } from "../components/Header.tsx";
@@ -249,33 +252,20 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
               <input type="hidden" name="id" value={b.id} />
               <input type="hidden" name="token" value={token} />
 
-              <div>
-                <label
-                  for="reason"
-                  class="block text-sm font-medium text-ink mb-1.5"
-                >
-                  Reason
-                  <span class="text-ink-subtle font-normal ml-1">
-                    (optional)
-                  </span>
-                </label>
-                <textarea
-                  id="reason"
+              <Field id="reason" label="Reason" hint="Optional">
+                <Textarea
                   name="reason"
                   rows={3}
                   maxLength={500}
                   placeholder="Let the other person know why (optional)."
-                  class="block w-full rounded-lg border border-line bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle transition-colors focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-y"
+                  class="resize-y"
                 />
-              </div>
+              </Field>
 
               <div class="flex items-center justify-end pt-2">
-                <button
-                  type="submit"
-                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-surface)"
-                >
+                <Button type="submit" variant="danger">
                   Cancel
-                </button>
+                </Button>
               </div>
             </form>
           </div>

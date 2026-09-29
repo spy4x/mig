@@ -21,15 +21,22 @@ export default define.page(function Error(
         />
       )}
       <main class="flex-1 grid place-items-center px-6 py-16">
-        <EmptyState
-          title="Something went wrong"
-          description={message}
-          action={
-            <a href="/" class={buttonClasses()}>
-              Back to booking
-            </a>
-          }
-        />
+        <div class="w-full max-w-[650px]">
+          <p class="mb-3 text-center text-xs font-medium uppercase tracking-[0.18em] text-red-600 dark:text-red-400">
+            500
+          </p>
+          <h1 class="mb-3 text-center text-xl font-semibold tracking-(--tracking-tight) text-ink">
+            Something went wrong
+          </h1>
+          <EmptyState
+            description={message}
+            action={
+              <a href="/" class={buttonClasses()}>
+                Back to booking
+              </a>
+            }
+          />
+        </div>
       </main>
       {cfg && (
         <Footer

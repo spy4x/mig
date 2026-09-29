@@ -10,10 +10,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The booking page's calendar, icons, form fields, buttons, and the 404, 500 and
   loading boxes now come from the shared `@spy4x/preact-*` packages. In the
-  calendar, the arrow keys, Home, End, Page Up and Page Down move between days
-  and months, and a month arrow with nothing to book in it is shown disabled
-  instead of hidden. Fields are a little taller and the icon strokes thinner.
-  Booking behaviour, URLs, form field names and emails are unchanged (#89).
+  calendar, the arrow keys, Home and End move between days within the month
+  (they stop at the month's edge), Page Up and Page Down change the month, and a
+  month arrow with nothing to book in it is shown disabled instead of hidden.
+  Fields are a little taller and the icon strokes thinner. Booking behaviour,
+  URLs, form field names and emails are unchanged (#89).
 - The email check now uses the same rule the mail sender uses. An address such
   as `a%b@example.com` is now accepted; `visitor@example-.com`, which the sender
   refused after the booking had been made, is now refused at the form (#89).
