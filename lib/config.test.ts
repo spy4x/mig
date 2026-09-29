@@ -158,13 +158,20 @@ Deno.test("config: exits 1 naming an invalid THEME", async () => {
   assertStringIncludes(stderr, "THEME");
 });
 
-// mig#3 review round 1: HOST_EMAIL goes through the same shared
-// lib/email-pattern.ts Email type as BookingSchema's email field — pin
-// the same Zod-parity boundary here too.
-Deno.test("config: accepts an apostrophe in HOST_EMAIL's local part (Zod parity)", async () => {
+// HOST_EMAIL goes through the same `emailAddress` rule as
+// BookingSchema's email field — pin the same boundary here too.
+Deno.test("config: accepts an apostrophe in HOST_EMAIL's local part", async () => {
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     HOST_EMAIL: "o'brien@example.com",
+  });
+  assertEquals(code, 0, stderr);
+});
+
+Deno.test("config: accepts a percent sign in HOST_EMAIL's local part", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    HOST_EMAIL: "a%b@example.com",
   });
   assertEquals(code, 0, stderr);
 });
@@ -174,12 +181,11 @@ for (
     "a..b@example.com",
     ".a@example.com",
     "a.@example.com",
-    "a%b@example.com",
     "a@-example.com",
     "a@example..com",
   ]
 ) {
-  Deno.test(`config: rejects HOST_EMAIL=${bad} (Zod parity)`, async () => {
+  Deno.test(`config: rejects HOST_EMAIL=${bad}`, async () => {
     const { code, stderr } = await runConfig({ ...VALID_ENV, HOST_EMAIL: bad });
     assertEquals(code, 1);
     assertStringIncludes(stderr, "HOST_EMAIL");

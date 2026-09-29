@@ -18,12 +18,8 @@
                   link already opens in a new tab on both.
 */
 
-import { isValidTimeZone } from "@spy4x/time/tz";
-import {
-  canonicalTimeZoneOr,
-  formatHostClockIn,
-  formatHostDateIn,
-} from "../lib/clock.ts";
+import { canonicalTimeZoneOr, isValidTimeZone } from "@spy4x/time/tz";
+import { formatHostClockIn, formatHostDateIn } from "../lib/clock.ts";
 import {
   IconArrowLeft,
   IconArrowRight,

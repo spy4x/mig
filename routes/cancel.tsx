@@ -2,9 +2,8 @@ import { define } from "../lib/utils.ts";
 import { verifyOpaqueToken } from "@spy4x/platform/tokens";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
-import { isValidTimeZone } from "@spy4x/time/tz";
+import { canonicalTimeZoneOr, isValidTimeZone } from "@spy4x/time/tz";
 import {
-  canonicalTimeZoneOr,
   formatClockShortAt,
   formatHostClockIn,
   formatHostDateIn,

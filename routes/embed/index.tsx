@@ -5,9 +5,13 @@ import {
   countSlotsForDate,
   getCandidateDates,
 } from "../../lib/availability.ts";
-import { isoDateInTz, minToHHMM, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalValidTimeZoneOrNull,
+  isoDateInTz,
+  minToHHMM,
+  zonedDateTime,
+} from "@spy4x/time/tz";
+import {
   EARLIEST_DATE,
   formatGridHeader,
   formatShortDateAt,

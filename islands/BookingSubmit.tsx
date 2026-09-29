@@ -1,4 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
+import { captureTimeZone } from "@spy4x/platform/browser/embed";
+import { isAddress } from "@spy4x/email/address";
 import { Button } from "@spy4x/preact-ui/button";
 
 /*
@@ -31,9 +33,13 @@ interface Props {
   label: string;
 }
 
-// Mirrors lib/validators.ts:BookingSchema (name min 2, email
-// shape). Server-side arktype is the trust boundary — this is UX only.
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Mirrors lib/validators.ts:BookingSchema (name min 2, the address
+// check behind the server's `emailAddress` rule). `isAddress` comes
+// from @spy4x/email/address, not `isEmailAddress` from
+// @spy4x/platform/validation/predicates: that module builds an arktype
+// type at load and would put arktype in the island's bundle. The
+// server adds the 254-character limit; server-side arktype is the
+// trust boundary and this is UX only.
 const NAME_MIN = 2;
 const NAME_MAX = 100;
 
@@ -43,11 +49,9 @@ export default function BookingSubmit({ label }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      setGuestTz(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    } catch {
-      // Keep field empty. Server falls back to host timezone.
-    }
+    // Stays empty when no zone is detected; the server then falls back
+    // to the host's timezone.
+    setGuestTz(captureTimeZone() ?? "");
   }, []);
 
   function validate(form: HTMLFormElement): string | null {
@@ -63,7 +67,7 @@ export default function BookingSubmit({ label }: Props) {
     if (!email) {
       return "Please enter your email.";
     }
-    if (!EMAIL_RE.test(email)) {
+    if (!isAddress(email)) {
       return "Please enter a valid email address.";
     }
     return null;

@@ -1,9 +1,10 @@
 import { assertEquals } from "@std/assert";
-import { zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalTimeZone,
   canonicalTimeZoneOr,
-  canonicalValidTimeZoneOrNull,
+  zonedDateTime,
+} from "@spy4x/time/tz";
+import {
   formatClockAt,
   formatClockShortAt,
   formatGridHeader,
@@ -13,37 +14,12 @@ import {
   formatShortDateAt,
   formatSlotDisplay,
   isCalendarDateTime,
-  zoneCity,
-  zoneOffsetLabel,
 } from "./clock.ts";
 
 // ─── mig#15: "HH:MM, City, UTC±N" formatter ──────────────────────────
 // October 2026 is DST-unambiguous for both zones under test: New York
 // is EDT (UTC-4) until 1 Nov 2026, and Ho Chi Minh has no DST at all
 // (always UTC+7).
-
-Deno.test("zoneCity: last path segment, underscores replaced by spaces", () => {
-  assertEquals(zoneCity("America/New_York"), "New York");
-  assertEquals(zoneCity("Asia/Ho_Chi_Minh"), "Ho Chi Minh");
-  assertEquals(zoneCity("Asia/Kolkata"), "Kolkata");
-  // No "/" — the whole name is used as-is (decision: no lookup table —
-  // see mig#15's PR body). formatClockAt special-cases "Etc/*" itself
-  // (offset-only, no city) rather than zoneCity, since "Etc/GMT+5"
-  // still has a real (if not city-shaped) segment after the slash.
-  assertEquals(zoneCity("UTC"), "UTC");
-});
-
-Deno.test("zoneOffsetLabel: whole hours, half hours, and zero", () => {
-  const instant = zonedDateTime("2026-10-06", "09:00", "Asia/Ho_Chi_Minh");
-  assertEquals(zoneOffsetLabel("Asia/Ho_Chi_Minh", instant), "UTC+7");
-  assertEquals(zoneOffsetLabel("America/New_York", instant), "UTC-4");
-  assertEquals(zoneOffsetLabel("Asia/Kolkata", instant), "UTC+5:30");
-  // London in January is standard time — UTC+0, not omitted (decision:
-  // zero always renders as "UTC+0", never a bare "UTC", so a real city
-  // at zero offset still gets an explicit sign).
-  const winter = zonedDateTime("2026-01-15", "09:00", "Europe/London");
-  assertEquals(zoneOffsetLabel("Europe/London", winter), "UTC+0");
-});
 
 Deno.test("formatClockAt: HH:MM, City, UTC±N in each zone under test", () => {
   // 09:00 in Ho Chi Minh is 02:00 UTC.
@@ -172,14 +148,6 @@ Deno.test("formatClockAt: an Etc/* zone shows the offset only, never a city, reg
     formatClockAt(instant, canonicalTimeZone("etc/gmt+5")),
     "21:00, UTC-5",
   );
-});
-
-Deno.test("canonicalValidTimeZoneOrNull: null for missing or invalid, canonical otherwise", () => {
-  assertEquals(canonicalValidTimeZoneOrNull(undefined), null);
-  assertEquals(canonicalValidTimeZoneOrNull(null), null);
-  assertEquals(canonicalValidTimeZoneOrNull(""), null);
-  assertEquals(canonicalValidTimeZoneOrNull("Not/A_Timezone"), null);
-  assertEquals(canonicalValidTimeZoneOrNull("Japan"), "Asia/Tokyo");
 });
 
 Deno.test("formatClockAt: a legacy alias only gets its offset once canonicalized", () => {

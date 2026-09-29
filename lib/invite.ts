@@ -10,13 +10,9 @@ import {
   IcsEventStatus,
   type IcsOptions,
 } from "@spy4x/time/ics";
-import { zonedDateTime } from "@spy4x/time/tz";
+import { canonicalTimeZoneOr, zonedDateTime } from "@spy4x/time/tz";
 import type { Booking, Config } from "./types.ts";
-import {
-  canonicalTimeZoneOr,
-  formatClockLongAt,
-  formatOwnerClock,
-} from "./clock.ts";
+import { formatClockLongAt, formatOwnerClock } from "./clock.ts";
 
 const PRODID = "-//mig//EN";
 

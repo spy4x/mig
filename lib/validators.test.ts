@@ -52,12 +52,12 @@ Deno.test("booking validator rejects a bad email with the visitor-facing message
   }
 });
 
-// mig#3 review round 1: arktype's built-in `string.email` keyword uses a
-// different pattern than Zod 3's `.email()` — it accepted `o'brien@...`
-// and rejected the six addresses below; arktype's keyword flipped every
-// one of them. lib/email-pattern.ts reproduces Zod's exact regex instead,
-// so these pin the accept/reject boundary that regex draws.
-Deno.test("booking validator accepts an apostrophe in the local part (Zod parity)", () => {
+// The email rule is `emailAddress` from @spy4x/platform: the same
+// address check @spy4x/email uses to send, plus a 254-character limit.
+// It replaced mig's copy of Zod 3's `.email()` pattern (mig#89); the
+// cases below are the ones that pattern already decided, plus `%`,
+// which Zod refused and the library accepts.
+Deno.test("booking validator accepts an apostrophe in the local part", () => {
   const result = BookingSchema.safeParse({
     ...validBooking,
     email: "o'brien@example.com",
@@ -66,17 +66,34 @@ Deno.test("booking validator accepts an apostrophe in the local part (Zod parity
   assertEquals(result.success, true);
 });
 
+Deno.test("booking validator accepts a percent sign in the local part", () => {
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    email: "a%b@example.com",
+  });
+
+  assertEquals(result.success, true);
+});
+
+Deno.test("booking validator rejects an address longer than 254 characters", () => {
+  const long = `${"a".repeat(60)}@${"b".repeat(60)}.${"c".repeat(60)}.${
+    "d".repeat(60)
+  }.${"e".repeat(20)}.com`;
+  assertEquals(long.length > 254, true);
+  const result = BookingSchema.safeParse({ ...validBooking, email: long });
+  assertEquals(result.success, false);
+});
+
 for (
   const bad of [
     "a..b@example.com",
     ".a@example.com",
     "a.@example.com",
-    "a%b@example.com",
     "a@-example.com",
     "a@example..com",
   ]
 ) {
-  Deno.test(`booking validator rejects ${bad} (Zod parity)`, () => {
+  Deno.test(`booking validator rejects ${bad}`, () => {
     const result = BookingSchema.safeParse({ ...validBooking, email: bad });
     assertEquals(result.success, false);
   });

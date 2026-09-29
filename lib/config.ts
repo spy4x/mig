@@ -4,7 +4,7 @@
 import { type } from "arktype";
 import { parseWeeklyAvailability } from "./availability.ts";
 import { parseBlockedDates } from "./availability.ts";
-import { Email } from "./email-pattern.ts";
+import { emailAddress } from "@spy4x/platform/validation/predicates";
 import { formatConfigIssue } from "./config-issue.ts";
 import { parseAddress } from "@spy4x/email/address";
 import { MIN_SECRET_LENGTH } from "@spy4x/platform/tokens";
@@ -40,7 +40,7 @@ const SmtpFrom = type("string").narrow((value) => {
 // through the schema unconditionally is safe.
 const ConfigSchema = type({
   HOST_NAME: "string > 0",
-  HOST_EMAIL: Email,
+  HOST_EMAIL: emailAddress,
   HOST_TZ: "string > 0",
   MEETING_URL: "string.url",
   PUBLIC_URL: "string.url",

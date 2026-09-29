@@ -13,9 +13,12 @@ import type { Config } from "./types.ts";
 import type { Booking } from "./types.ts";
 import { err, ok, type Result } from "./types.ts";
 import { bookingInvite } from "./invite.ts";
-import { isValidTimeZone, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalTimeZoneOr,
+  isValidTimeZone,
+  zonedDateTime,
+} from "@spy4x/time/tz";
+import {
   formatClockLongAt,
   formatClockShortAt,
   formatOwnerClock,

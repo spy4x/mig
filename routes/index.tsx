@@ -4,9 +4,13 @@ import { Footer } from "../components/Footer.tsx";
 import BookingFlow from "../islands/BookingFlow.tsx";
 import { gridDay } from "../components/TimeSlots.tsx";
 import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
-import { isoDateInTz, minToHHMM, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalValidTimeZoneOrNull,
+  isoDateInTz,
+  minToHHMM,
+  zonedDateTime,
+} from "@spy4x/time/tz";
+import {
   EARLIEST_DATE,
   formatGridHeader,
   formatShortDateAt,
