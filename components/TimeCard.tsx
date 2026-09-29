@@ -6,7 +6,7 @@
   progression, not a state change.
 */
 
-import { ArrowRight, Clock } from "./icons.tsx";
+import { IconArrowRight, IconClock } from "@spy4x/preact-icons";
 import { pickerHref } from "../lib/picker-links.ts";
 
 interface TimeCardProps {
@@ -44,10 +44,10 @@ export function TimeCard(
     "shrink-0 inline-flex items-center gap-1 text-xs font-medium text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline";
 
   return (
-    <div class="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface-raised px-4 py-3">
+    <div class="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
       <div class="flex items-center gap-3 min-w-0">
         <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-300">
-          <Clock />
+          <IconClock class="size-4" />
         </span>
         <div class="min-w-0">
           <p class="text-[11px] font-medium uppercase tracking-wider text-ink-subtle">
@@ -68,7 +68,7 @@ export function TimeCard(
             class={changeClass}
           >
             Change
-            <ArrowRight size={12} />
+            <IconArrowRight class="size-3" />
           </button>
         )
         : (
@@ -81,7 +81,7 @@ export function TimeCard(
             class={changeClass}
           >
             Change
-            <ArrowRight size={12} />
+            <IconArrowRight class="size-3" />
           </a>
         )}
     </div>

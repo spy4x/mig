@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "@spy4x/preact-theme/tokens.css";
+@import "@spy4x/preact-theme/preset.css";
 
 /*
   Design tokens.
@@ -39,9 +41,9 @@
   --color-brand-800: oklch(0.40 0.13 32);
   --color-brand-900: oklch(0.32 0.09 30);
 
-  /* Surfaces — light defaults; .dark overrides below. */
-  --color-surface: oklch(0.99 0.003 80);
-  --color-surface-raised: oklch(1 0 0);
+  /* Surfaces — light defaults; .dark overrides below. The page and the
+     card are the library's `canvas` and `surface`, set in the :root
+     block after this one. */
   --color-surface-sunken: oklch(0.97 0.005 80);
   --color-line: oklch(0.92 0.005 80);
   --color-line-strong: oklch(0.86 0.008 80);
@@ -79,12 +81,40 @@
     monospace;
 }
 
+/* mig's palette on the library's tokens, after tokens.css so it wins the
+   cascade. The library's components read these names; mig's own markup
+   reads the `brand`, `ink` and `line` utilities above. Both draw from the
+   same values, so a component and mig's own markup never disagree.
+   The accent is set for both palettes: the library's `.dark` would
+   otherwise put its purple back. */
+:root {
+  --color-primary: var(--color-brand-500);
+  --color-accent: var(--color-brand-500);
+  --color-primary-muted: var(--color-brand-500);
+  --color-canvas: oklch(0.99 0.003 80);
+  --color-surface: oklch(1 0 0);
+  --color-foreground: var(--color-ink);
+  --color-muted-foreground: var(--color-ink-muted);
+  --color-placeholder: var(--color-ink-subtle);
+  --color-border-subtle: var(--color-line);
+  --color-border-control: var(--color-line-strong);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", "SF Pro Text",
+    "Inter", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.dark {
+  --color-primary: var(--color-brand-500);
+  --color-accent: var(--color-brand-500);
+  --color-primary-muted: var(--color-brand-400);
+  --color-canvas: oklch(0.16 0.012 260);
+  --color-surface: oklch(0.20 0.014 260);
+}
+
 /* Dark mode surface overrides. The .dark class is applied to <html> by
    the bootstrap script before first paint. */
 @layer base {
   .dark {
-    --color-surface: oklch(0.16 0.012 260);
-    --color-surface-raised: oklch(0.20 0.014 260);
     --color-surface-sunken: oklch(0.13 0.012 260);
     --color-line: oklch(0.27 0.014 260);
     --color-line-strong: oklch(0.33 0.016 260);
@@ -106,7 +136,7 @@
 
   html,
   body {
-    background: var(--color-surface);
+    background: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -136,7 +166,7 @@
   ::-webkit-scrollbar-thumb {
     background: var(--color-line-strong);
     border-radius: 999px;
-    border: 2px solid var(--color-surface);
+    border: 2px solid var(--color-canvas);
   }
   ::-webkit-scrollbar-thumb:hover {
     background: var(--color-ink-subtle);
@@ -181,23 +211,4 @@
 
 .step-in {
   animation: mig-step-in var(--duration-default) var(--ease-out-quart);
-}
-
-/* Tiny pulse on the selected day cell, repeated a few times so it
-   reads as "this is what you chose" without being annoying. Stops
-   after one cycle of 3 pulses. */
-@keyframes mig-cell-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgb(249 115 22 / 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 8px rgb(249 115 22 / 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgb(249 115 22 / 0);
-  }
-}
-
-.selected-pulse {
-  animation: mig-cell-pulse 1.4s var(--ease-out-quart) 2;
 }

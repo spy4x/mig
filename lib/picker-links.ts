@@ -35,12 +35,25 @@ export function pickerHref(
   tz?: string | null,
   theme?: string | null,
 ): string {
-  const path = pickerPath(basePath);
+  return `${pickerPath(basePath)}${pickerQuery(params, tz, theme)}`;
+}
+
+/** The query part of {@link pickerHref} on its own — `"?date=…&tz=…"`,
+ *  or `""` when there is nothing to carry. A link that starts with `?`
+ *  resolves against the page it sits on, and Fresh only marks links
+ *  that start with `/` as current (mig#50), so the library's calendar
+ *  uses this for its day and month links. Same `tz` and `theme` rules
+ *  as `pickerHref`. */
+export function pickerQuery(
+  params?: Record<string, string>,
+  tz?: string | null,
+  theme?: string | null,
+): string {
   const merged: Record<string, string> = { ...params };
   if (tz) merged.tz = tz;
   if (theme) merged.theme = theme;
-  if (Object.keys(merged).length === 0) return path;
-  return `${path}?${new URLSearchParams(merged).toString()}`;
+  if (Object.keys(merged).length === 0) return "";
+  return `?${new URLSearchParams(merged).toString()}`;
 }
 
 /** Build the address `BookingFlow.tsx`'s `pushUrl` writes into the

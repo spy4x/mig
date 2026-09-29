@@ -71,6 +71,15 @@ const DATES: EmbedData["dates"] = [
   { date: "2027-01-06", slots: 5 },
 ];
 
+// DATES plus one bookable day in the month before and one in the month
+// after: the calendar draws a month arrow as a link only when that
+// month has something bookable, so month-link tests need both.
+const DATES_ACROSS_MONTHS: EmbedData["dates"] = [
+  { date: "2026-12-30", slots: 2 },
+  ...DATES,
+  { date: "2027-02-02", slots: 2 },
+];
+
 const SLOTS: EmbedData["slots"] = [
   { time: "09:00", available: true },
   { time: "09:30", available: false },
@@ -156,15 +165,22 @@ function formActions(html: string): string[] {
   return tags.map((tag) => attr(tag, "action") ?? "");
 }
 
-/** Every href/action must start with `base`, except entries in
- *  `allow` (matched exactly). Returns the offending values so a
+/** Every href/action must lead under `base`, except entries in
+ *  `allow` (matched exactly). A relative link ("?date=…", which the
+ *  calendar renders) is resolved against the embed page first, so it
+ *  counts as `/embed?date=…`. Returns the offending values so a
  *  failure message names them instead of just "not equal". */
 function offendingLinks(
   links: string[],
   base: string,
   allow: string[] = [],
 ): string[] {
-  return links.filter((l) => !l.startsWith(base) && !allow.includes(l));
+  return links.filter((l) => {
+    if (allow.includes(l)) return false;
+    const resolved = new URL(l, "http://localhost/embed");
+    return !(resolved.origin === "http://localhost" &&
+      resolved.pathname.startsWith(base));
+  });
 }
 
 // ─── /embed (picker) ─────────────────────────────────────────────────
@@ -343,7 +359,10 @@ Deno.test("mig#15: calendar date links and month-nav links carry tz (step 1, no 
   // so it never exercises this component's own tz threading.
   const html = renderToString(
     <EmbedPage
-      {...fakePageProps(embedData({ tz: "America/New_York" }))}
+      {...fakePageProps(embedData({
+        tz: "America/New_York",
+        dates: DATES_ACROSS_MONTHS,
+      }))}
     />,
   );
   const dateLinks = anchors(html).map((a) => a.href).filter((h) =>
@@ -519,7 +538,10 @@ Deno.test("mig#44: step 1 (calendar) — date cells and prev/next month links ca
   // (same reasoning as mig#15's equivalent tz-threading test below).
   const html = renderToString(
     <EmbedPage
-      {...fakePageProps(embedData({ theme: "dark" }))}
+      {...fakePageProps(embedData({
+        theme: "dark",
+        dates: DATES_ACROSS_MONTHS,
+      }))}
     />,
   );
   const dateLinks = anchors(html).map((a) => a.href).filter((h) =>
@@ -590,7 +612,12 @@ Deno.test("mig#44: /embed/confirmed's back link has no theme param when theme is
 
 Deno.test("embed picker: month navigation links stay under /embed", () => {
   const html = renderToString(
-    <EmbedPage {...fakePageProps(embedData({ monthAnchor: "2027-02-01" }))} />,
+    <EmbedPage
+      {...fakePageProps(embedData({
+        monthAnchor: "2027-02-01",
+        dates: DATES_ACROSS_MONTHS,
+      }))}
+    />,
   );
   const links = anchors(html).map((a) => a.href);
   const monthLinks = links.filter((l) => l.includes("month="));

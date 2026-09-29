@@ -9,7 +9,7 @@ import {
   formatHostClockIn,
   formatHostDateIn,
 } from "../lib/clock.ts";
-import { InfoCircle } from "../components/icons.tsx";
+import { IconInformationCircle } from "@spy4x/preact-icons";
 
 interface CancelData {
   state: "ok" | "missing" | "invalid" | "not-found" | "already-cancelled";
@@ -173,7 +173,7 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
         <main class="flex-1 grid place-items-center px-6 py-16">
           <div class="max-w-sm text-center">
             <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
-              <InfoCircle />
+              <IconInformationCircle class="size-5.5" />
             </div>
             <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
               {msg.title}
@@ -192,7 +192,7 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
             )}
             <a
               href="/"
-              class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-canvas)"
             >
               Back to booking
             </a>
@@ -225,7 +225,7 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
       <Header compact defaultTheme={cfg.theme} />
       <main class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
         <div class="max-w-md w-full">
-          <div class="rounded-2xl border border-line bg-surface-raised overflow-hidden">
+          <div class="rounded-2xl border border-line bg-surface overflow-hidden">
             <div class="px-6 pt-6 pb-5 border-b border-line">
               <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
                 Cancel your booking?
@@ -266,14 +266,14 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
                   rows={3}
                   maxLength={500}
                   placeholder="Let the other person know why (optional)."
-                  class="block w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle transition-colors focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-y"
+                  class="block w-full rounded-lg border border-line bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle transition-colors focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-y"
                 />
               </div>
 
               <div class="flex items-center justify-end pt-2">
                 <button
                   type="submit"
-                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
+                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-surface)"
                 >
                   Cancel
                 </button>

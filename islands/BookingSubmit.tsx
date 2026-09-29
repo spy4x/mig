@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import { Spinner } from "../components/icons.tsx";
+import { Button } from "@spy4x/preact-ui/button";
 
 /*
   Booking submit island.
@@ -96,21 +96,15 @@ export default function BookingSubmit({ label }: Props) {
   return (
     <>
       <input type="hidden" name="guestTz" value={guestTz} />
-      <button
+      <Button
         type="submit"
         onClick={onClick}
-        aria-busy={busy ? "true" : undefined}
-        class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 active:bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-(--duration-snappy) hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
+        busy={busy}
+        busyLabel="Confirming…"
+        class="w-full sm:w-auto"
       >
-        {busy
-          ? (
-            <>
-              <Spinner />
-              <span>Confirming…</span>
-            </>
-          )
-          : <span>{label}</span>}
-      </button>
+        {label}
+      </Button>
       {error && (
         <p
           role="alert"

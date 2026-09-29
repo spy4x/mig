@@ -41,7 +41,7 @@ export default define.page<typeof handler>(
       // also means the not-ok and cancelled states' `place-items-center`
       // no longer has extra height to center within — intended: a
       // frame sized to this element's content has no such space.
-      <div class="flex flex-col bg-surface text-ink" {...{ [HEIGHT_ATTR]: "" }}>
+      <div class="flex flex-col bg-canvas text-ink" {...{ [HEIGHT_ATTR]: "" }}>
         {
           /* mig#44 — see routes/embed/index.tsx for why this runs on
              every /embed page. */

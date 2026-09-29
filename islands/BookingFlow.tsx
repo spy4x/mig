@@ -1,6 +1,8 @@
 import { useEffect } from "preact/hooks";
 import { useSignal } from "@preact/signals";
-import { Calendar } from "../components/Calendar.tsx";
+import { EmptyState } from "@spy4x/preact-ui/empty-state";
+import { LoadingSpinner } from "@spy4x/preact-ui/loading-spinner";
+import { PickerCalendar } from "../components/PickerCalendar.tsx";
 import { gridDay, TimeSlots } from "../components/TimeSlots.tsx";
 import { DateCard } from "../components/DateCard.tsx";
 import { TimeCard } from "../components/TimeCard.tsx";
@@ -494,7 +496,7 @@ export default function BookingFlow(props: BookingFlowProps) {
               />
             )
             : (
-              <Calendar
+              <PickerCalendar
                 monthAnchor={month.value}
                 minDate={minDate(props.dates, hostTz)}
                 maxDate={maxDate(props.dates, hostTz)}
@@ -503,7 +505,6 @@ export default function BookingFlow(props: BookingFlowProps) {
                 hostTz={hostTz}
                 onSelectDate={interactive ? onSelectDate : undefined}
                 onSelectMonth={interactive ? onSelectMonth : undefined}
-                basePath={links.basePath}
                 tz={links.tz}
                 theme={links.theme}
               />
@@ -537,11 +538,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                 />
               )
               : loading.value
-              ? (
-                <div class="rounded-2xl border border-line bg-surface-raised px-5 py-10 text-center">
-                  <p class="text-sm text-ink-muted">Loading times…</p>
-                </div>
-              )
+              ? <LoadingSpinner label="Loading times…" />
               : slotsForDisplay.length > 0
               ? (
                 <TimeSlots
@@ -557,11 +554,9 @@ export default function BookingFlow(props: BookingFlowProps) {
                 />
               )
               : (
-                <div class="rounded-2xl border border-line bg-surface-raised px-5 py-10 text-center">
-                  <p class="text-sm text-ink-muted">
-                    No available times on {dateLabel ?? date.value}.
-                  </p>
-                </div>
+                <EmptyState
+                  title={`No available times on ${dateLabel ?? date.value}.`}
+                />
               )}
           </div>
         </section>
