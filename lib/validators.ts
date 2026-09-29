@@ -14,13 +14,13 @@
 // visitor sees first when several fields are invalid at once.
 
 import { type } from "arktype";
-import { Email } from "./email-pattern.ts";
-import { isValidTimeZone } from "@spy4x/time/tz";
+import { canonicalTimeZone, isValidTimeZone } from "@spy4x/time/tz";
 import {
+  emailAddress,
   hasHeaderControlCharacters,
   hasTextControlCharacters,
 } from "@spy4x/platform/validation/predicates";
-import { canonicalTimeZone, isCalendarDateTime } from "./clock.ts";
+import { isCalendarDateTime } from "./clock.ts";
 
 export interface BookingData {
   name: string;
@@ -72,7 +72,7 @@ const NameRule = type("string").pipe((s: string, ctx) => {
 
 const EmailRule = type("string").pipe((s: string, ctx) => {
   const trimmed = s.trim().toLowerCase();
-  const checked = Email(trimmed);
+  const checked = emailAddress(trimmed);
   if (checked instanceof type.errors) {
     return ctx.reject({ message: "Please enter a valid email." });
   }

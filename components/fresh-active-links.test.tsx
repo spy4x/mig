@@ -11,7 +11,7 @@
 import { assertEquals, assertFalse } from "@std/assert";
 import { App } from "fresh";
 import type { VNode } from "preact";
-import { Calendar } from "./Calendar.tsx";
+import { PickerCalendar } from "./PickerCalendar.tsx";
 import { DateCard } from "./DateCard.tsx";
 import { TimeCard } from "./TimeCard.tsx";
 
@@ -39,25 +39,27 @@ for (const base of ["", "/embed"]) {
   Deno.test(`mig#50: on ${path}, only the selected calendar day is current — never another day or a month link`, async () => {
     const html = await renderThroughFresh(
       `http://localhost${path}?date=2026-11-03`,
-      <Calendar
+      <PickerCalendar
         monthAnchor="2026-11-01"
-        minDate="2026-11-02"
-        maxDate="2026-11-04"
+        minDate="2026-10-01"
+        maxDate="2026-12-31"
         slotsByDate={{ "2026-11-02": 3, "2026-11-03": 3, "2026-11-04": 3 }}
         selectedDate="2026-11-03"
         hostTz="Europe/Berlin"
-        basePath={base}
       />,
     );
     const currents = linkCurrents(html);
-    // Previous month, next month, and the three bookable days.
+    // Previous month, next month (both in range, so both are links), and
+    // the three bookable days.
     assertEquals(currents.length, 5, html);
     assertEquals(currents.filter((c) => c === "date").length, 1);
+    // The calendar's links start with "?", which Fresh leaves alone, so
+    // they carry no `aria-current` at all.
     assertEquals(currents.filter((c) => c !== "date"), [
-      "false",
-      "false",
-      "false",
-      "false",
+      "none",
+      "none",
+      "none",
+      "none",
     ]);
   });
 

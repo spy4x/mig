@@ -23,7 +23,8 @@ Thanks for your interest in mig! Contributions welcome.
   - `@spy4x/email` (SMTP), `@spy4x/integrations` (ntfy), `@spy4x/net` (bounded
     request bodies), `@spy4x/platform` (tokens, file lock, atomic write, rate
     limit), `@spy4x/time` (time zones, `.ics`), `@spy4x/preact-signals` (theme
-    store)
+    store) and the `@spy4x/preact-ui`, `-system`, `-icons`, `-theme` and `-cn`
+    design-system packages
 - **One logical change per commit.** Angular commit convention
   (`feat(scope): ...`, `fix(scope): ...`).
 - **Run `deno task check` before committing.** Lint, format, and type-check must

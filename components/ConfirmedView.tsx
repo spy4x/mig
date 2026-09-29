@@ -18,13 +18,15 @@
                   link already opens in a new tab on both.
 */
 
-import { isValidTimeZone } from "@spy4x/time/tz";
+import { canonicalTimeZoneOr, isValidTimeZone } from "@spy4x/time/tz";
+import { formatHostClockIn, formatHostDateIn } from "../lib/clock.ts";
 import {
-  canonicalTimeZoneOr,
-  formatHostClockIn,
-  formatHostDateIn,
-} from "../lib/clock.ts";
-import { ArrowLeft, ArrowRight, Check, InfoCircle, Minus } from "./icons.tsx";
+  IconArrowLeft,
+  IconArrowRight,
+  IconCheck,
+  IconInformationCircle,
+  IconMinus,
+} from "@spy4x/preact-icons";
 import type { ConfirmedBooking, ConfirmedData } from "../lib/confirmed-data.ts";
 
 export interface ConfirmedViewProps extends ConfirmedData {
@@ -81,7 +83,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
       <main id={mainId} class="flex-1 grid place-items-center px-6 py-16">
         <div class="max-w-sm text-center">
           <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
-            <InfoCircle />
+            <IconInformationCircle class="size-5.5" />
           </div>
           <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
             {title}
@@ -89,7 +91,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
           <p class="text-sm text-ink-muted mb-6">{body}</p>
           <a
             href={backHref}
-            class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-canvas)"
           >
             Back to booking
           </a>
@@ -122,7 +124,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
         <div class="max-w-sm w-full">
           <div class="text-center mb-8">
             <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-surface-sunken text-ink-subtle mb-5">
-              <Minus size={26} strokeWidth={1.8} />
+              <IconMinus class="size-6.5" />
             </div>
             <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
               Booking cancelled
@@ -142,10 +144,10 @@ export function ConfirmedView(props: ConfirmedViewProps) {
           <div class="text-center">
             <a
               href={backHref}
-              class="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-canvas)"
             >
               Book another time
-              <ArrowRight size={14} />
+              <IconArrowRight class="size-3.5" />
             </a>
           </div>
         </div>
@@ -158,7 +160,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
       <div class="max-w-md w-full">
         <div class="text-center mb-8">
           <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300 mb-5">
-            <Check />
+            <IconCheck class="size-6.5" />
           </div>
           <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
             You're booked
@@ -169,7 +171,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
           </p>
         </div>
 
-        <div class="rounded-2xl border border-line bg-surface-raised divide-y divide-line">
+        <div class="rounded-2xl border border-line bg-surface divide-y divide-line">
           <Detail label="Date" value={<span class="tnum">{dateLabel}</span>} />
           <Detail label="Time" value={<span class="tnum">{timeLabel}</span>} />
           <Detail label="Duration" value={`${slotDurationMin} minutes`} />
@@ -199,7 +201,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
             href={backHref}
             class="inline-flex items-center gap-1 text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline"
           >
-            <ArrowLeft />
+            <IconArrowLeft class="size-3" />
             Book another time
           </a>
           <a
@@ -209,7 +211,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
             class="inline-flex items-center gap-1 text-ink-muted hover:text-red-600 dark:hover:text-red-300 transition-colors focus:outline-none focus-visible:underline"
           >
             Need to cancel?
-            <ArrowRight />
+            <IconArrowRight class="size-3" />
           </a>
         </div>
       </div>

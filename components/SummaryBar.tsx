@@ -13,7 +13,7 @@
       they use the DateCard's Change button.
 */
 
-import { Calendar } from "./icons.tsx";
+import { IconCalendar } from "@spy4x/preact-icons";
 
 interface SummaryBarProps {
   /** "none"  → bar is hidden.
@@ -35,9 +35,9 @@ export function SummaryBar(props: SummaryBarProps) {
   return (
     <div class="fixed inset-x-0 bottom-0 z-30 md:hidden pointer-events-none">
       <div class="mx-auto max-w-2xl px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div class="pointer-events-auto flex items-center justify-center gap-2 rounded-2xl border border-line bg-surface-raised/95 backdrop-blur-md shadow-[0_8px_32px_-12px_rgb(0_0_0_/_0.18)] px-4 py-2.5">
+        <div class="pointer-events-auto flex items-center justify-center gap-2 rounded-2xl border border-line bg-(--color-surface)/95 backdrop-blur-md shadow-[0_8px_32px_-12px_rgb(0_0_0_/_0.18)] px-4 py-2.5">
           <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-brand-500/10 text-brand-600 dark:text-brand-300 shrink-0">
-            <Calendar size={14} strokeWidth={2.2} />
+            <IconCalendar class="size-3.5" />
           </span>
           <span class="truncate text-sm font-medium text-ink tnum">
             {dateLabel ?? date}

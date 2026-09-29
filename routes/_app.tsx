@@ -1,3 +1,4 @@
+import { SEOHead } from "@spy4x/preact-system/seo-head";
 import { define } from "../lib/utils.ts";
 import {
   forcedThemeFor,
@@ -56,19 +57,11 @@ export default define.page(function App({ Component, state, url }) {
           content="#0a0a0b"
           media="(prefers-color-scheme: dark)"
         />
-        <meta name="description" content={description} />
-
-        {/* Open Graph / Twitter */}
-        <meta property="og:type" content="website" />
-        <meta property="og:title" content={title} />
-        <meta property="og:description" content={description} />
-        <meta property="og:url" content={canonical} />
-        <meta name="twitter:card" content="summary" />
-        <meta name="twitter:title" content={title} />
-        <meta name="twitter:description" content={description} />
-
-        <title>{title}</title>
-        <link rel="canonical" href={canonical} />
+        <SEOHead
+          title={title}
+          description={description}
+          canonical={canonical}
+        />
         <link
           rel="icon"
           type="image/svg+xml"
@@ -83,14 +76,14 @@ export default define.page(function App({ Component, state, url }) {
         <style
           dangerouslySetInnerHTML={{
             __html: `:root{
-  --color-surface:oklch(0.99 0.003 80);
+  --color-canvas:oklch(0.99 0.003 80);
   --color-ink:oklch(0.18 0.01 60);
 }
 .dark{
-  --color-surface:oklch(0.16 0.012 260);
+  --color-canvas:oklch(0.16 0.012 260);
   --color-ink:oklch(0.96 0.005 80);
 }
-html,body{margin:0;background:var(--color-surface);color:var(--color-ink);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}`,
+html,body{margin:0;background:var(--color-canvas);color:var(--color-ink);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}`,
           }}
         />
         {

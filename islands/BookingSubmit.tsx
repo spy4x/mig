@@ -1,5 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
-import { Spinner } from "../components/icons.tsx";
+import { captureTimeZone } from "@spy4x/platform/browser/embed";
+import { isAddress } from "@spy4x/email/address";
+import { Button } from "@spy4x/preact-ui/button";
 
 /*
   Booking submit island.
@@ -31,9 +33,13 @@ interface Props {
   label: string;
 }
 
-// Mirrors lib/validators.ts:BookingSchema (name min 2, email
-// shape). Server-side arktype is the trust boundary — this is UX only.
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Mirrors lib/validators.ts:BookingSchema (name min 2, the address
+// check behind the server's `emailAddress` rule). `isAddress` comes
+// from @spy4x/email/address, not `isEmailAddress` from
+// @spy4x/platform/validation/predicates: that module builds an arktype
+// type at load and would put arktype in the island's bundle. The
+// server adds the 254-character limit; server-side arktype is the
+// trust boundary and this is UX only.
 const NAME_MIN = 2;
 const NAME_MAX = 100;
 
@@ -43,11 +49,9 @@ export default function BookingSubmit({ label }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      setGuestTz(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    } catch {
-      // Keep field empty. Server falls back to host timezone.
-    }
+    // Stays empty when no zone is detected; the server then falls back
+    // to the host's timezone.
+    setGuestTz(captureTimeZone() ?? "");
   }, []);
 
   function validate(form: HTMLFormElement): string | null {
@@ -63,7 +67,7 @@ export default function BookingSubmit({ label }: Props) {
     if (!email) {
       return "Please enter your email.";
     }
-    if (!EMAIL_RE.test(email)) {
+    if (!isAddress(email)) {
       return "Please enter a valid email address.";
     }
     return null;
@@ -96,21 +100,15 @@ export default function BookingSubmit({ label }: Props) {
   return (
     <>
       <input type="hidden" name="guestTz" value={guestTz} />
-      <button
+      <Button
         type="submit"
         onClick={onClick}
-        aria-busy={busy ? "true" : undefined}
-        class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 active:bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-(--duration-snappy) hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
+        busy={busy}
+        busyLabel="Confirming…"
+        class="w-full sm:w-auto"
       >
-        {busy
-          ? (
-            <>
-              <Spinner />
-              <span>Confirming…</span>
-            </>
-          )
-          : <span>{label}</span>}
-      </button>
+        {label}
+      </Button>
       {error && (
         <p
           role="alert"

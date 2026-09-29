@@ -5,9 +5,13 @@ import {
   countSlotsForDate,
   getCandidateDates,
 } from "../../lib/availability.ts";
-import { isoDateInTz, minToHHMM, zonedDateTime } from "@spy4x/time/tz";
 import {
   canonicalValidTimeZoneOrNull,
+  isoDateInTz,
+  minToHHMM,
+  zonedDateTime,
+} from "@spy4x/time/tz";
+import {
   EARLIEST_DATE,
   formatGridHeader,
   formatShortDateAt,
@@ -306,7 +310,7 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
     // Change back to the date step) reports a smaller height instead
     // of a high-water mark. See lib/height-report-script.ts's header
     // comment for the full reasoning.
-    <div class="bg-surface text-ink" {...{ [HEIGHT_ATTR]: "" }}>
+    <div class="bg-canvas text-ink" {...{ [HEIGHT_ATTR]: "" }}>
       {
         /* mig#15 — always emitted; the script itself only redirects
            when the browser's detected zone doesn't already match the

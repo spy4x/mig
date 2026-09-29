@@ -580,11 +580,13 @@ async function main(): Promise<void> {
     const today = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Europe/Berlin",
     }).format(new Date());
-    const days = probePage.locator(`[aria-label$=" 16 slots available"]`);
+    const days = probePage.locator(
+      `[data-calendar-date][aria-label$=" — 16 available"]`,
+    );
     const dates: string[] = [];
     for (let i = 0; i < (await days.count()); i++) {
       dates.push(
-        (await days.nth(i).getAttribute("aria-label"))?.split(" ")[0] ?? "",
+        (await days.nth(i).getAttribute("data-calendar-date")) ?? "",
       );
     }
     // A later weekday, not today, so no slot has passed while the script runs.
@@ -679,7 +681,7 @@ async function main(): Promise<void> {
     await clickLike(
       videoPage,
       pointer,
-      videoPage.locator(`[aria-label^="${date} "]`),
+      videoPage.locator(`[data-calendar-date="${date}"]`),
     );
     await slotsVisible(videoPage);
     await videoPage.waitForTimeout(900);

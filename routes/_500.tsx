@@ -1,3 +1,5 @@
+import { buttonClasses } from "@spy4x/preact-ui/button";
+import { EmptyState } from "@spy4x/preact-ui/empty-state";
 import { define } from "../lib/utils.ts";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
@@ -19,20 +21,21 @@ export default define.page(function Error(
         />
       )}
       <main class="flex-1 grid place-items-center px-6 py-16">
-        <div class="max-w-sm text-center">
-          <p class="text-xs font-medium uppercase tracking-[0.18em] text-red-600 dark:text-red-400 mb-3">
+        <div class="w-full max-w-[650px]">
+          <p class="mb-3 text-center text-xs font-medium uppercase tracking-[0.18em] text-red-600 dark:text-red-400">
             500
           </p>
-          <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
+          <h1 class="mb-3 text-center text-xl font-semibold tracking-(--tracking-tight) text-ink">
             Something went wrong
           </h1>
-          <p class="text-sm text-ink-muted mb-6">{message}</p>
-          <a
-            href="/"
-            class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-          >
-            Back to booking
-          </a>
+          <EmptyState
+            description={message}
+            action={
+              <a href="/" class={buttonClasses()}>
+                Back to booking
+              </a>
+            }
+          />
         </div>
       </main>
       {cfg && (

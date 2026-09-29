@@ -20,15 +20,9 @@ interface HeaderProps {
   defaultTheme: ThemeParam;
 }
 
-export function Header(
-  { compact = false, themeToggle = true, defaultTheme }: HeaderProps,
-) {
+export function Header({ themeToggle = true, defaultTheme }: HeaderProps) {
   return (
-    <header
-      class={`sticky top-0 z-40 w-full border-b border-line bg-surface/80 backdrop-blur-md backdrop-saturate-150 ${
-        compact ? "" : ""
-      }`}
-    >
+    <header class="sticky top-0 z-40 w-full border-b border-line bg-(--color-canvas)/80 backdrop-blur-md backdrop-saturate-150">
       <div class="mx-auto flex w-full max-w-2xl items-center justify-between px-4 sm:px-6 py-4 sm:py-5">
         <Logo size={28} href="/" />
         {themeToggle && <ThemeToggle defaultTheme={defaultTheme} />}

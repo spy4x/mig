@@ -213,7 +213,7 @@ export function TimeSlots(
 ) {
   if (slots.length === 0) {
     return (
-      <div class="rounded-2xl border border-line bg-surface-raised px-5 py-10 text-center">
+      <div class="rounded-2xl border border-line bg-surface px-5 py-10 text-center">
         <p class="text-sm text-ink-muted">
           No available times on {dateLabel}.
         </p>
@@ -224,7 +224,7 @@ export function TimeSlots(
   const groups = groupByConsecutivePeriod(slots);
 
   return (
-    <div class="rounded-2xl border border-line bg-surface-raised overflow-hidden">
+    <div class="rounded-2xl border border-line bg-surface overflow-hidden">
       <div class="px-5 py-4 border-b border-line">
         <h3 class="text-sm font-medium text-ink-muted">{dateLabel}</h3>
         {zoneLabel && <p class="text-xs text-ink-subtle mt-0.5">{zoneLabel}</p>}
@@ -269,7 +269,7 @@ function SlotButton(
   },
 ) {
   const base =
-    "inline-flex flex-col min-h-10 min-w-[4.5rem] items-center justify-center gap-0 rounded-lg border px-3 py-1.5 text-sm tnum font-medium transition-all duration-(--duration-snappy) focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised";
+    "inline-flex flex-col min-h-10 min-w-[4.5rem] items-center justify-center gap-0 rounded-lg border px-3 py-1.5 text-sm tnum font-medium transition-all duration-(--duration-snappy) focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-surface)";
   // What the user actually sees. Falls back to host-local when the
   // route or island hasn't computed a visitor-TZ displayHHMM.
   const shownTime = slot.displayHHMM ?? slot.time;
@@ -347,7 +347,7 @@ function SlotButton(
         type="button"
         aria-label={fullLabel}
         onClick={() => onSelect(date, slot.time)}
-        class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
+        class={`${base} border-line bg-surface text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
       >
         {visible}
       </button>
@@ -366,7 +366,7 @@ function SlotButton(
       href={pickerHref(basePath, { date, slot: slot.time }, tz, theme)}
       aria-current="false"
       aria-label={fullLabel}
-      class={`${base} border-line bg-surface-raised text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
+      class={`${base} border-line bg-surface text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
     >
       {visible}
     </a>

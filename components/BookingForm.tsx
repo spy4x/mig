@@ -27,6 +27,10 @@
   real <button type="submit"> with the same label.
 */
 
+import { Button } from "@spy4x/preact-ui/button";
+import { Field } from "@spy4x/preact-ui/field";
+import { honeypotField } from "@spy4x/preact-ui/honeypot";
+import { Input, Textarea } from "@spy4x/preact-ui/input";
 import BookingSubmit from "../islands/BookingSubmit.tsx";
 import { guestTzCaptureScript } from "../lib/guest-tz-script.ts";
 
@@ -80,7 +84,7 @@ export function BookingForm({
   const embed = basePath !== "";
   const action = embed ? `${basePath}/book` : "/api/book";
   return (
-    <div class="rounded-2xl border border-line bg-surface-raised overflow-hidden">
+    <div class="rounded-2xl border border-line bg-surface overflow-hidden">
       <div class="px-5 py-4 border-b border-line">
         <p class="text-sm text-ink-muted">
           <span class="text-ink font-medium">{durationMin} minutes</span>{" "}
@@ -108,50 +112,40 @@ export function BookingForm({
           </div>
         )}
 
-        <Field
-          label="Your name"
-          name="name"
-          required
-          minLength={2}
-          maxLength={100}
-          autocomplete="name"
-          placeholder="Jane Doe"
-        />
-        <Field
-          label="Email"
-          name="email"
-          type="email"
-          required
-          autocomplete="email"
-          placeholder="jane@example.com"
-        />
-        <Field
-          label="Notes"
-          name="notes"
-          textarea
-          maxLength={500}
-          placeholder="Anything I should know before we meet?"
-          optional
-        />
+        <Field id="f-name" label="Your name">
+          <Input
+            name="name"
+            required
+            minLength={2}
+            maxLength={100}
+            autocomplete="name"
+            placeholder="Jane Doe"
+          />
+        </Field>
+        <Field id="f-email" label="Email">
+          <Input
+            name="email"
+            type="email"
+            required
+            autocomplete="email"
+            placeholder="jane@example.com"
+          />
+        </Field>
+        <Field id="f-notes" label="Notes" hint="Optional">
+          <Textarea
+            name="notes"
+            rows={3}
+            maxLength={500}
+            placeholder="Anything I should know before we meet?"
+            class="resize-y min-h-[5rem]"
+          />
+        </Field>
 
         {
-          /* Honeypot — offscreen, real users never fill. Bots that skip
-           CSS-hidden fields get bitten here. */
+          /* Honeypot — off-screen, real users never fill it. The server
+            rejects a booking whose `website` field has text in it. */
         }
-        <div
-          aria-hidden="true"
-          style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden"
-        >
-          <label>
-            Website
-            <input
-              type="text"
-              name="website"
-              tabIndex={-1}
-              autocomplete="off"
-            />
-          </label>
-        </div>
+        {honeypotField("website", "Website")}
 
         {
           /* Progressive-enhancement timezone capture — /embed's
@@ -204,70 +198,8 @@ export function BookingForm({
 */
 function PlainSubmitButton({ label }: { label: string }) {
   return (
-    <button
-      type="submit"
-      class="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-500 hover:bg-brand-600 active:bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors duration-(--duration-snappy) hover:shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised"
-    >
-      <span>{label}</span>
-    </button>
-  );
-}
-
-interface FieldProps {
-  label: string;
-  name: string;
-  type?: string;
-  required?: boolean;
-  minLength?: number;
-  maxLength?: number;
-  autocomplete?: string;
-  placeholder?: string;
-  textarea?: boolean;
-  optional?: boolean;
-}
-
-function Field(p: FieldProps) {
-  const id = `f-${p.name}`;
-  const base =
-    "block w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-subtle transition-colors focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
-  return (
-    <div>
-      <label
-        for={id}
-        class="flex items-center justify-between text-sm font-medium text-ink mb-1.5"
-      >
-        <span>
-          {p.label}
-          {p.optional && (
-            <span class="text-ink-subtle font-normal ml-1">(optional)</span>
-          )}
-        </span>
-      </label>
-      {p.textarea
-        ? (
-          <textarea
-            id={id}
-            name={p.name}
-            required={p.required}
-            maxLength={p.maxLength}
-            rows={3}
-            placeholder={p.placeholder}
-            class={`${base} resize-y min-h-[5rem]`}
-          />
-        )
-        : (
-          <input
-            id={id}
-            name={p.name}
-            type={p.type ?? "text"}
-            required={p.required}
-            minLength={p.minLength}
-            maxLength={p.maxLength}
-            autocomplete={p.autocomplete}
-            placeholder={p.placeholder}
-            class={base}
-          />
-        )}
-    </div>
+    <Button type="submit" class="w-full sm:w-auto">
+      {label}
+    </Button>
   );
 }

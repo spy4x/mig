@@ -291,11 +291,13 @@ Deno.test("POST /api/book: a body that stalls is answered with 408 and books not
   }
 });
 
-// The form's validator copies zod's email pattern, which accepts a
-// domain label ending in a hyphen; the shared SMTP sender's address
-// parser refuses it. Such a guest passes the form, the owner's email
-// goes out, the guest's send fails, and the booking is rolled back.
-Deno.test("POST /api/book: a guest address the form accepts but the mail sender refuses rolls the booking back", async () => {
+// The form's email rule is the same address check the shared SMTP
+// sender uses (`emailAddress` from @spy4x/platform, built on
+// @spy4x/email's `isAddress`). An address the sender would refuse — a
+// domain label ending in a hyphen — is refused at the form, before any
+// mail goes out or a booking is stored. mig's own pattern used to let
+// it through, and the booking was rolled back after the owner's email.
+Deno.test("POST /api/book: an address the mail sender would refuse is turned back at the form, with no email and no booking", async () => {
   const path = `/tmp/mig-book-bad-guest-test-${crypto.randomUUID()}.json`;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
@@ -332,12 +334,10 @@ Deno.test("POST /api/book: a guest address the form accepts but the mail sender 
     assertEquals(location.pathname, "/");
     assertEquals(
       location.searchParams.get("err"),
-      "Something went wrong, so the booking was not created. Please try again in a moment.",
+      "Please enter a valid email.",
     );
     assertEquals(bookings.list().length, 0);
-    // The owner's booking email, then the owner's correction; nothing
-    // reached the refused guest address.
-    assertEquals(sentTo, ["jane@example.com", "jane@example.com"]);
+    assertEquals(sentTo, []);
   } finally {
     setTransportForTesting({ sendMail: () => Promise.resolve({}) });
     await rm(path);

@@ -3,7 +3,7 @@
 // pages would do nothing. These tests render both pages and check that
 // the button is hidden exactly when the theme is forced.
 
-import { assert, assertFalse } from "@std/assert";
+import { assert, assertEquals, assertFalse } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
 import type { State } from "../lib/utils.ts";
 import type { Config } from "../lib/types.ts";
@@ -60,4 +60,20 @@ Deno.test("500: /embed with THEME=light shows no theme button", () => {
 
 Deno.test("500: the standalone site keeps the theme button with THEME=light", () => {
   assert(render500("/boom", "light").includes(TOGGLE));
+});
+
+function h1Count(html: string): number {
+  return (html.match(/<h1[\s>]/g) ?? []).length;
+}
+
+Deno.test("404: the page has exactly one h1, the title", () => {
+  const html = render404("/nope", "auto");
+  assertEquals(h1Count(html), 1);
+  assert(/<h1[^>]*>\s*Page not found\s*<\/h1>/.test(html));
+});
+
+Deno.test("500: the page has exactly one h1, the title", () => {
+  const html = render500("/boom", "auto");
+  assertEquals(h1Count(html), 1);
+  assert(/<h1[^>]*>\s*Something went wrong\s*<\/h1>/.test(html));
 });

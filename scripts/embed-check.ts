@@ -73,7 +73,7 @@ function check(ok: boolean, what: string): void {
 }
 
 const DATE_CELL =
-  `section[aria-labelledby="step-date"] [aria-label$=" 16 slots available"]`;
+  `section[aria-labelledby="step-date"] [data-calendar-date][aria-label$=" — 16 available"]`;
 const SLOT =
   `section[aria-labelledby="step-time"] :is(button, a):not([aria-disabled="true"])`;
 const FORM = `form[aria-label="Booking details"]`;
@@ -86,7 +86,7 @@ async function pickableDate(frame: Frame): Promise<string> {
   const cells = frame.locator(DATE_CELL);
   await cells.first().waitFor();
   for (let i = 0; i < (await cells.count()); i++) {
-    const date = (await cells.nth(i).getAttribute("aria-label"))?.split(" ")[0];
+    const date = await cells.nth(i).getAttribute("data-calendar-date");
     if (date && date > today) return date;
   }
   throw new Error("the calendar shows no fully bookable weekday after today");
@@ -145,7 +145,7 @@ async function withJavaScript(browser: Browser, local: string, smtp: {
     const date = await pickableDate(frame);
     // Hydrated: the calendar's days are buttons, not links.
     await frame.locator(
-      `section[aria-labelledby="step-date"] button[aria-label^="${date} "]`,
+      `section[aria-labelledby="step-date"] button[data-calendar-date="${date}"]`,
     )
       .waitFor({ timeout: 15_000 });
     // A page load would drop this marker.
@@ -156,7 +156,7 @@ async function withJavaScript(browser: Browser, local: string, smtp: {
     await settle();
     const h0 = (await heights()).at(-1);
 
-    await frame.locator(`button[aria-label^="${date} "]`).click();
+    await frame.locator(`button[data-calendar-date="${date}"]`).click();
     await frame.locator(SLOT).first().waitFor({ timeout: 15_000 });
     await settle();
     check(
@@ -221,7 +221,7 @@ async function withJavaScript(browser: Browser, local: string, smtp: {
       `going back to the calendar shrinks the frame without a page load (${h2} → ${h3})`,
     );
 
-    await frame.locator(`button[aria-label^="${date} "]`).click();
+    await frame.locator(`button[data-calendar-date="${date}"]`).click();
     await frame.locator(
       `section[aria-labelledby="step-time"] button:not([disabled])`,
     ).first()
@@ -252,7 +252,9 @@ async function withoutJavaScript(browser: Browser, local: string, smtp: {
     const page = await ctx.newPage();
     await page.goto(`${local}/embed`);
     const date = await pickableDate(page);
-    await page.locator(`a[aria-label^="${date} "]`).click({ force: true });
+    await page.locator(`a[data-calendar-date="${date}"]`).click({
+      force: true,
+    });
     await page.waitForURL(/[?&]date=/);
     await page.locator(`section[aria-labelledby="step-time"] a`).first()
       .click({ force: true });

@@ -1,105 +1,21 @@
 // mig's own timezone helpers — the ones `@spy4x/time/tz` has no
 // counterpart for. The generic zone math (`zonedDateTime`, `addDays`,
-// `isoDateInTz`, `hhmmInTz`, `formatInstantLong`, ...) lives in
-// `@spy4x/time/tz`; what stays here is mig-specific: canonicalizing an
-// untrusted zone name, the "HH:MM, City, UTC±N" clock every page and
-// email shows, and the host-zone/display-zone pairs a stored booking
-// needs (mig#57).
+// `canonicalTimeZone`, `zoneCity`, `zoneOffsetLabel`, ...) lives in
+// `@spy4x/time/tz`; what stays here is mig-specific: the
+// "HH:MM, City, UTC±N" clock every page and email shows, and the
+// host-zone/display-zone pairs a stored booking needs (mig#57).
 
 import {
+  canonicalValidTimeZoneOrNull,
   formatInstantLong,
   hhmmInTz,
   isoDateInTz,
-  isValidTimeZone,
-  tzOffsetMinutes,
+  resolveWallClock,
+  WallClockKind,
+  zoneCity,
   zonedDateTime,
+  zoneOffsetLabel,
 } from "@spy4x/time/tz";
-
-// Fixes casing and resolves slash-less legacy aliases on a
-// *known-valid* zone — WITHOUT renaming a valid modern zone to a
-// legacy one. "america/new_york" -> "America/New_York" (casing only),
-// "Japan" -> "Asia/Tokyo", "EST5EDT" -> "America/New_York" (slash-less
-// aliases, resolved the only way JS exposes: Intl's own
-// resolvedOptions()), "etc/gmt+5" -> "Etc/GMT+5" (casing only, see
-// below) — but "Asia/Kolkata", "Europe/Kyiv", "Asia/Ho_Chi_Minh" and
-// "Asia/Kathmandu" all pass through unchanged, in whatever casing they
-// arrived in.
-//
-// mig#15 round 2: routing every zone through resolvedOptions()
-// (round-1's approach) rewrites those four modern names to their
-// legacy backward-compat links under Deno's ICU (Calcutta, Kiev,
-// Saigon, Katmandu) — a Ukrainian visitor saw "Kiev" everywhere, and
-// worse, it made the /embed tz-redirect unstable: a browser that
-// itself reports the modern name (many do) would detect
-// "Asia/Kolkata", get redirected to a URL the server then rewrote to
-// "Asia/Calcutta" for display, and the *next* page load would detect
-// "Asia/Kolkata" again and redirect once more — two loads per click,
-// forever. `Intl.supportedValuesOf("timeZone")` is a curated list that
-// (for reasons out of our control) already prefers several legacy
-// names over their modern replacements, so it can't be used to
-// "prefer modern" either — it can only fix *casing* for whichever
-// spelling it does contain.
-//
-// mig#18: that curated list omits some zones entirely — no casing at
-// all, not even the legacy one — most `Etc/*` names (`Etc/GMT+5`) and,
-// on Deno's ICU, `Asia/Ho_Chi_Minh` itself. For those, resolvedOptions()
-// is the only source of a canonical spelling, but it's the same
-// function that renames Kolkata to Calcutta — so it's only trusted
-// here when its answer is the *same* name in different casing
-// (`etc/gmt+5` -> `Etc/GMT+5`, safe: nothing changed but case). When it
-// answers with a genuinely different name (`asia/ho_chi_minh` ->
-// `Asia/Saigon`, a real rename), that answer is discarded and `tz` is
-// returned exactly as given — uncorrected casing, but never renamed.
-//
-// Caller must validate first — this throws on an invalid zone, same
-// as the Intl constructor it wraps. Only ever applied to zones read
-// from *untrusted input* (a visitor's browser, a `tz` query param, a
-// submitted `guestTz`) — never to `HOST_TZ`, which is deploy-time
-// configuration the owner chose deliberately.
-export function canonicalTimeZone(tz: string): string {
-  const supported = Intl.supportedValuesOf("timeZone");
-  if (supported.includes(tz)) return tz; // exact match — never rewritten
-  if (!tz.includes("/")) {
-    // Slash-less alias ("Japan", "EST5EDT", "GMT") — there's no
-    // "modern name" to preserve for these; resolvedOptions() is the
-    // only way to resolve one at all.
-    return new Intl.DateTimeFormat("en", { timeZone: tz }).resolvedOptions()
-      .timeZone;
-  }
-  // Wrong casing of a name the curated list does contain (e.g.
-  // "america/new_york") — fix the casing, nothing else.
-  const lower = tz.toLowerCase();
-  const curated = supported.find((s) => s.toLowerCase() === lower);
-  if (curated) return curated;
-  // Not in the curated list under any casing at all (e.g.
-  // "Etc/GMT+5", "Asia/Ho_Chi_Minh"). resolvedOptions() is trusted
-  // only when it resolves to the very same name, just differently
-  // cased — never when it resolves to a different name (a legacy
-  // rename, the round-2 bug).
-  const resolved = new Intl.DateTimeFormat("en", { timeZone: tz })
-    .resolvedOptions().timeZone;
-  return resolved.toLowerCase() === lower ? resolved : tz;
-}
-
-// Validates + canonicalizes an untrusted zone string in one step.
-// Returns the canonical IANA name, or `null` if `value` is missing or
-// invalid — never throws.
-export function canonicalValidTimeZoneOrNull(
-  value: string | undefined | null,
-): string | null {
-  if (!value || !isValidTimeZone(value)) return null;
-  return canonicalTimeZone(value);
-}
-
-// `@spy4x/time/tz`'s `validTimeZoneOr` only validates; this one also
-// canonicalizes (see canonicalTimeZone above), which the /embed
-// tz-redirect needs to stay stable — hence its own name (mig#57).
-export function canonicalTimeZoneOr(
-  value: string | undefined,
-  fallback: string,
-): string {
-  return canonicalValidTimeZoneOrNull(value) ?? fallback;
-}
 
 // Date-only, e.g. "Wednesday, 2 September 2026". Used on the
 // confirmation page where Date + Time get separate rows.
@@ -337,34 +253,6 @@ export function formatHostClockIn(
   return formatClockAt(zonedDateTime(date, time, hostTz), displayTz);
 }
 
-// Last path segment of an IANA zone name, underscores replaced by
-// spaces: "America/New_York" -> "New York", "Asia/Ho_Chi_Minh" ->
-// "Ho Chi Minh", "UTC" -> "UTC" (no "/", so the whole name is used).
-// No lookup table — this is IANA's own naming convention, not a
-// geocode, so it needs no data file and never goes stale.
-export function zoneCity(tz: string): string {
-  const idx = tz.lastIndexOf("/");
-  const seg = idx === -1 ? tz : tz.slice(idx + 1);
-  return seg.replaceAll("_", " ");
-}
-
-// "UTC+7" / "UTC-4" / "UTC+5:30" / "UTC+0". Always signed, including
-// zero — "UTC+0" rather than bare "UTC" — so every offset this
-// produces has the same shape and a reader never has to wonder
-// whether a missing sign means "zero" or "not shown".
-export function zoneOffsetLabel(tz: string, at: Date): string {
-  const min = tzOffsetMinutes(at, tz);
-  const sign = min < 0 ? "-" : "+";
-  const abs = Math.abs(min);
-  const hh = Math.floor(abs / 60);
-  const mm = abs % 60;
-  return mm === 0 ? `UTC${sign}${hh}` : `UTC${sign}${hh}:${pad2(mm)}`;
-}
-
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
 // The earliest date mig takes from a link, a form or /api/slots: `/`
 // and `/embed` ignore an earlier `?date=` or `?month=`, /api/slots
 // answers 400 and a booking is refused (mig#57). `@spy4x/time/tz`'s
@@ -412,14 +300,13 @@ export function isCalendarDateTime(
 // jump from 02:00 to 03:00. `@spy4x/time/tz`'s zonedDateTime resolves
 // such a time forward (02:30 becomes 03:30), which would turn one
 // offered slot into a second copy of the 03:30 slot; mig offers and
-// accepts neither, so every slot is built through here (mig#57).
+// accepts neither, so every slot is built through here (mig#57). The
+// gap check is `resolveWallClock`'s `WallClockKind.Gap`.
 export function hostSlotInstant(
   date: string,
   time: string,
   hostTz: string,
 ): Date | null {
-  const instant = zonedDateTime(date, time, hostTz);
-  const exists = isoDateInTz(instant, hostTz) === date &&
-    hhmmInTz(instant, hostTz) === time;
-  return exists ? instant : null;
+  const { kind, instant } = resolveWallClock(date, time, hostTz);
+  return kind === WallClockKind.Gap ? null : instant;
 }
