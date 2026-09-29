@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-30
+
 ### Changed
 
 - The booking page's calendar, icons, form fields, buttons, and the 404, 500 and
@@ -505,7 +507,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/spy4x/mig/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/spy4x/mig/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/spy4x/mig/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/spy4x/mig/compare/v0.7.1...v0.7.2
