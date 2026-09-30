@@ -746,6 +746,44 @@ for (const state of ["missing", "invalid", "expired"] as const) {
   });
 }
 
+// ─── mig#95: mig:booked only on a new, confirmed booking ─────────────
+
+const BOOKED_MARK = "mig:booked";
+
+Deno.test("mig#95: /embed/confirmed renders the booked script only for a booked booking", () => {
+  const html = renderToString(
+    <EmbedConfirmedPage {...fakePageProps(confirmedData({}))} />,
+  );
+  assertEquals(html.split(BOOKED_MARK).length - 1 >= 1, true);
+});
+
+Deno.test("mig#95: /embed/confirmed cancelled state renders no booked script", () => {
+  const html = renderToString(
+    <EmbedConfirmedPage
+      {...fakePageProps(confirmedData({ mode: "cancelled" }))}
+    />,
+  );
+  assertFalse(html.includes(BOOKED_MARK));
+});
+
+for (const state of ["missing", "invalid", "expired"] as const) {
+  Deno.test(`mig#95: /embed/confirmed ${state} state renders no booked script`, () => {
+    const html = renderToString(
+      <EmbedConfirmedPage
+        {...fakePageProps(confirmedData({ state, booking: null }))}
+      />,
+    );
+    assertFalse(html.includes(BOOKED_MARK));
+  });
+}
+
+Deno.test("mig#95: the standalone /confirmed page renders no booked script", () => {
+  const html = renderToString(
+    <ConfirmedPage {...fakePageProps(confirmedData({}))} />,
+  );
+  assertFalse(html.includes(BOOKED_MARK));
+});
+
 // ─── mig#15: confirmation page shows the visitor's labelled clock ────
 
 Deno.test("mig#15: confirmed page shows the visitor's converted, labelled clock, not the host's", () => {

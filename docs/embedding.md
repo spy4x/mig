@@ -101,6 +101,31 @@ message itself carries only a content height in CSS pixels — no booking detail
 no visitor data — so mig posts it with target origin `"*"`; there's nothing in
 it a different origin reading it could misuse.
 
+## Knowing when a visitor booked
+
+When `/embed/confirmed` shows a new, confirmed booking, it posts one message to
+the parent:
+
+```js
+{
+  type: "mig:booked";
+}
+```
+
+The message has no other key: no booking id, name, email, time or token, so mig
+posts it with target origin `"*"` for the same reason as `mig:height`. It is
+sent once per booking in a browser session (reloading the confirmed page sends
+nothing more; the frame remembers the booking in `sessionStorage`, and if the
+browser blocks that storage the message can repeat). A cancelled booking, a
+stale or invalid link and the standalone `/confirmed` page send nothing. Check
+`event.origin` and `event.source` as for `mig:height`, then count it:
+
+```js
+if (event.data?.type === "mig:booked") {
+  // e.g. send your analytics event
+}
+```
+
 ## Timezone
 
 `/embed` detects the visitor's timezone with a small inline script (no tracking,

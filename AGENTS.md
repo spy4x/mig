@@ -86,7 +86,8 @@ src/
 │   ├── picker-links.ts      — basePath-aware hrefs + pushed addresses for the picker
 │   ├── guest-tz-script.ts   — inline timezone-capture script for /embed's form
 │   ├── theme.ts             — theme bootstrap script + /embed's ?theme= parser
-│   └── height-report-script.ts — /embed's postMessage height-reporting script
+│   ├── height-report-script.ts — /embed's postMessage height-reporting script
+│   └── booked-report-script.ts — /embed/confirmed's one-time mig:booked postMessage script
 ├── components/              — server-side Preact components (no hydration); PickerCalendar wires
 │                              the library's Calendar to the picker links; icons.tsx is LogoMark only
 ├── scripts/screenshots.ts   — writes the README pictures (see "Screenshots")

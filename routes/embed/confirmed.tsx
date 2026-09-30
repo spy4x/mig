@@ -16,6 +16,7 @@ import {
   HEIGHT_ATTR,
   heightReportScript,
 } from "../../lib/height-report-script.ts";
+import { bookedReportScript } from "../../lib/booked-report-script.ts";
 
 export const handler = define.handlers({
   async GET(ctx) {
@@ -49,6 +50,17 @@ export default define.page<typeof handler>(
         <script
           dangerouslySetInnerHTML={{ __html: heightReportScript() }}
         />
+        {
+          /* mig#95 — only a booked, ok state tells the host a booking
+             happened: not cancelled, not missing/invalid/expired. */
+        }
+        {data.state === "ok" && data.mode === "booked" && data.booking && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: bookedReportScript(data.booking.id),
+            }}
+          />
+        )}
         <ConfirmedView
           {...data}
           hostName={cfg.hostName}
