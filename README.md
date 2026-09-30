@@ -95,8 +95,10 @@ NTFY are optional: see [configuration.md](docs/configuration.md).
   style="width:100%;max-width:36rem;border:0"></iframe>
 ```
 
-Framing headers, auto-resizing and time zones:
-[embedding.md](docs/embedding.md).
+The frame posts `{ type: "mig:height", height }` as its content changes and
+`{ type: "mig:booked" }` once when a visitor books, so the host page can resize
+the iframe and count booked calls. Framing headers, both messages and time
+zones: [embedding.md](docs/embedding.md).
 
 ## Development
 

@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The embedded booking page (`/embed/confirmed`) now posts
+  `{ type: "mig:booked" }` to the host page once when a visitor books, so the
+  host can count booked calls. The message carries nothing else, and a reload, a
+  cancelled booking, an invalid link or the standalone `/confirmed` page post
+  nothing (#95).
+
 ## [0.10.0] - 2026-09-30
 
 ### Changed
