@@ -107,9 +107,7 @@ When `/embed/confirmed` shows a new, confirmed booking, it posts one message to
 the parent:
 
 ```js
-{
-  type: "mig:booked";
-}
+event.data; // { type: "mig:booked" }
 ```
 
 The message has no other key: no booking id, name, email, time or token, so mig
