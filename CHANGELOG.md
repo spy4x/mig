@@ -9,12 +9,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Startup errors for the environment now come from `@spy4x/server`'s
-  `ConfigError.issues`. A required variable that is unset or blank reads
-  `NAME: is missing` (was `is not set`), and a blank optional variable such as
-  `PORT=` now takes its default instead of failing. `HIDE_BRANDING`,
-  `TRUSTED_PROXY_HEADER`, `CANCEL_SECRET` and `SMTP_FROM` keep their messages
-  that list what is accepted. The `@spy4x` time, platform, email, integrations
-  and net libraries move from 1.11.0 to 1.19.0 (#94).
+  `ConfigError.issues`. The `@spy4x` time, platform, email, integrations and net
+  libraries move from 1.11.0 to 1.19.0 (#94).
+
+### Upgrade note
+
+A blank variable (`NAME=` with nothing after it, or only spaces) now counts as
+unset, so it takes its default.
+
+- `MIN_NOTICE_HOURS=` used to mean 0 hours of notice and now means 6. Write
+  `MIN_NOTICE_HOURS=0` to keep zero notice.
+- `DATA_PATH=` and `MIG_VERSION=` used to be the empty string and now become
+  `./data/bookings.json` and `dev`.
+- `PORT=`, `SMTP_PORT=`, `RATE_LIMIT_PER_5MIN=`, `BOOKING_HORIZON_DAYS=`,
+  `THEME=` and `GITHUB_URL=` used to stop startup and now take their default.
+- A required variable that is unset or blank reads `NAME: is missing` (was
+  `is not set`, or a rule such as `must be non-empty` for a blank one).
+- Every other error line keeps its old wording, except the rule text of numeric
+  variables, which the library words itself (for example `must be an integer`).
 
 ## [0.11.0] - 2026-09-30
 

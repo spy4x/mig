@@ -21,7 +21,7 @@ Deno.test("formatConfigIssues: a fixed variable that is missing keeps the librar
 Deno.test("formatConfigIssues: any other variable keeps the library's reason, one line each", () => {
   assertEquals(
     formatConfigIssues([
-      { name: "MEETING_URL", reason: "must be a URL string" },
+      { name: "MEETING_URL", reason: "must be positive" },
       { name: "HOST_NAME", reason: "is missing" },
     ]),
     "  MEETING_URL: must be a URL string\n  HOST_NAME: is missing",
@@ -33,4 +33,17 @@ Deno.test("formatConfigIssues: a name like an inherited Object member is not tre
     formatConfigIssues([{ name: "toString", reason: "has an invalid value" }]),
     "  toString: has an invalid value",
   );
+});
+
+Deno.test("formatConfigIssues: THEME, the URLs and HOST_EMAIL name what they accept", () => {
+  const bad = (name: string) =>
+    formatConfigIssues([{ name, reason: "has an invalid value" }]);
+  assertEquals(bad("THEME"), '  THEME: must be "auto", "dark" or "light"');
+  assertEquals(
+    bad("HOST_EMAIL"),
+    "  HOST_EMAIL: must be a valid email address",
+  );
+  for (const name of ["MEETING_URL", "PUBLIC_URL", "GITHUB_URL"]) {
+    assertEquals(bad(name), `  ${name}: must be a URL string`);
+  }
 });

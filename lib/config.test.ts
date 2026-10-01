@@ -750,3 +750,22 @@ Deno.test("config: a blank optional variable takes its default", async () => {
   const value = await runConfigField({ ...VALID_ENV, PORT: "" }, "port");
   assertEquals(value, 8080);
 });
+
+Deno.test("config: MIN_NOTICE_HOURS= (blank) means the default 6, not 0", async () => {
+  const value = await runConfigField(
+    { ...VALID_ENV, MIN_NOTICE_HOURS: "" },
+    "minNoticeHours",
+  );
+  assertEquals(value, 6);
+});
+
+Deno.test("config: whitespace-only counts as blank, for a number and for a string", async () => {
+  const env = { ...VALID_ENV, MIN_NOTICE_HOURS: " ", MIG_VERSION: " " };
+  assertEquals(await runConfigField(env, "minNoticeHours"), 6);
+  assertEquals(await runConfigField(env, "version"), "dev");
+});
+
+Deno.test("config: an invalid THEME lists the accepted values", async () => {
+  const { stderr } = await runConfig({ ...VALID_ENV, THEME: "blue" });
+  assertStringIncludes(stderr, '  THEME: must be "auto", "dark" or "light"');
+});

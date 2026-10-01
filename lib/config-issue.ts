@@ -1,8 +1,8 @@
 // Startup error lines for mig's environment. @spy4x/server's `loadConfig`
 // reports each failing variable as `{ name, reason }` with no value in it.
-// Its reason for a custom check is only "has an invalid value", and an
-// operator needs to know what is accepted, so these variables keep a
-// message chosen by hand here (mig#42). A fixed string is never built from
+// Its reason for a custom check, a union of literals or a URL is only
+// "has an invalid value", and an operator needs to know what is accepted,
+// so these variables keep a message chosen by hand here (mig#42). A fixed string is never built from
 // the value, so it can list accepted values without risking a leak.
 import type { ConfigIssue } from "@spy4x/server/config";
 
@@ -13,6 +13,11 @@ const FIXED_MESSAGES: Record<string, string> = {
   HIDE_BRANDING: "must be true, false, 1, 0, yes, no or empty",
   TRUSTED_PROXY_HEADER:
     "must be cf-connecting-ip, x-forwarded-for, x-real-ip or empty",
+  THEME: 'must be "auto", "dark" or "light"',
+  HOST_EMAIL: "must be a valid email address",
+  MEETING_URL: "must be a URL string",
+  PUBLIC_URL: "must be a URL string",
+  GITHUB_URL: "must be a URL string",
   CANCEL_SECRET:
     "must be at least 32 printable ASCII characters, not counting spaces at either end",
   SMTP_FROM: "must be an address or Name <address>, with no control characters",

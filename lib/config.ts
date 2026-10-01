@@ -150,7 +150,8 @@ function parseConfig(): Config {
   let r;
   try {
     r = loadConfig(ConfigSchema, {
-      get: (name) => (env[name] ?? "") === "" ? DEFAULTS[name] : env[name],
+      get: (name) =>
+        (env[name] ?? "").trim() === "" ? DEFAULTS[name] : env[name],
     });
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
