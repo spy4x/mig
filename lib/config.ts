@@ -1,11 +1,12 @@
 // Environment variable parsing + arktype validation.
 // All required vars cause the process to exit 1 if missing/malformed.
 
-import { type } from "arktype";
+import { type Type, type } from "arktype";
 import { parseWeeklyAvailability } from "./availability.ts";
 import { parseBlockedDates } from "./availability.ts";
 import { emailAddress } from "@spy4x/platform/validation/predicates";
-import { formatConfigIssue } from "./config-issue.ts";
+import { ConfigError, loadConfig } from "@spy4x/server/config";
+import { formatConfigIssues } from "./config-issue.ts";
 import { parseAddress } from "@spy4x/email/address";
 import { MIN_SECRET_LENGTH } from "@spy4x/platform/tokens";
 import type { Config } from "./types.ts";
@@ -31,13 +32,37 @@ const SmtpFrom = type("string").narrow((value) => {
   }
 });
 
-// Field-level shape + constraints, applied to the already-defaulted/
-// coerced candidate built below. A field with a `.default()` in the
-// old Zod schema gets its default substituted here *before* this
-// schema ever sees it (see `withDefault`), so this only needs to
-// describe what a *provided* value must look like — every default
-// below also happens to satisfy its own constraint, so running it
-// through the schema unconditionally is safe.
+// A variable read from the environment as a string, converted by `parse`
+// and then checked against `rule`. `Number` is what `z.coerce.number()`
+// was, and a malformed number (NaN) fails the integer rule.
+const converted = <const rule extends Type>(
+  parse: (raw: string) => unknown,
+  rule: rule,
+) => type("string").pipe(parse, rule);
+
+const toNumber = (raw: string): number => Number(raw);
+
+// mig#59: the one proxy header the rate limiter reads the client's
+// address from. Empty (the default) trusts no header: the limiter keys on
+// the socket address alone, which a client cannot forge. Header names are
+// case-insensitive, so `CF-Connecting-IP` as the operator copies it from
+// a proxy's docs is accepted too.
+const toProxyHeader = (raw: string): string => raw.trim().toLowerCase();
+
+// mig#35: z.coerce.boolean()/Boolean(raw) turned any non-empty string,
+// including "false" and "0", into true. This coerces case-insensitively
+// and trims first (whitespace-only counts as empty), and leaves anything
+// else as the raw string so the schema's `"boolean"` check rejects it.
+function toHideBranding(raw: string): boolean | string {
+  const v = raw.trim().toLowerCase();
+  if (v === "true" || v === "1" || v === "yes") return true;
+  if (v === "false" || v === "0" || v === "no" || v === "") return false;
+  return raw;
+}
+
+// The environment schema, read through @spy4x/server's `loadConfig`: every
+// variable arrives as a string, a blank one counts as unset, and a
+// variable with a default takes it when unset. Required ones have none.
 const ConfigSchema = type({
   HOST_NAME: "string > 0",
   HOST_EMAIL: emailAddress,
@@ -45,60 +70,52 @@ const ConfigSchema = type({
   MEETING_URL: "string.url",
   PUBLIC_URL: "string.url",
   WEEKLY_AVAILABILITY: "string > 0",
-  SLOT_DURATION_MIN: "1 <= number.integer <= 480",
-  MIN_NOTICE_HOURS: "number.integer >= 0",
-  BOOKING_HORIZON_DAYS: "1 <= number.integer <= 365",
+  SLOT_DURATION_MIN: converted(toNumber, type("1 <= number.integer <= 480")),
+  MIN_NOTICE_HOURS: converted(toNumber, type("number.integer >= 0")),
+  BOOKING_HORIZON_DAYS: converted(
+    toNumber,
+    type("1 <= number.integer <= 365"),
+  ),
   BLOCKED_DATES: "string",
-  RATE_LIMIT_PER_5MIN: "number.integer > 0",
-  // mig#59: the one proxy header the rate limiter reads the client's
-  // address from. Empty (the default) trusts no header: the limiter
-  // keys on the socket address alone, which a client cannot forge.
-  TRUSTED_PROXY_HEADER:
-    "'' | 'cf-connecting-ip' | 'x-forwarded-for' | 'x-real-ip'",
+  RATE_LIMIT_PER_5MIN: converted(toNumber, type("number.integer > 0")),
+  TRUSTED_PROXY_HEADER: converted(
+    toProxyHeader,
+    type("'' | 'cf-connecting-ip' | 'x-forwarded-for' | 'x-real-ip'"),
+  ),
   THEME: "'light' | 'dark' | 'auto'",
   SMTP_HOST: "string > 0",
-  SMTP_PORT: "number.integer > 0",
+  SMTP_PORT: converted(toNumber, type("number.integer > 0")),
   SMTP_USER: "string > 0",
   // Homelab convention is SMTP_PASSWORD (matches servers/{cloud,home}/.env).
   SMTP_PASSWORD: "string > 0",
   SMTP_FROM: SmtpFrom,
   CANCEL_SECRET: CancelSecret,
-  PORT: "number.integer > 0",
+  PORT: converted(toNumber, type("number.integer > 0")),
   DATA_PATH: "string",
-  HIDE_BRANDING: "boolean",
+  HIDE_BRANDING: converted(toHideBranding, type("boolean")),
   GITHUB_URL: "string.url",
+  MIG_VERSION: converted((raw) => raw.trim(), type("string <= 64")),
+});
+
+// What a variable is when the operator leaves it unset or blank. The
+// required variables (no entry here) fail as "is missing" instead.
+const DEFAULTS: Record<string, string> = {
+  MIN_NOTICE_HOURS: "6",
+  BOOKING_HORIZON_DAYS: "14",
+  BLOCKED_DATES: "",
+  RATE_LIMIT_PER_5MIN: "1",
+  TRUSTED_PROXY_HEADER: "",
+  THEME: "auto",
+  SMTP_PORT: "587",
+  PORT: "8080",
+  DATA_PATH: "./data/bookings.json",
+  HIDE_BRANDING: "false",
+  GITHUB_URL: "https://github.com/spy4x/mig",
   // Build identifier. Injected at container build time as a docker
   // --build-arg (see AGENTS.md "Build version"). Defaults to "dev" so
   // local `deno task dev` always shows something sensible.
-  MIG_VERSION: "string <= 64",
-});
-
-/** Mirrors Zod's `.default(x)`: use `defaultValue` untouched when the
- *  key is absent from `env`; otherwise run the raw string through
- *  `coerce` — the same "coerce, don't validate here" split
- *  `z.coerce.number()`/`z.coerce.boolean()` had. */
-function withDefault<T>(
-  env: Record<string, string>,
-  key: string,
-  defaultValue: T,
-  coerce: (raw: string) => T,
-): T {
-  return key in env ? coerce(env[key]) : defaultValue;
-}
-
-const identity = (raw: string): string => raw;
-
-// mig#35: z.coerce.boolean()/Boolean(raw) turned any non-empty string,
-// including "false" and "0", into true. This coerces case-insensitively
-// and trims first (whitespace-only counts as empty), and leaves anything
-// else as the raw string so ConfigSchema's `"boolean"` check rejects it —
-// same "coerce here, validate in the schema" split the other fields use.
-function coerceHideBranding(raw: string): boolean | string {
-  const v = raw.trim().toLowerCase();
-  if (v === "true" || v === "1" || v === "yes") return true;
-  if (v === "false" || v === "0" || v === "no" || v === "") return false;
-  return raw;
-}
+  MIG_VERSION: "dev",
+};
 
 function loadEnv(): Record<string, string> {
   // Load .env if present; in production env is set by container.
@@ -130,84 +147,24 @@ function loadEnv(): Record<string, string> {
 function parseConfig(): Config {
   const env = loadEnv();
 
-  // Required vars (no default in the old schema): pass the raw string
-  // straight through, undefined and all — ConfigSchema rejects a
-  // missing/empty one with a message naming the variable.
-  // Optional vars (had a `.default()`): substitute the default when
-  // the key is absent, coerce the raw string when it's present —
-  // z.coerce.number() was literally `Number(x)`, so that's what `Number`
-  // below reproduces. HIDE_BRANDING instead goes through
-  // coerceHideBranding (mig#35): Boolean(x) treated every non-empty
-  // string, including "false" and "0", as true.
-  const candidate = {
-    HOST_NAME: env.HOST_NAME,
-    HOST_EMAIL: env.HOST_EMAIL,
-    HOST_TZ: env.HOST_TZ,
-    MEETING_URL: env.MEETING_URL,
-    PUBLIC_URL: env.PUBLIC_URL,
-    WEEKLY_AVAILABILITY: env.WEEKLY_AVAILABILITY,
-    SLOT_DURATION_MIN: Number(env.SLOT_DURATION_MIN),
-    MIN_NOTICE_HOURS: withDefault(env, "MIN_NOTICE_HOURS", 6, Number),
-    BOOKING_HORIZON_DAYS: withDefault(env, "BOOKING_HORIZON_DAYS", 14, Number),
-    BLOCKED_DATES: withDefault(env, "BLOCKED_DATES", "", identity),
-    RATE_LIMIT_PER_5MIN: withDefault(env, "RATE_LIMIT_PER_5MIN", 1, Number),
-    // Header names are case-insensitive, so `CF-Connecting-IP` as the
-    // operator copies it from a proxy's docs is accepted too.
-    TRUSTED_PROXY_HEADER: withDefault(
-      env,
-      "TRUSTED_PROXY_HEADER",
-      "",
-      (raw) => raw.trim().toLowerCase(),
-    ),
-    THEME: withDefault(env, "THEME", "auto", identity),
-    SMTP_HOST: env.SMTP_HOST,
-    SMTP_PORT: withDefault(env, "SMTP_PORT", 587, Number),
-    SMTP_USER: env.SMTP_USER,
-    SMTP_PASSWORD: env.SMTP_PASSWORD,
-    SMTP_FROM: env.SMTP_FROM,
-    CANCEL_SECRET: env.CANCEL_SECRET,
-    PORT: withDefault(env, "PORT", 8080, Number),
-    DATA_PATH: withDefault(env, "DATA_PATH", "./data/bookings.json", identity),
-    // Not withDefault<T>: coerceHideBranding can return a string (an
-    // invalid raw value, passed through so ConfigSchema rejects it), which
-    // withDefault's single type parameter can't express alongside the
-    // `false` default.
-    HIDE_BRANDING: "HIDE_BRANDING" in env
-      ? coerceHideBranding(env.HIDE_BRANDING)
-      : false,
-    GITHUB_URL: withDefault(
-      env,
-      "GITHUB_URL",
-      "https://github.com/spy4x/mig",
-      identity,
-    ),
-    MIG_VERSION: withDefault(
-      env,
-      "MIG_VERSION",
-      "dev",
-      (raw) => raw.trim(),
-    ),
-  };
-
-  const validated = ConfigSchema(candidate);
-  if (validated instanceof type.errors) {
-    // Never touch arktype's own `.message` — it echoes the actual
-    // value, and stripping that back out with a regex is fragile (a
-    // value containing U+2028 or the literal text "must be (" can
-    // survive a strip). formatConfigIssue builds the line from the
-    // variable name and `expected` instead, and falls back to a
-    // generic message for the one issue code (`union`) whose
-    // `expected` also embeds the value. See its doc comment.
-    const issues = [...validated]
-      .map((issue) => {
-        const name = issue.path.join(".");
-        return formatConfigIssue(name, env[name], issue.code, issue.expected);
-      })
-      .join("\n");
-    console.error(`mig: invalid environment configuration:\n${issues}`);
+  let r;
+  try {
+    r = loadConfig(ConfigSchema, {
+      get: (name) =>
+        (env[name] ?? "").trim() === "" ? DEFAULTS[name] : env[name],
+    });
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    // ConfigError.issues carry a reason per variable and never a value;
+    // formatConfigIssues only swaps in mig's own wording where it is
+    // clearer. Never print arktype's own message: it echoes the value.
+    console.error(
+      `mig: invalid environment configuration:\n${
+        formatConfigIssues(e.issues)
+      }`,
+    );
     Deno.exit(1);
   }
-  const r = validated;
 
   // IANA tz sanity check (Intl.DateTimeFormat throws on invalid). Validated
   // before BLOCKED_DATES below: parseBlockedDates needs r.HOST_TZ to expand
