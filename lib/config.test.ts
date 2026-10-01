@@ -360,12 +360,12 @@ Deno.test("config: a MEETING_URL containing ') must be (' is named but not echoe
   );
 });
 
-Deno.test("config: a missing HOST_NAME is reported as 'is not set'", async () => {
+Deno.test("config: a missing HOST_NAME is reported as 'is missing'", async () => {
   const env = { ...VALID_ENV };
   delete env.HOST_NAME;
   const { code, stderr } = await runConfig(env);
   assertEquals(code, 1);
-  assertStringIncludes(stderr, "  HOST_NAME: is not set");
+  assertStringIncludes(stderr, "  HOST_NAME: is missing");
 });
 
 Deno.test("config: a THEME value with a unique marker is named but not echoed", async () => {
@@ -708,3 +708,45 @@ for (
     assertRawValueNotLeaked(stderr, raw);
   });
 }
+
+// The error output is built from ConfigError.issues, which carry no value.
+// SMTP_PASSWORD has no malformed form except blank, so the leak that
+// matters is a valid password and a malformed secret and sender sitting in
+// the same environment as another failing variable.
+Deno.test("config: malformed CANCEL_SECRET and SMTP_FROM, and a set SMTP_PASSWORD, never reach stderr", async () => {
+  const secret = "SECRET-MARKER-ü-q9";
+  const from = "FROM-MARKER-x7\r\nBcc: a@example.com";
+  const password = "PASSWORD-MARKER-k3";
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    CANCEL_SECRET: secret,
+    SMTP_FROM: from,
+    SMTP_PASSWORD: password,
+    THEME: "THEME-MARKER-z1",
+  });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "  CANCEL_SECRET: must be at least 32");
+  assertStringIncludes(stderr, "  SMTP_FROM: must be an address");
+  assertStringIncludes(stderr, "THEME");
+  for (
+    const marker of [
+      "SECRET-MARKER",
+      "FROM-MARKER",
+      "PASSWORD-MARKER",
+      "THEME-MARKER",
+    ]
+  ) {
+    assertRawValueNotLeaked(stderr, marker);
+  }
+});
+
+Deno.test("config: a blank SMTP_PASSWORD is reported as missing", async () => {
+  const { code, stderr } = await runConfig({ ...VALID_ENV, SMTP_PASSWORD: "" });
+  assertEquals(code, 1);
+  assertStringIncludes(stderr, "  SMTP_PASSWORD: is missing");
+});
+
+Deno.test("config: a blank optional variable takes its default", async () => {
+  const value = await runConfigField({ ...VALID_ENV, PORT: "" }, "port");
+  assertEquals(value, 8080);
+});

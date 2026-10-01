@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Startup errors for the environment now come from `@spy4x/server`'s
+  `ConfigError.issues`. A required variable that is unset or blank reads
+  `NAME: is missing` (was `is not set`), and a blank optional variable such as
+  `PORT=` now takes its default instead of failing. `HIDE_BRANDING`,
+  `TRUSTED_PROXY_HEADER`, `CANCEL_SECRET` and `SMTP_FROM` keep their messages
+  that list what is accepted. The `@spy4x` time, platform, email, integrations
+  and net libraries move from 1.11.0 to 1.19.0 (#94).
+
 ## [0.11.0] - 2026-09-30
 
 ### Added

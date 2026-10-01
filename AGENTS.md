@@ -72,8 +72,8 @@ src/
 │   ├── BookingSubmit.tsx    — standalone submit button: spinner, guestTz
 │   └── ThemeToggle.tsx      — three-way theme button (mig's own; library icons and `cn`)
 ├── lib/
-│   ├── config.ts            — env parsing + arktype validation
-│   ├── config-issue.ts      — formats one startup error line, never the value
+│   ├── config.ts            — env parsing: arktype schema read through @spy4x/server's loadConfig
+│   ├── config-issue.ts      — mig's fixed startup wording for four variables, over ConfigError.issues
 │   ├── availability.ts      — weekly pattern + blocked-dates parser
 │   ├── bookings.ts          — JSON store (mutex + atomic write: @spy4x/platform)
 │   ├── email.ts             — email content; sending via @spy4x/email
@@ -116,6 +116,7 @@ src/
   writer), `@spy4x/platform` (rate limiter, tokens, mutex, atomic JSON write,
   input predicates, `Result`), `@spy4x/email` (SMTP sender, HTML shell),
   `@spy4x/integrations` (ntfy client), `@spy4x/net` (bounded request body),
+  `@spy4x/server` (`loadConfig`, the startup error's per-variable reasons),
   `@spy4x/preact-signals` (the theme store and its first-paint script) and the
   design-system packages `@spy4x/preact-ui` (`Button`, `Field`, `Input`,
   `Textarea`, `EmptyState`, `LoadingSpinner`, `honeypotField`),
