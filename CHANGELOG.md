@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-01
+
 ### Changed
 
 - Startup errors for the environment now come from `@spy4x/server`'s
@@ -539,7 +541,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/spy4x/mig/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/spy4x/mig/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/spy4x/mig/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/spy4x/mig/compare/v0.8.0...v0.9.0
