@@ -2,8 +2,9 @@
 // reports each failing variable as `{ name, reason }` with no value in it.
 // Its reason for a custom check, a union of literals or a URL is only
 // "has an invalid value", and an operator needs to know what is accepted,
-// so these variables keep a message chosen by hand here (mig#42). A fixed string is never built from
-// the value, so it can list accepted values without risking a leak.
+// so these variables keep a message chosen by hand here (mig#42). A fixed
+// string is never built from the value, so it can list accepted values
+// without risking a leak.
 import type { ConfigIssue } from "@spy4x/server/config";
 
 // Looked up with `Object.hasOwn`, not `in`: `name` comes from the

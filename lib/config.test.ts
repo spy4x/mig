@@ -765,6 +765,15 @@ Deno.test("config: whitespace-only counts as blank, for a number and for a strin
   assertEquals(await runConfigField(env, "version"), "dev");
 });
 
+// Trimming would break SMTP logins whose password has spaces at either
+// end, and every cancel link, since the token hash includes the secret.
+Deno.test("config: SMTP_PASSWORD and CANCEL_SECRET keep spaces at either end", async () => {
+  const secret = " test-cancel-secret-not-real-00000 ";
+  const env = { ...VALID_ENV, SMTP_PASSWORD: " abc ", CANCEL_SECRET: secret };
+  assertEquals(await runConfigField(env, "smtp.pass"), " abc ");
+  assertEquals(await runConfigField(env, "cancelSecret"), secret);
+});
+
 Deno.test("config: an invalid THEME lists the accepted values", async () => {
   const { stderr } = await runConfig({ ...VALID_ENV, THEME: "blue" });
   assertStringIncludes(stderr, '  THEME: must be "auto", "dark" or "light"');

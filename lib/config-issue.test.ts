@@ -21,10 +21,10 @@ Deno.test("formatConfigIssues: a fixed variable that is missing keeps the librar
 Deno.test("formatConfigIssues: any other variable keeps the library's reason, one line each", () => {
   assertEquals(
     formatConfigIssues([
-      { name: "MEETING_URL", reason: "must be positive" },
+      { name: "PORT", reason: "must be positive" },
       { name: "HOST_NAME", reason: "is missing" },
     ]),
-    "  MEETING_URL: must be a URL string\n  HOST_NAME: is missing",
+    "  PORT: must be positive\n  HOST_NAME: is missing",
   );
 });
 
