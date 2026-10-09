@@ -19,7 +19,11 @@ import { addDays, dayOfWeek, isoDateInTz } from "@spy4x/time/tz";
 import Index from "./index.tsx";
 
 const HOST_TZ = "Asia/Ho_Chi_Minh";
-const TEST_DATE = "2026-10-06"; // Tuesday, within MON-FRI 09:00-17:00
+// A fixed Tuesday within MON-FRI 09:00-17:00, for tests that pin exact
+// labels and offsets ("Tuesday, 6 October 2026", "UTC-4"). It is in the
+// past, so its slots are no longer bookable: a test that needs a
+// bookable slot uses bookableDate() instead.
+const TEST_DATE = "2026-10-06";
 
 /** A bookable weekday at least `daysAhead` days out, computed from
  *  whenever the suite actually runs — same helper as lib/book.test.ts's
@@ -32,6 +36,13 @@ function futureWeekday(daysAhead: number, tz: string): string {
     d = addDays(d, 1, tz);
   }
   return d;
+}
+
+/** A weekday two or more days ahead in the host's zone: past the
+ *  minimum notice and inside the booking horizon whenever the suite
+ *  runs, so its 09:00 slot is always offered. */
+function bookableDate(): string {
+  return futureWeekday(2, HOST_TZ);
 }
 
 // mig#48 review: scoped to TimeSlots.tsx's own header element
@@ -115,7 +126,7 @@ async function renderIndex(
 }
 
 Deno.test("mig#48: standalone / shows the host's zone once above the grid, and each slot's own labelled clock in its accessible name", async () => {
-  const html = await renderIndex(`http://localhost/?date=${TEST_DATE}`);
+  const html = await renderIndex(`http://localhost/?date=${bookableDate()}`);
   // The zone renders once, in the grid header element itself.
   assertEquals(
     gridHeaderZoneLabel(html),
@@ -303,7 +314,7 @@ Deno.test("mig#57: standalone / ignores a date or slot param that is not on the 
   assertFalse(badDate.includes("2026-02-31"));
 
   const badSlot = await renderIndex(
-    `http://localhost/?date=${TEST_DATE}&slot=24:00`,
+    `http://localhost/?date=${bookableDate()}&slot=24:00`,
   );
   assert(badSlot.includes("slot=09%3A00"), "expected the day's slots");
   assertFalse(badSlot.includes("24:00"));
