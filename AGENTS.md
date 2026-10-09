@@ -271,18 +271,29 @@ keeps a host `node_modules` out of the build context, because
 `release` runs after `check` on a `v<digit>` tag and publishes `antonshubin/mig`
 to Docker Hub: `v1.2.3` and `latest`, built with `MIG_VERSION=1.2.3`. A
 pre-release tag such as `v1.2.3-rc.1` is published under its own name and never
-moves `latest`. The step uses the agent's Docker daemon through its socket, so
-the repository must stay trusted for volumes in Woodpecker. It logs in with
-mig's repository secrets `DOCKER_USERNAME` and `DOCKER_PASSWORD`, enabled for
-the tag event only. Never make them global: a global secret reaches every
-repository on the Woodpecker server.
+moves `latest`. It builds and pushes with kaniko (`martizih/kaniko`, a
+maintained fork of the archived GoogleContainerTools project, pinned by version
+and digest), inside an ordinary container: no Docker socket, no volumes, no
+privileged mode. The repository is untrusted in Woodpecker and must stay so. The
+only agent runs on a private server that holds other projects and their keys,
+and a step allowed to mount its Docker socket is root there. It logs in with the
+secrets `DOCKER_USERNAME` and `DOCKER_PASSWORD`, enabled for the tag event only,
+through kaniko's Docker config file, never a command argument.
 
+- `release-guard` runs first on a release tag and fails the pipeline unless the
+  tagged commit is already on `main` (`git merge-base --is-ancestor`, after
+  fetching `main` in full, since the clone is shallow). A tag on an unmerged
+  branch never reaches a step that holds the Docker Hub secrets.
+- `image-build` builds the same Dockerfile with the same kaniko image on every
+  pull request, with `--no-push` and no secrets, so a broken Dockerfile fails
+  the pull request, not the release.
 - `latest` follows the most recently pushed release tag, not the highest
   version. Never push or re-run an older release tag; tag a backport as a
   pre-release (`v1.2.4-rc.1`) instead.
-- Trusted volumes also apply to pull requests from forks, and a step that mounts
-  the Docker socket is root on the agent host. Approving a fork pull request
-  that touches `.woodpecker.yml` hands out that access: read the diff first.
+- Never add `volumes`, `privileged` or a Docker socket mount to a step, and
+  never mark the repository trusted to make one work: that hands every pull
+  request that touches `.woodpecker.yml`, forks included, root on the agent
+  host.
 
 `dockerhub-overview` runs after `release` on the same tags and copies
 `docs/dockerhub.md` into the image's Docker Hub overview, logging in with the
