@@ -36,8 +36,10 @@ steps:
   # Builds the image on every pull request without pushing it, with the same
   # rootless builder the release uses, so a Dockerfile change that breaks the
   # build fails here instead of at the next release. No secrets, no volumes.
+  # Runs beside check, not after it: the build does not need check's result.
   image-build:
     image: martizih/kaniko:v1.28.5-alpine@sha256:6ba327d49f75147a44e39e8a977e9cde11b483832214b307ccf11f9da360693c
+    depends_on: []
     commands:
       - /kaniko/executor --context "$$CI_WORKSPACE" --dockerfile Dockerfile --no-push
     when:
