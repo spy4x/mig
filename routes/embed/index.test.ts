@@ -14,7 +14,8 @@ import type { Config } from "../../lib/types.ts";
 import { BookingsStore } from "../../lib/bookings.ts";
 import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../../lib/availability.ts";
-import { addDays, dayOfWeek, isoDateInTz, zonedDateTime } from "@spy4x/time/tz";
+import { zonedDateTime } from "@spy4x/time/tz";
+import { futureWeekday } from "../../lib/test-dates.ts";
 import EmbedPage, { handler } from "./index.tsx";
 import type { EmbedData } from "./index.tsx";
 
@@ -31,11 +32,7 @@ const TEST_DATE = "2026-10-06";
  *  runs. TEST_DATE is in the past, so its slots are never available;
  *  a test that needs an available slot uses this instead. */
 function bookableDate(): string {
-  let d = addDays(isoDateInTz(new Date(), HOST_TZ), 2, HOST_TZ);
-  while (dayOfWeek(d, HOST_TZ) === "SAT" || dayOfWeek(d, HOST_TZ) === "SUN") {
-    d = addDays(d, 1, HOST_TZ);
-  }
-  return d;
+  return futureWeekday(2, HOST_TZ);
 }
 
 function fakeConfig(): Config {
