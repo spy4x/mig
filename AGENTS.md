@@ -22,8 +22,8 @@
   start.
 - **CI:** Woodpecker `check` step — `deno install --frozen`, `deno task check`
   (fmt --check + lint + type check), `deno task test`, `deno task build` — on
-  every push, pull request, tag and manual run; a tag-only `release` step then
-  builds and publishes the Docker image.
+  every push, pull request, tag and manual run; on a release tag, `build` builds
+  the Docker image without secrets and `push` publishes it.
 - **Storage:** JSON file (`./data/bookings.json`) + in-process async mutex
 - **Email:** SMTP via `@spy4x/email` (`nodemailer` underneath, pinned by that
   package)
@@ -268,22 +268,39 @@ than the lock recorded; never reintroduce a separate install. `.dockerignore`
 keeps a host `node_modules` out of the build context, because
 `deno install --frozen` builds its own there.
 
-`release` runs after `check` on a `v<digit>` tag and publishes `antonshubin/mig`
-to Docker Hub: `v1.2.3` and `latest`, built with `MIG_VERSION=1.2.3`. A
-pre-release tag such as `v1.2.3-rc.1` is published under its own name and never
-moves `latest`. It builds and pushes with kaniko (`martizih/kaniko`, a
-maintained fork of the archived GoogleContainerTools project, pinned by version
-and digest), inside an ordinary container: no Docker socket, no volumes, no
-privileged mode. The repository is untrusted in Woodpecker and must stay so. The
-only agent runs on a private server that holds other projects and their keys,
-and a step allowed to mount its Docker socket is root there. It logs in with the
-secrets `DOCKER_USERNAME` and `DOCKER_PASSWORD`, enabled for the tag event only,
-through kaniko's Docker config file, never a command argument.
+The release is two steps, `build` then `push`, on a `v<digit>` tag after
+`release-guard` and `check`. It publishes `antonshubin/mig` to Docker Hub:
+`v1.2.3` and `latest`, built with `MIG_VERSION=1.2.3`. A pre-release tag such as
+`v1.2.3-rc.1` is published under its own name and never moves `latest`. No step
+uses a Docker socket, a volume or privileged mode. The repository is untrusted
+in Woodpecker and must stay so. The only agent runs on a private server that
+holds other projects and their keys, and a step allowed to mount its Docker
+socket is root there.
 
-- `release-guard` runs first on a release tag and fails the pipeline unless the
-  tagged commit is already on `main` (`git merge-base --is-ancestor`, after
-  fetching `main` in full, since the clone is shallow). A tag on an unmerged
-  branch never reaches a step that holds the Docker Hub secrets.
+- `build` runs kaniko (`martizih/kaniko`, a maintained fork of the archived
+  GoogleContainerTools project) with `--no-push` and writes the image to
+  `image.tar` in the workspace. It holds no secret, because kaniko runs the
+  Dockerfile's RUN lines in its own container: anything in that container, a
+  login included, is readable by every dependency the build installs.
+- `push` runs crane (go-containerregistry's `crane/debug` image, for its busybox
+  shell) and never repository code. It is the only release step that receives
+  `DOCKER_USERNAME` and `DOCKER_PASSWORD`, enabled for the tag event only. It
+  logs in with the password on stdin, pushes `image.tar` under the tag and adds
+  `latest` with `crane tag`. The tags come from `CI_COMMIT_TAG`, never from a
+  workspace file. Never merge the two steps back into one.
+- Every image in the pipeline is pinned by version and digest, so a moved tag
+  cannot change what runs next to the login.
+- `release-guard` fails the pipeline unless the tagged commit is already on
+  `main` (`git merge-base --is-ancestor`, after fetching `main` in full, since
+  the clone is shallow), and `build` waits for it. It catches a mistaken tag; it
+  is not a security boundary. Woodpecker reads `.woodpecker.yml` from the tagged
+  commit and hands secrets out by event, so a tag on a commit whose own pipeline
+  file lacks the guard still reaches the secrets.
+- The pipeline runs by `depends_on` (`image-build` has an empty one), so a step
+  without `depends_on` starts at once. On a tag, `release-guard` and `check`
+  start together; every step that receives a secret waits for both through
+  `build`. A `depends_on` may only name a step that runs on the same event:
+  Woodpecker refuses the pipeline when it names one that `when` filtered out.
 - `image-build` builds the same Dockerfile with the same kaniko image on every
   pull request, with `--no-push` and no secrets, so a broken Dockerfile fails
   the pull request, not the release.
@@ -295,7 +312,7 @@ through kaniko's Docker config file, never a command argument.
   request that touches `.woodpecker.yml`, forks included, root on the agent
   host.
 
-`dockerhub-overview` runs after `release` on the same tags and copies
+`dockerhub-overview` runs after `push` on the same tags and copies
 `docs/dockerhub.md` into the image's Docker Hub overview, logging in with the
 same two secrets. The overview is a separate file, not the README, because the
 README's relative links and images break on Docker Hub. The step is fail-open:
