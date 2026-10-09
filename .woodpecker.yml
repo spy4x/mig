@@ -1,4 +1,26 @@
 steps:
+  # Stops a mistaken release: a tag pushed on a commit that is not on main fails
+  # here, before build and push. It is not a security boundary. Woodpecker reads
+  # this file from the tagged commit and hands secrets out by event, so a tag on
+  # a commit whose own .woodpecker.yml lacks this step still reaches them. The
+  # clone is shallow, so main's history is fetched explicitly.
+  release-guard:
+    image: alpine/git:v2.54.0@sha256:a4bb51f1a3553df194ce679fc1db721d8bfba2046fa1a88fe9d4ac551ffbce25
+    commands:
+      - |
+          set -e
+          if [ "$$(git rev-parse --is-shallow-repository)" = true ]; then UNSHALLOW=--unshallow; fi
+          git fetch --no-tags $${UNSHALLOW:-} origin +refs/heads/main:refs/remotes/origin/main
+          if git merge-base --is-ancestor "$${CI_COMMIT_SHA}" origin/main; then
+            echo "$${CI_COMMIT_TAG} ($${CI_COMMIT_SHA}) is on main"
+          else
+            echo "error: $${CI_COMMIT_TAG} points at $${CI_COMMIT_SHA}, which is not on main; refusing to release" >&2
+            exit 1
+          fi
+    when:
+      event: tag
+      ref: refs/tags/v[0-9]*
+
   check:
     image: denoland/deno:debian-2.9.5
     when:
@@ -12,35 +34,77 @@ steps:
       - deno task compile
       - deno task smoke:binary
 
-  # Publishes antonshubin/mig to Docker Hub when a v<digit>* tag is pushed. Talks
-  # to the agent's Docker daemon through its socket, so the repository must be
-  # trusted for volumes in Woodpecker. DOCKER_USERNAME and DOCKER_PASSWORD are
-  # mig's repository secrets, enabled for the tag event only (never global: a
-  # global secret reaches every repository on the server). Every runtime variable
-  # is written $$ so Woodpecker leaves it for the shell (see AGENTS.md, CI).
-  release:
-    image: docker:29.8.1
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+  # Builds the image on every pull request without pushing it, with the same
+  # rootless builder the release uses, so a Dockerfile change that breaks the
+  # build fails here instead of at the next release. No secrets, no volumes.
+  # Runs beside check, not after it: the build does not need check's result.
+  image-build:
+    image: martizih/kaniko:v1.28.5-alpine@sha256:6ba327d49f75147a44e39e8a977e9cde11b483832214b307ccf11f9da360693c
+    depends_on: []
+    commands:
+      - /kaniko/executor --context "$$CI_WORKSPACE" --dockerfile Dockerfile --no-push
+    when:
+      event: pull_request
+
+  # The release publishes antonshubin/mig to Docker Hub when a v<digit>* tag is
+  # pushed, in two steps. The repository is untrusted in Woodpecker: no step
+  # mounts a volume or runs privileged. The only agent runs on a private server,
+  # and a step that mounts its Docker socket is root there.
+  #
+  # Building and pushing are separate steps because kaniko runs the
+  # Dockerfile's RUN lines (deno install and every dependency it fetches) in
+  # its own container, where a login would be readable by all of them. `build`
+  # holds no secret and writes the image to a tar file in the workspace; `push`
+  # runs only crane, never repository code, and is the one release step that
+  # receives DOCKER_USERNAME and DOCKER_PASSWORD (enabled for the tag event
+  # only). Images are pinned by digest, so a moved tag cannot change what runs
+  # next to the login. Every runtime variable is written $$ so Woodpecker
+  # leaves it for the shell (see AGENTS.md, CI).
+  build:
+    image: martizih/kaniko:v1.28.5-alpine@sha256:6ba327d49f75147a44e39e8a977e9cde11b483832214b307ccf11f9da360693c
+    depends_on: [release-guard, check]
+    commands:
+      # --destination only names the image inside the tar; nothing is pushed.
+      - /kaniko/executor --context "$$CI_WORKSPACE" --dockerfile Dockerfile
+        --build-arg "MIG_VERSION=$${CI_COMMIT_TAG#v}"
+        --destination "antonshubin/mig:$${CI_COMMIT_TAG}"
+        --no-push --tar-path "$$CI_WORKSPACE/image.tar"
+    when:
+      event: tag
+      ref: refs/tags/v[0-9]*
+
+  push:
+    # crane v0.22.1, its debug build, because the release builds have no
+    # shell. Its shell is /busybox/sh and it has no /bin/sh, so the entrypoint
+    # Woodpecker runs the commands with is named here. The tags come from
+    # CI_COMMIT_TAG, never from a file in the workspace.
+    image: gcr.io/go-containerregistry/crane/debug:v0.22.1@sha256:e78770b31258a3846f878036d9c1f63fbe4c871f9f56990bf77fd95c013e3c1b
+    entrypoint: [
+      "/busybox/sh",
+      "-c",
+      "echo $$CI_SCRIPT | /busybox/base64 -d | /busybox/sh -e",
+    ]
+    depends_on: [build]
     environment:
       DOCKER_USERNAME:
         from_secret: DOCKER_USERNAME
       DOCKER_PASSWORD:
         from_secret: DOCKER_PASSWORD
     commands:
-      - echo "$$DOCKER_PASSWORD" | docker login -u "$$DOCKER_USERNAME" --password-stdin
       - |
-          set -e
+          set -eu
           IMAGE=antonshubin/mig
-          # A pre-release tag (v1.2.3-rc.1) is published under its own name only;
-          # it never moves latest.
-          case "$${CI_COMMIT_TAG}" in *-*) LATEST= ;; *) LATEST=1 ;; esac
-          docker build --pull --build-arg MIG_VERSION="$${CI_COMMIT_TAG#v}" \
-            -t "$$IMAGE:$${CI_COMMIT_TAG}" $${LATEST:+-t "$$IMAGE:latest"} .
-          docker push "$$IMAGE:$${CI_COMMIT_TAG}"
-          if [ -n "$$LATEST" ]; then docker push "$$IMAGE:latest"; fi
-          # The daemon is the agent host's: do not leave release images on it.
-          docker image rm "$$IMAGE:$${CI_COMMIT_TAG}" $${LATEST:+"$$IMAGE:latest"}
+          # The login stays in this container, outside the workspace.
+          export DOCKER_CONFIG=/tmp/docker
+          printf '%s' "$$DOCKER_PASSWORD" |
+            crane auth login index.docker.io -u "$$DOCKER_USERNAME" --password-stdin
+          crane push image.tar "$$IMAGE:$${CI_COMMIT_TAG}"
+          # A pre-release tag (v1.2.3-rc.1) is published under its own name
+          # only; it never moves latest.
+          case "$${CI_COMMIT_TAG}" in
+            *-*) ;;
+            *) crane tag "$$IMAGE:$${CI_COMMIT_TAG}" latest ;;
+          esac
     when:
       event: tag
       ref: refs/tags/v[0-9]*
@@ -51,6 +115,7 @@ steps:
   # login token is held in a variable and never printed.
   dockerhub-overview:
     image: alpine:3.22
+    depends_on: [push]
     environment:
       DOCKER_USERNAME:
         from_secret: DOCKER_USERNAME

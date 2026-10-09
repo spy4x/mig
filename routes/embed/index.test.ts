@@ -15,6 +15,7 @@ import { BookingsStore } from "../../lib/bookings.ts";
 import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../../lib/availability.ts";
 import { zonedDateTime } from "@spy4x/time/tz";
+import { futureWeekday } from "../../lib/test-dates.ts";
 import EmbedPage, { handler } from "./index.tsx";
 import type { EmbedData } from "./index.tsx";
 
@@ -25,6 +26,14 @@ type SlotCell = EmbedData["slots"][number];
 // choice. 2026-10-06 is a Tuesday within MON-FRI 09:00-17:00.
 const HOST_TZ = "Asia/Ho_Chi_Minh";
 const TEST_DATE = "2026-10-06";
+
+/** A weekday two or more days ahead in the host's zone: past the
+ *  minimum notice and inside the booking horizon whenever the suite
+ *  runs. TEST_DATE is in the past, so its slots are never available;
+ *  a test that needs an available slot uses this instead. */
+function bookableDate(): string {
+  return futureWeekday(2, HOST_TZ);
+}
 
 function fakeConfig(): Config {
   return {
@@ -141,6 +150,7 @@ Deno.test("after a conflict, the slot list shows the taken slot disabled", async
   // booking exists, the picker route itself (not the write path) must
   // show that slot disabled so the visitor can't pick it again.
   const cfg = fakeConfig();
+  const date = bookableDate();
   const path = `/tmp/mig-embed-index-test-${crypto.randomUUID()}.json`;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
@@ -149,7 +159,7 @@ Deno.test("after a conflict, the slot list shows the taken slot disabled", async
       draft.push({
         id: "01EXISTING",
         createdAt: new Date().toISOString(),
-        date: TEST_DATE,
+        date,
         time: "09:00",
         hostTz: HOST_TZ,
         guestName: "Someone Else",
@@ -158,7 +168,7 @@ Deno.test("after a conflict, the slot list shows the taken slot disabled", async
         status: "active",
       });
     });
-    const req = new Request(`http://localhost/embed?date=${TEST_DATE}`);
+    const req = new Request(`http://localhost/embed?date=${date}`);
     const ctx = {
       req,
       state: {

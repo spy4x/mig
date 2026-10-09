@@ -15,23 +15,21 @@ import type { Config } from "../lib/types.ts";
 import { BookingsStore } from "../lib/bookings.ts";
 import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../lib/availability.ts";
-import { addDays, dayOfWeek, isoDateInTz } from "@spy4x/time/tz";
+import { futureWeekday } from "../lib/test-dates.ts";
 import Index from "./index.tsx";
 
 const HOST_TZ = "Asia/Ho_Chi_Minh";
-const TEST_DATE = "2026-10-06"; // Tuesday, within MON-FRI 09:00-17:00
+// A fixed Tuesday within MON-FRI 09:00-17:00, for tests that pin exact
+// labels and offsets ("Tuesday, 6 October 2026", "UTC-4"). It is in the
+// past, so its slots are no longer bookable: a test that needs a
+// bookable slot uses bookableDate() instead.
+const TEST_DATE = "2026-10-06";
 
-/** A bookable weekday at least `daysAhead` days out, computed from
- *  whenever the suite actually runs — same helper as lib/book.test.ts's
- *  futureWeekday, needed here too so a test isn't pinned to a literal
- *  date that eventually lands in the past (see the slot-link test
- *  below). */
-function futureWeekday(daysAhead: number, tz: string): string {
-  let d = addDays(isoDateInTz(new Date(), tz), daysAhead, tz);
-  while (dayOfWeek(d, tz) === "SAT" || dayOfWeek(d, tz) === "SUN") {
-    d = addDays(d, 1, tz);
-  }
-  return d;
+/** A weekday two or more days ahead in the host's zone: past the
+ *  minimum notice and inside the booking horizon whenever the suite
+ *  runs, so its 09:00 slot is always offered. */
+function bookableDate(): string {
+  return futureWeekday(2, HOST_TZ);
 }
 
 // mig#48 review: scoped to TimeSlots.tsx's own header element
@@ -115,7 +113,7 @@ async function renderIndex(
 }
 
 Deno.test("mig#48: standalone / shows the host's zone once above the grid, and each slot's own labelled clock in its accessible name", async () => {
-  const html = await renderIndex(`http://localhost/?date=${TEST_DATE}`);
+  const html = await renderIndex(`http://localhost/?date=${bookableDate()}`);
   // The zone renders once, in the grid header element itself.
   assertEquals(
     gridHeaderZoneLabel(html),
@@ -203,7 +201,7 @@ Deno.test("mig#18: standalone / keeps tz on every slot link", async () => {
   // review follow-up: a past date renders its slots disabled and
   // without links, so the loop below would never run — this test
   // computes a bookable weekday relative to whenever the suite
-  // actually runs, the same way lib/book.test.ts's futureWeekday does.
+  // actually runs, through lib/test-dates.ts.
   const date = futureWeekday(3, HOST_TZ);
   const html = await renderIndex(
     `http://localhost/?date=${date}&tz=America/New_York`,
@@ -246,15 +244,18 @@ Deno.test("mig#18: the host-timezone <noscript> note is hidden when the tz query
 });
 
 Deno.test("mig#48 review: the header comes from the FIRST slot, so only a LATER slot whose offset disagrees shows its own inline", async () => {
-  // Europe/Berlin's DST ends 2026-10-25 at 03:00 CEST -> 02:00 CET —
-  // a real transition where the offset itself changes, from UTC+2 to
+  // Europe/Berlin's DST ends on the last Sunday of October at 03:00
+  // CEST -> 02:00 CET — a real transition where the offset itself changes, from UTC+2 to
   // UTC+1, at 01:00 UTC. The host (Ho Chi Minh, UTC+7, no DST) has an
   // unusually early Sunday window so the visible grid straddles that
   // instant once converted to Berlin: 06:00 host-local (the first
   // slot) lands at 01:00 Berlin (still UTC+2, pre-transition), 08:00
   // onward lands at 02:00+ Berlin (already UTC+1).
+  // The date is computed, not fixed: a past slot is never offered, and
+  // this test needs the first slot to render.
+  const date = nextFallBackSunday();
   const html = await renderIndex(
-    "http://localhost/?date=2026-10-25&tz=Europe/Berlin",
+    `http://localhost/?date=${date}&tz=Europe/Berlin`,
     {
       weeklyAvailability: parseWeeklyAvailability("SUN 06:00-10:00"),
       bookingHorizonDays: 3650,
@@ -303,26 +304,38 @@ Deno.test("mig#57: standalone / ignores a date or slot param that is not on the 
   assertFalse(badDate.includes("2026-02-31"));
 
   const badSlot = await renderIndex(
-    `http://localhost/?date=${TEST_DATE}&slot=24:00`,
+    `http://localhost/?date=${bookableDate()}&slot=24:00`,
   );
   assert(badSlot.includes("slot=09%3A00"), "expected the day's slots");
   assertFalse(badSlot.includes("24:00"));
   assertFalse(badSlot.includes("24%3A00"));
 });
 
-// The next day Berlin's clocks jump from 02:00 to 03:00: the last
-// Sunday of March, this year's if it is at least two days ahead, else
-// next year's. Computed, not fixed, because a slot that is past or
-// inside the minimum notice renders without a link.
-function nextSpringForwardSunday(): string {
+// The last Sunday of a month (0 = January), this year's if it is at
+// least two days ahead, else next year's: the day Berlin's clocks change
+// (March and October). Computed, not fixed, because a slot that is past
+// or inside the minimum notice renders without a link, or not at all.
+function nextLastSunday(month: number): string {
   const today = new Date(Date.now() + 2 * 86_400_000).toISOString()
     .slice(0, 10);
   for (let year = new Date().getUTCFullYear();; year++) {
-    const march31 = new Date(Date.UTC(year, 2, 31));
-    const sunday = new Date(Date.UTC(year, 2, 31 - march31.getUTCDay()));
+    const lastDay = new Date(Date.UTC(year, month + 1, 0));
+    const sunday = new Date(
+      Date.UTC(year, month, lastDay.getUTCDate() - lastDay.getUTCDay()),
+    );
     const iso = sunday.toISOString().slice(0, 10);
     if (iso > today) return iso;
   }
+}
+
+/** The next day Berlin's clocks jump from 02:00 to 03:00. */
+function nextSpringForwardSunday(): string {
+  return nextLastSunday(2);
+}
+
+/** The next day Berlin's clocks fall back from 03:00 to 02:00. */
+function nextFallBackSunday(): string {
+  return nextLastSunday(9);
 }
 
 Deno.test("mig#57: standalone / offers no slot inside the spring-forward gap", async () => {

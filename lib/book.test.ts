@@ -15,7 +15,7 @@ import type { Config } from "./types.ts";
 import { BookingsStore } from "./bookings.ts";
 import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { getSlotsForDate, parseWeeklyAvailability } from "./availability.ts";
-import { addDays, dayOfWeek, isoDateInTz } from "@spy4x/time/tz";
+import { futureWeekday } from "./test-dates.ts";
 import { setTransportForTesting } from "./email.ts";
 import { handleBookingSubmit } from "./book.ts";
 
@@ -51,17 +51,6 @@ function fakeConfig(): Config {
     githubUrl: "https://github.com/spy4x/mig",
     version: "test",
   };
-}
-
-/** A bookable weekday at least `daysAhead` days out, so it clears
- *  minNoticeHours and lands inside MON-FRI availability regardless of
- *  which day the suite runs on. */
-function futureWeekday(daysAhead: number, tz: string): string {
-  let d = addDays(isoDateInTz(new Date(), tz), daysAhead, tz);
-  while (dayOfWeek(d, tz) === "SAT" || dayOfWeek(d, tz) === "SUN") {
-    d = addDays(d, 1, tz);
-  }
-  return d;
 }
 
 function tmpDataPath(): string {
