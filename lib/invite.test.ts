@@ -319,7 +319,7 @@ Deno.test("bookingIcs — visitorTz omits the visitor clock when no valid zone w
   assertEquals(ics.includes("visitor:"), false);
 });
 
-Deno.test("bookingIcs — description includes guest notes when present", () => {
+Deno.test("bookingIcs — the owner's description includes guest notes when present", () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZBK8M",
@@ -338,6 +338,10 @@ Deno.test("bookingIcs — description includes guest notes when present", () => 
     b,
     cfg,
     `https://meet.example.com/cancel?id=01HXYZBK8M&t=${raw}`,
+    undefined,
+    undefined,
+    undefined,
+    "owner",
   );
 
   // Notes are inlined into the DESCRIPTION on their own paragraph.
@@ -348,6 +352,32 @@ Deno.test("bookingIcs — description includes guest notes when present", () => 
   assertEquals(
     flat.includes("Looking forward\\; please share the deck ahead."),
     true,
+  );
+});
+
+// mig#108: anyone can book with an address that is not theirs, so the
+// invite that goes there carries nothing the booker typed but the address.
+Deno.test("bookingIcs — the guest's invite, the default, holds neither the name nor the notes", () => {
+  const b: Booking = {
+    id: "01HXYZBK8M",
+    createdAt: "2026-08-25T16:42:00.000Z",
+    date: "2026-08-28",
+    time: "10:00",
+    hostTz: "Europe/Berlin",
+    guestName: "Typedname",
+    guestEmail: "client@example.com",
+    notes: "Typednotes",
+    cancelTokenHash: "h",
+    status: "active",
+  };
+  const ics = unfold(bookingIcs(b, makeConfig(), "https://example.com/c"));
+
+  assertEquals(ics.includes("Typedname"), false);
+  assertEquals(ics.includes("Typednotes"), false);
+  assertEquals(
+    ics.includes("ATTENDEE;RSVP=TRUE:mailto:client@example.com"),
+    true,
+    ics,
   );
 });
 
@@ -376,7 +406,7 @@ Deno.test("bookingIcs — empty / whitespace notes are dropped", () => {
   assertEquals(ics.includes("Looking forward"), false);
 });
 
-Deno.test("bookingIcs — RFC 6868-encodes CN parameter delimiters", () => {
+Deno.test("bookingIcs — RFC 6868-encodes CN parameter delimiters in the owner's invite", () => {
   const cfg = makeConfig();
   const b: Booking = {
     id: "01HXYZ",
@@ -390,7 +420,17 @@ Deno.test("bookingIcs — RFC 6868-encodes CN parameter delimiters", () => {
     status: "active",
   };
   const raw = randomBase64Url();
-  const ics = unfold(bookingIcs(b, cfg, `https://example.com/c?t=${raw}`));
+  const ics = unfold(
+    bookingIcs(
+      b,
+      cfg,
+      `https://example.com/c?t=${raw}`,
+      undefined,
+      undefined,
+      undefined,
+      "owner",
+    ),
+  );
 
   assertEquals(
     ics.includes('CN="Visitor^\';ROLE=CHAIR^^^nInjected";RSVP=TRUE'),

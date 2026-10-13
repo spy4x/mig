@@ -4,6 +4,17 @@ import { define } from "../../lib/utils.ts";
 import { verifyOpaqueToken } from "@spy4x/platform/tokens";
 import { sendCancellationEmails } from "../../lib/email.ts";
 import { notifyBookingCancelled } from "../../lib/notify.ts";
+import { NOTES_MAX_LENGTH } from "../../lib/validators.ts";
+
+/** The reason as it is stored and mailed to the owner: trimmed and cut
+ *  to the length the booking form's notes may have. The form's own
+ *  `maxlength` is only a browser's promise, so a longer reason is cut
+ *  here rather than refused: the cancellation still goes through
+ *  (mig#108). A cut never leaves half of a surrogate pair behind. */
+function boundedReason(raw: string): string {
+  return raw.trim().slice(0, NOTES_MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, "")
+    .trimEnd();
+}
 
 export const handler = define.handlers({
   async POST(ctx) {
@@ -11,7 +22,7 @@ export const handler = define.handlers({
     const form = await ctx.req.formData();
     const id = String(form.get("id") ?? "");
     const token = String(form.get("token") ?? "");
-    const reason = String(form.get("reason") ?? "").trim();
+    const reason = boundedReason(String(form.get("reason") ?? ""));
 
     if (!id || !token) {
       return Response.redirect(

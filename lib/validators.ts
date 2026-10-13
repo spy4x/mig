@@ -79,8 +79,12 @@ const EmailRule = type("string").pipe((s: string, ctx) => {
   return trimmed;
 });
 
+/** The most characters the booking form's notes may hold. The cancel
+ *  reason is cut to the same length (routes/api/cancel.ts). */
+export const NOTES_MAX_LENGTH = 500;
+
 const NotesRule = type("string").pipe((s: string, ctx) => {
-  if (s.length > 500) {
+  if (s.length > NOTES_MAX_LENGTH) {
     return ctx.reject({ message: "Notes must be 500 characters or less." });
   }
   if (hasTextControlCharacters(s)) {

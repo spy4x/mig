@@ -16,6 +16,7 @@ import { loadConfirmedData } from "../../lib/confirmed-data.ts";
 import CancelPage, { handler as cancelPage } from "../cancel.tsx";
 import { handler } from "./cancel.ts";
 import { tempDataFile } from "../../lib/test-temp.ts";
+import { NOTES_MAX_LENGTH } from "../../lib/validators.ts";
 
 const SECRET = "fake-cancel-secret-only-for-tests";
 
@@ -223,4 +224,57 @@ Deno.test("an old cancel link is refused once CANCEL_SECRET changes", async () =
       assertEquals(confirmed.state, "invalid");
     },
   );
+});
+
+// mig#108: the form's maxlength is a browser's promise only. A request
+// written by hand carried a 200,000-character reason into the stored
+// booking and into a 400 KB mail.
+Deno.test("mig#108: a cancel reason over the notes limit is cut before it is stored or mailed", async () => {
+  const mails: { to: string; text: string; html: string }[] = [];
+  setTransportForTesting({
+    sendMail(message) {
+      mails.push({
+        to: String(message.to),
+        text: String(message.text),
+        html: String(message.html),
+      });
+      return Promise.resolve({});
+    },
+  });
+  try {
+    await withOldLinkBooking(OLD_LINK.secret, async (state, id) => {
+      // 499 letters, then an emoji whose two code units straddle the
+      // limit, then far more than fits.
+      const kept = "r".repeat(NOTES_MAX_LENGTH - 1);
+      const reason = `  ${kept}\u{1F600}${"X".repeat(200_000)}`;
+      const res = await handler.POST!(
+        {
+          req: new Request("http://localhost/api/cancel", {
+            method: "POST",
+            body: new URLSearchParams({ id, token: OLD_LINK.raw, reason }),
+          }),
+          state,
+        } as unknown as Context<State>,
+      ) as Response;
+
+      assertEquals(res.status, 303);
+      assertEquals(state.bookings.get(id)?.status, "cancelled");
+      assertEquals(state.bookings.get(id)?.cancelledReason, kept);
+
+      assertEquals(mails.map((m) => m.to), [
+        "visitor@example.com",
+        "jane@example.com",
+      ]);
+      const [guest, owner] = mails;
+      assert(owner.text.includes(`Reason: ${kept}\n`), "owner's reason");
+      for (const mail of mails) {
+        assertEquals(mail.text.includes("X"), false, `text to ${mail.to}`);
+        assertEquals(mail.html.includes("XX"), false, `html to ${mail.to}`);
+      }
+      assertEquals(guest.text.includes("rrr"), false, "guest's mail");
+      assertEquals(guest.html.includes("rrr"), false, "guest's mail");
+    });
+  } finally {
+    setTransportForTesting({ sendMail: () => Promise.resolve({}) });
+  }
 });

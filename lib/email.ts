@@ -290,6 +290,12 @@ function correctionHtml(
   );
 }
 
+// Anyone can book with an address that is not theirs, so a mail to the
+// guest's address holds nothing the booker typed except that address:
+// no name, no notes, no cancel reason, in the subject, the text, the
+// HTML or the invite (mig#108). The owner's mails keep all three.
+const GUEST_GREETING = "Hello,";
+
 export function buildBookingEmails(
   config: Config,
   booking: Booking,
@@ -304,7 +310,15 @@ export function buildBookingEmails(
   // bookingIcs's doc comment. The guest's own ics above passes no
   // `visitorTz`, so its DESCRIPTION is unaffected.
   const ownerIcs = inviteAttachment(
-    bookingInvite(booking, config, cancelUrl, booking.hostTz, booking.guestTz),
+    bookingInvite(
+      booking,
+      config,
+      cancelUrl,
+      booking.hostTz,
+      booking.guestTz,
+      undefined,
+      "owner",
+    ),
   );
   const instant = bookingInstant(booking);
   const guestWhen = formatClockShortAt(instant, guestTz);
@@ -394,18 +408,16 @@ export function buildCancellationEmails(
       to: booking.guestEmail,
       subject: `Your booking on ${guestWhen} was cancelled`,
       text: cancellationText({
-        greeting: `Hi ${booking.guestName},`,
+        greeting: GUEST_GREETING,
         body: guestBody,
         cancellerLabel: guestCancellerLabel,
-        reason: reasonText,
         cancelledAtLabel: formatClockShortAt(cancelledAt, guestTz),
         tzNote: knownGuestTz ? undefined : HOST_TZ_NOTE,
       }),
       html: cancellationHtml(config, {
-        greeting: `Hi ${booking.guestName},`,
+        greeting: GUEST_GREETING,
         body: guestBody,
         cancellerLabel: guestCancellerLabel,
-        reason: reasonText,
         cancelledAtLabel: formatClockShortAt(cancelledAt, guestTz),
         tzNote: knownGuestTz ? undefined : HOST_TZ_NOTE,
       }),
@@ -439,7 +451,7 @@ function guestText(
   cancelUrl: string,
 ): string {
   const lines = [
-    `Hi ${booking.guestName},`,
+    GUEST_GREETING,
     "",
     `Your meeting with ${config.hostName} is booked.`,
     "",
@@ -474,7 +486,7 @@ function guestHtml(
   return htmlWrap(
     config,
     `
-    <p>Hi ${esc(booking.guestName)},</p>
+    <p>${esc(GUEST_GREETING)}</p>
     <p>Your meeting with <strong>${esc(config.hostName)}</strong> is booked.</p>
     <table style="border-collapse:collapse;margin:16px 0">
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">When</td>
@@ -578,7 +590,8 @@ function cancellationText(opts: {
   greeting: string;
   body: string;
   cancellerLabel: string;
-  reason: string;
+  /** Left out of the guest's mail, which then has no "Reason" line. */
+  reason?: string;
   cancelledAtLabel: string;
   tzNote?: string;
 }): string {
@@ -588,10 +601,9 @@ function cancellationText(opts: {
     opts.body,
   ];
   if (opts.tzNote) lines.push(opts.tzNote);
+  lines.push("", `Cancelled by: ${opts.cancellerLabel}`);
+  if (opts.reason !== undefined) lines.push(`Reason: ${opts.reason}`);
   lines.push(
-    "",
-    `Cancelled by: ${opts.cancellerLabel}`,
-    `Reason: ${opts.reason}`,
     `Cancelled at: ${opts.cancelledAtLabel}`,
     "",
     "— Sent by mig",
@@ -605,11 +617,15 @@ function cancellationHtml(
     greeting: string;
     body: string;
     cancellerLabel: string;
-    reason: string;
+    reason?: string;
     cancelledAtLabel: string;
     tzNote?: string;
   },
 ): string {
+  const reasonHtml = opts.reason === undefined
+    ? ""
+    : `<tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Reason</td>
+          <td style="padding:4px 0">${esc(opts.reason)}</td></tr>`;
   const tzNoteHtml = opts.tzNote
     ? `<p style="color:#94a3b8;font-size:13px">${esc(opts.tzNote)}</p>`
     : "";
@@ -622,8 +638,7 @@ function cancellationHtml(
     <table style="border-collapse:collapse;margin:16px 0">
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Cancelled by</td>
           <td style="padding:4px 0">${esc(opts.cancellerLabel)}</td></tr>
-      <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Reason</td>
-          <td style="padding:4px 0">${esc(opts.reason)}</td></tr>
+      ${reasonHtml}
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Cancelled at</td>
           <td style="padding:4px 0">${esc(opts.cancelledAtLabel)}</td></tr>
     </table>

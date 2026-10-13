@@ -2,6 +2,7 @@ import { Button } from "@spy4x/preact-ui/button";
 import { Field } from "@spy4x/preact-ui/field";
 import { Textarea } from "@spy4x/preact-ui/input";
 import { define } from "../lib/utils.ts";
+import { NOTES_MAX_LENGTH } from "../lib/validators.ts";
 import { verifyOpaqueToken } from "@spy4x/platform/tokens";
 import { Header } from "../components/Header.tsx";
 import { Footer } from "../components/Footer.tsx";
@@ -256,7 +257,7 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
                 <Textarea
                   name="reason"
                   rows={3}
-                  maxLength={500}
+                  maxLength={NOTES_MAX_LENGTH}
                   placeholder="Let the other person know why."
                   class="resize-y"
                 />
