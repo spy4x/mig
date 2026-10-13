@@ -20,6 +20,7 @@ import {
 } from "../../lib/book.ts";
 import { MAX_BOOKING_BODY_BYTES } from "../../lib/book.ts";
 import { handler } from "./book.ts";
+import { tempDataFile } from "../../lib/test-temp.ts";
 
 const HOST_TZ = "Europe/Berlin";
 
@@ -61,20 +62,13 @@ function futureWeekday(daysAhead: number, tz: string): string {
   return d;
 }
 
-async function rm(path: string) {
-  try {
-    await Deno.remove(path);
-  } catch {
-    // ignore
-  }
-}
-
 // Every send resolves at once with no network I/O.
 setTransportForTesting({ sendMail: () => Promise.resolve({}) });
 
 Deno.test("POST /api/book: a successful booking redirects to /confirmed, not /embed/confirmed", async () => {
   const cfg = fakeConfig();
-  const path = `/tmp/mig-api-book-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -117,7 +111,6 @@ Deno.test("POST /api/book: a successful booking redirects to /confirmed, not /em
     false,
     location.pathname,
   );
-  await rm(path);
 });
 
 // Submits one booking for `date` at `slot` and returns the redirect.
@@ -159,37 +152,34 @@ async function submit(
 // date before 1980 is refused before any zone math runs; 1980-01-01
 // gets as far as the past-time check.
 Deno.test("POST /api/book: a date before 1980 is refused", async () => {
-  const path = `/tmp/mig-api-book-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
 
-  try {
-    const phoenix = await submit(
-      "1883-11-18",
-      "09:00",
-      "America/Phoenix",
-      bookings,
-    );
-    const lastBefore = await submit("1979-12-31", "09:00", HOST_TZ, bookings);
-    const first = await submit("1980-01-01", "09:00", HOST_TZ, bookings);
+  const phoenix = await submit(
+    "1883-11-18",
+    "09:00",
+    "America/Phoenix",
+    bookings,
+  );
+  const lastBefore = await submit("1979-12-31", "09:00", HOST_TZ, bookings);
+  const first = await submit("1980-01-01", "09:00", HOST_TZ, bookings);
 
-    assertEquals(phoenix.pathname, "/");
-    assertEquals(
-      phoenix.searchParams.get("err"),
-      "That date is not available for booking.",
-    );
-    assertEquals(
-      lastBefore.searchParams.get("err"),
-      "That date is not available for booking.",
-    );
-    assertEquals(
-      first.searchParams.get("err"),
-      "That time is no longer available.",
-    );
-    assertEquals(bookings.list().length, 0);
-  } finally {
-    await rm(path);
-  }
+  assertEquals(phoenix.pathname, "/");
+  assertEquals(
+    phoenix.searchParams.get("err"),
+    "That date is not available for booking.",
+  );
+  assertEquals(
+    lastBefore.searchParams.get("err"),
+    "That date is not available for booking.",
+  );
+  assertEquals(
+    first.searchParams.get("err"),
+    "That time is no longer available.",
+  );
+  assertEquals(bookings.list().length, 0);
 });
 
 // mig#73: the form is read with a byte cap, so an oversized body is
@@ -198,7 +188,8 @@ async function postOversized(streamed: boolean): Promise<{
   res: Response;
   stored: number;
 }> {
-  const path = `/tmp/mig-book-oversize-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const form = new URLSearchParams({
@@ -236,12 +227,8 @@ async function postOversized(streamed: boolean): Promise<{
       rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     },
   } as unknown as Context<State>;
-  try {
-    const res = await handler.POST!(ctx);
-    return { res, stored: bookings.list().length };
-  } finally {
-    await rm(path);
-  }
+  const res = await handler.POST!(ctx);
+  return { res, stored: bookings.list().length };
 }
 
 Deno.test("POST /api/book: an oversized body is rejected with 413 and books nothing", async () => {
@@ -257,7 +244,8 @@ Deno.test("POST /api/book: an oversized streamed body without Content-Length is 
 });
 
 Deno.test("POST /api/book: a body that stalls is answered with 408 and books nothing", async () => {
-  const path = `/tmp/mig-book-stall-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   // A body that never sends a byte and never ends, as a slow-loris
@@ -279,16 +267,12 @@ Deno.test("POST /api/book: a body that stalls is answered with 408 and books not
       rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     },
   } as unknown as Context<State>;
-  try {
-    const started = performance.now();
-    const res = await handleBookingSubmit(ctx, "", { bodyTimeoutMs: 50 });
-    assertEquals(res.status, 408);
-    // The 50 ms budget, not the routes' 10 s default, ended the read.
-    assert(performance.now() - started < BOOKING_BODY_TIMEOUT_MS / 2);
-    assertEquals(bookings.list().length, 0);
-  } finally {
-    await rm(path);
-  }
+  const started = performance.now();
+  const res = await handleBookingSubmit(ctx, "", { bodyTimeoutMs: 50 });
+  assertEquals(res.status, 408);
+  // The 50 ms budget, not the routes' 10 s default, ended the read.
+  assert(performance.now() - started < BOOKING_BODY_TIMEOUT_MS / 2);
+  assertEquals(bookings.list().length, 0);
 });
 
 // The form's email rule is the same address check the shared SMTP
@@ -298,7 +282,8 @@ Deno.test("POST /api/book: a body that stalls is answered with 408 and books not
 // mail goes out or a booking is stored. mig's own pattern used to let
 // it through, and the booking was rolled back after the owner's email.
 Deno.test("POST /api/book: an address the mail sender would refuse is turned back at the form, with no email and no booking", async () => {
-  const path = `/tmp/mig-book-bad-guest-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const sentTo: string[] = [];
@@ -340,6 +325,5 @@ Deno.test("POST /api/book: an address the mail sender would refuse is turned bac
     assertEquals(sentTo, []);
   } finally {
     setTransportForTesting({ sendMail: () => Promise.resolve({}) });
-    await rm(path);
   }
 });

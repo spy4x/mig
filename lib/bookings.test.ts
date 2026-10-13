@@ -1,18 +1,7 @@
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { BookingsStore, rollOverStoredWallClock } from "../lib/bookings.ts";
 import type { Booking } from "../lib/types.ts";
-
-function tmpPath(): string {
-  return `/tmp/mig-test-${crypto.randomUUID()}.json`;
-}
-
-async function rm(path: string) {
-  try {
-    await Deno.remove(path);
-  } catch {
-    // ignore
-  }
-}
+import { tempDataFile } from "../lib/test-temp.ts";
 
 function makeBooking(overrides: Partial<Booking> = {}): Booking {
   return {
@@ -30,17 +19,17 @@ function makeBooking(overrides: Partial<Booking> = {}): Booking {
 }
 
 Deno.test("BookingsStore — loads empty when file missing", async () => {
-  const path = tmpPath();
-  await rm(path);
+  await using file = await tempDataFile();
+  const path = file.path;
+  await Deno.remove(path);
   const s = new BookingsStore({ filePath: path });
   await s.init();
   assertEquals(s.list(), []);
-  await rm(path);
 });
 
 Deno.test("BookingsStore — persists mutations atomically", async () => {
-  const path = tmpPath();
-  await rm(path);
+  await using file = await tempDataFile();
+  const path = file.path;
   const s = new BookingsStore({ filePath: path });
   await s.init();
 
@@ -56,12 +45,11 @@ Deno.test("BookingsStore — persists mutations atomically", async () => {
   assertEquals(s2.list().length, 2);
   assertEquals(s2.list()[0].id, "a");
   assertEquals(s2.list()[0].guestTz, "America/New_York");
-  await rm(path);
 });
 
 Deno.test("BookingsStore — mutate serialises concurrent writes", async () => {
-  const path = tmpPath();
-  await rm(path);
+  await using file = await tempDataFile();
+  const path = file.path;
   const s = new BookingsStore({ filePath: path });
   await s.init();
 
@@ -73,12 +61,11 @@ Deno.test("BookingsStore — mutate serialises concurrent writes", async () => {
       })),
   );
   assertEquals(s.list().length, N);
-  await rm(path);
 });
 
 Deno.test("BookingsStore — forDate filters by host-local date", async () => {
-  const path = tmpPath();
-  await rm(path);
+  await using file = await tempDataFile();
+  const path = file.path;
   const s = new BookingsStore({ filePath: path });
   await s.init();
   await s.mutate((draft) => {
@@ -89,26 +76,24 @@ Deno.test("BookingsStore — forDate filters by host-local date", async () => {
   assertEquals(s.forDate("2026-08-28").length, 2);
   assertEquals(s.forDate("2026-08-29").length, 1);
   assertEquals(s.forDate("2026-08-30").length, 0);
-  await rm(path);
 });
 
 Deno.test("BookingsStore — temp file cleanup on crash simulation", async () => {
   // Simulate crash by manually creating a stale .tmp file, then start.
-  const path = tmpPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const tmp = path + ".tmp";
-  await rm(path);
-  await rm(tmp);
+  await Deno.remove(path);
   await Deno.writeTextFile(tmp, "{ broken json");
   const s = new BookingsStore({ filePath: path });
   await s.init(); // should still succeed
   assertEquals(s.list().length, 0);
-  await rm(path);
-  await rm(tmp);
+  await Deno.remove(tmp);
 });
 
 Deno.test("BookingsStore — get returns booking by id", async () => {
-  const path = tmpPath();
-  await rm(path);
+  await using file = await tempDataFile();
+  const path = file.path;
   const s = new BookingsStore({ filePath: path });
   await s.init();
   await s.mutate((draft) => {
@@ -118,7 +103,6 @@ Deno.test("BookingsStore — get returns booking by id", async () => {
   assertExists(found);
   assertEquals(found!.id, "abc");
   assertEquals(s.get("missing"), undefined);
-  await rm(path);
 });
 
 // mig#57: before the validator checked the calendar, "2027-02-30" at

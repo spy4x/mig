@@ -17,6 +17,7 @@ import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../lib/availability.ts";
 import { futureWeekday } from "../lib/test-dates.ts";
 import Index from "./index.tsx";
+import { tempDataFile } from "../lib/test-temp.ts";
 
 const HOST_TZ = "Asia/Ho_Chi_Minh";
 // A fixed Tuesday within MON-FRI 09:00-17:00, for tests that pin exact
@@ -80,36 +81,29 @@ async function renderIndex(
   cfgOverrides: Partial<Config> = {},
 ): Promise<string> {
   const cfg = { ...fakeConfig(), ...cfgOverrides };
-  const path = `/tmp/mig-index-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
-  try {
-    const req = new Request(url);
-    const ctx = {
-      req,
-      url: new URL(url),
-      state: {
-        config: cfg,
-        bookings,
-        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-      },
-      params: {},
-      config: {},
-      info: {},
-      isPartial: false,
-      Component: () => null,
-      error: null,
-      route: null,
-    } as unknown as Context<State>;
-    // deno-lint-ignore no-explicit-any
-    return renderToString((Index as any)(ctx));
-  } finally {
-    try {
-      await Deno.remove(path);
-    } catch {
-      // ignore
-    }
-  }
+  const req = new Request(url);
+  const ctx = {
+    req,
+    url: new URL(url),
+    state: {
+      config: cfg,
+      bookings,
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    },
+    params: {},
+    config: {},
+    info: {},
+    isPartial: false,
+    Component: () => null,
+    error: null,
+    route: null,
+  } as unknown as Context<State>;
+  // deno-lint-ignore no-explicit-any
+  return renderToString((Index as any)(ctx));
 }
 
 Deno.test("mig#48: standalone / shows the host's zone once above the grid, and each slot's own labelled clock in its accessible name", async () => {

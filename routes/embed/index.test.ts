@@ -18,6 +18,7 @@ import { zonedDateTime } from "@spy4x/time/tz";
 import { futureWeekday } from "../../lib/test-dates.ts";
 import EmbedPage, { handler } from "./index.tsx";
 import type { EmbedData } from "./index.tsx";
+import { tempDataFile } from "../../lib/test-temp.ts";
 
 type SlotCell = EmbedData["slots"][number];
 
@@ -65,41 +66,30 @@ function fakeConfig(): Config {
   };
 }
 
-async function rm(path: string) {
-  try {
-    await Deno.remove(path);
-  } catch {
-    // ignore
-  }
-}
-
 async function handlerData(
   url: string,
   cfgOverrides: Partial<Config> = {},
 ): Promise<EmbedData> {
   const cfg = { ...fakeConfig(), ...cfgOverrides };
-  const path = `/tmp/mig-embed-index-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
-  try {
-    const req = new Request(url);
-    const ctx = {
-      req,
-      state: {
-        config: cfg,
-        bookings,
-        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-      },
-    } as unknown as Context<State>;
-    const res = await handler.GET!(ctx);
-    // define.handlers' GET returns { data } (a Fresh RouteConfig
-    // response), not a Response — cast through unknown, same as the
-    // response shape routes/embed/embed.test.tsx's fakePageProps relies
-    // on for `data`.
-    return (res as unknown as { data: EmbedData }).data;
-  } finally {
-    await rm(path);
-  }
+  const req = new Request(url);
+  const ctx = {
+    req,
+    state: {
+      config: cfg,
+      bookings,
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    },
+  } as unknown as Context<State>;
+  const res = await handler.GET!(ctx);
+  // define.handlers' GET returns { data } (a Fresh RouteConfig
+  // response), not a Response — cast through unknown, same as the
+  // response shape routes/embed/embed.test.tsx's fakePageProps relies
+  // on for `data`.
+  return (res as unknown as { data: EmbedData }).data;
 }
 
 /** The labels BookingFlow renders from the handler's data, read back
@@ -151,41 +141,38 @@ Deno.test("after a conflict, the slot list shows the taken slot disabled", async
   // show that slot disabled so the visitor can't pick it again.
   const cfg = fakeConfig();
   const date = bookableDate();
-  const path = `/tmp/mig-embed-index-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
-  try {
-    await bookings.mutate((draft) => {
-      draft.push({
-        id: "01EXISTING",
-        createdAt: new Date().toISOString(),
-        date,
-        time: "09:00",
-        hostTz: HOST_TZ,
-        guestName: "Someone Else",
-        guestEmail: "else@example.com",
-        cancelTokenHash: "h",
-        status: "active",
-      });
+  await bookings.mutate((draft) => {
+    draft.push({
+      id: "01EXISTING",
+      createdAt: new Date().toISOString(),
+      date,
+      time: "09:00",
+      hostTz: HOST_TZ,
+      guestName: "Someone Else",
+      guestEmail: "else@example.com",
+      cancelTokenHash: "h",
+      status: "active",
     });
-    const req = new Request(`http://localhost/embed?date=${date}`);
-    const ctx = {
-      req,
-      state: {
-        config: cfg,
-        bookings,
-        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-      },
-    } as unknown as Context<State>;
-    const res = await handler.GET!(ctx);
-    const data = (res as unknown as { data: EmbedData }).data;
-    const taken = data.slots.find((s: SlotCell) => s.time === "09:00");
-    const free = data.slots.find((s: SlotCell) => s.time === "09:30");
-    assertEquals(taken?.available, false);
-    assertEquals(free?.available, true);
-  } finally {
-    await rm(path);
-  }
+  });
+  const req = new Request(`http://localhost/embed?date=${date}`);
+  const ctx = {
+    req,
+    state: {
+      config: cfg,
+      bookings,
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    },
+  } as unknown as Context<State>;
+  const res = await handler.GET!(ctx);
+  const data = (res as unknown as { data: EmbedData }).data;
+  const taken = data.slots.find((s: SlotCell) => s.time === "09:00");
+  const free = data.slots.find((s: SlotCell) => s.time === "09:30");
+  assertEquals(taken?.available, false);
+  assertEquals(free?.available, true);
 });
 
 Deno.test("mig#15: /embed with a valid tz renders the slot list in the visitor's zone", async () => {
