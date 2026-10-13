@@ -8,10 +8,10 @@
 [![Docker](https://img.shields.io/badge/docker-antonshubin%2Fmig-blue?logo=docker)](https://hub.docker.com/r/antonshubin/mig)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
-[**Try it live →**](https://meet.antonshubin.com) ·
-[Self-hosting](docs/self-hosting.md) · [Configuration](docs/configuration.md) ·
-[Embedding](docs/embedding.md) · [How it works](docs/how-it-works.md) ·
-[Changelog](CHANGELOG.md)
+[**See it live →**](https://meet.antonshubin.com) (my real booking page: book
+only if you want to talk) · [Self-hosting](docs/self-hosting.md) ·
+[Configuration](docs/configuration.md) · [Embedding](docs/embedding.md) ·
+[How it works](docs/how-it-works.md) · [Changelog](CHANGELOG.md)
 
 ![A visitor books a meeting: picks a date in the calendar, picks 15:30, types a name and email, confirms, and lands on the "You're booked" page.](docs/screenshots/booking-flow.gif)
 
@@ -52,7 +52,7 @@ day.
 # compose.yml
 services:
   mig:
-    image: antonshubin/mig:latest
+    image: antonshubin/mig:v0.12.0
     restart: unless-stopped
     ports: ["8080:8080"]
     volumes: ["./data:/data:z"]
@@ -64,6 +64,9 @@ cp .env.example .env    # fill in your name, hours, SMTP and a CANCEL_SECRET
 mkdir -p data && sudo chown 1993:1993 data   # the container runs as uid 1993
 docker compose up -d
 ```
+
+Pin a version from the [changelog](CHANGELOG.md), as above; the `latest` tag
+follows the most recent stable release.
 
 Open `http://localhost:8080`. Put it behind a TLS reverse proxy before you share
 the link: [self-hosting.md](docs/self-hosting.md) covers `docker run`, Podman,
