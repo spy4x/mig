@@ -8,6 +8,7 @@ import { BookingsStore } from "../../lib/bookings.ts";
 import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
 import { parseWeeklyAvailability } from "../../lib/availability.ts";
 import { handler } from "./slots.ts";
+import { tempDataFile } from "../../lib/test-temp.ts";
 
 function fakeConfig(): Config {
   return {
@@ -43,26 +44,19 @@ async function getSlots(
   date: string,
   hostTz = "Europe/Berlin",
 ): Promise<Response> {
-  const path = `/tmp/mig-slots-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
-  try {
-    const ctx = {
-      req: new Request(`http://localhost/api/slots?date=${date}`),
-      state: {
-        config: { ...fakeConfig(), hostTz },
-        bookings,
-        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-      },
-    } as unknown as Context<State>;
-    return await handler.GET!(ctx) as Response;
-  } finally {
-    try {
-      await Deno.remove(path);
-    } catch {
-      // ignore
-    }
-  }
+  const ctx = {
+    req: new Request(`http://localhost/api/slots?date=${date}`),
+    state: {
+      config: { ...fakeConfig(), hostTz },
+      bookings,
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    },
+  } as unknown as Context<State>;
+  return await handler.GET!(ctx) as Response;
 }
 
 // @spy4x/time/tz's zonedDateTime throws on "2026-02-30" where mig's own

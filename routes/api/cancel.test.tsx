@@ -15,6 +15,7 @@ import { setTransportForTesting } from "../../lib/email.ts";
 import { loadConfirmedData } from "../../lib/confirmed-data.ts";
 import CancelPage, { handler as cancelPage } from "../cancel.tsx";
 import { handler } from "./cancel.ts";
+import { tempDataFile } from "../../lib/test-temp.ts";
 
 const SECRET = "fake-cancel-secret-only-for-tests";
 
@@ -53,7 +54,8 @@ function fakeConfig(): Config {
 // the impossible values.
 Deno.test("mig#57: a booking stored with an impossible date still opens and cancels, emails included", async () => {
   const cfg = fakeConfig();
-  const path = `/tmp/mig-api-cancel-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const { raw, hash } = await newOpaqueToken(SECRET);
   const stored: Booking = {
     id: "01JIMPOSSIBLEDATE00000000",
@@ -137,11 +139,6 @@ Deno.test("mig#57: a booking stored with an impossible date still opens and canc
     );
   } finally {
     setTransportForTesting({ sendMail: () => Promise.resolve({}) });
-    try {
-      await Deno.remove(path);
-    } catch {
-      // ignore
-    }
   }
 });
 
@@ -163,7 +160,8 @@ async function withOldLinkBooking(
   secret: string,
   fn: (state: State, id: string) => Promise<void>,
 ): Promise<void> {
-  const path = `/tmp/mig-api-cancel-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const stored: Booking = {
     id: "01JOLDCANCELLINK000000000",
     createdAt: "2026-09-01T10:00:00.000Z",
@@ -176,17 +174,13 @@ async function withOldLinkBooking(
     status: "active",
   };
   await Deno.writeTextFile(path, JSON.stringify([stored]));
-  try {
-    const bookings = new BookingsStore({ filePath: path });
-    await bookings.init();
-    await fn({
-      config: { ...fakeConfig(), cancelSecret: secret },
-      bookings,
-      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-    } as State, stored.id);
-  } finally {
-    await Deno.remove(path);
-  }
+  const bookings = new BookingsStore({ filePath: path });
+  await bookings.init();
+  await fn({
+    config: { ...fakeConfig(), cancelSecret: secret },
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+  } as State, stored.id);
 }
 
 Deno.test("a cancel link minted by the old lib/tokens.ts still opens /confirmed and cancels", async () => {

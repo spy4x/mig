@@ -16,6 +16,7 @@ import { addDays, dayOfWeek, isoDateInTz } from "@spy4x/time/tz";
 import { setTransportForTesting } from "../../lib/email.ts";
 import { MAX_BOOKING_BODY_BYTES } from "../../lib/book.ts";
 import { handler } from "./book.ts";
+import { tempDataFile } from "../../lib/test-temp.ts";
 
 const HOST_TZ = "Europe/Berlin";
 
@@ -57,20 +58,13 @@ function futureWeekday(daysAhead: number, tz: string): string {
   return d;
 }
 
-async function rm(path: string) {
-  try {
-    await Deno.remove(path);
-  } catch {
-    // ignore
-  }
-}
-
 // Every send resolves at once with no network I/O.
 setTransportForTesting({ sendMail: () => Promise.resolve({}) });
 
 Deno.test("POST /embed/book: a successful booking redirects to /embed/confirmed, not /confirmed", async () => {
   const cfg = fakeConfig();
-  const path = `/tmp/mig-embed-book-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -108,7 +102,6 @@ Deno.test("POST /embed/book: a successful booking redirects to /embed/confirmed,
     true,
     location.pathname,
   );
-  await rm(path);
 });
 
 // mig#73: the form is read with a byte cap, so an oversized body is
@@ -117,7 +110,8 @@ async function postOversized(streamed: boolean): Promise<{
   res: Response;
   stored: number;
 }> {
-  const path = `/tmp/mig-book-oversize-test-${crypto.randomUUID()}.json`;
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const form = new URLSearchParams({
@@ -155,12 +149,8 @@ async function postOversized(streamed: boolean): Promise<{
       rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     },
   } as unknown as Context<State>;
-  try {
-    const res = await handler.POST!(ctx);
-    return { res, stored: bookings.list().length };
-  } finally {
-    await rm(path);
-  }
+  const res = await handler.POST!(ctx);
+  return { res, stored: bookings.list().length };
 }
 
 Deno.test("POST /embed/book: an oversized body is rejected with 413 and books nothing", async () => {

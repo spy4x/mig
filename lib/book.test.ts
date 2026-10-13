@@ -18,6 +18,7 @@ import { getSlotsForDate, parseWeeklyAvailability } from "./availability.ts";
 import { futureWeekday } from "./test-dates.ts";
 import { setTransportForTesting } from "./email.ts";
 import { handleBookingSubmit } from "./book.ts";
+import { tempDataFile } from "./test-temp.ts";
 
 // ─── Fixtures ──────────────────────────────────────────────────────
 
@@ -51,18 +52,6 @@ function fakeConfig(): Config {
     githubUrl: "https://github.com/spy4x/mig",
     version: "test",
   };
-}
-
-function tmpDataPath(): string {
-  return `/tmp/mig-book-test-${crypto.randomUUID()}.json`;
-}
-
-async function rm(path: string) {
-  try {
-    await Deno.remove(path);
-  } catch {
-    // ignore
-  }
 }
 
 // Each stub request comes from its own source port, as real connections
@@ -289,7 +278,8 @@ async function captureConsoleError(
 
 Deno.test('handleBookingSubmit: success under "" redirects to /confirmed', async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -305,12 +295,12 @@ Deno.test('handleBookingSubmit: success under "" redirects to /confirmed', async
   const path2 = locationPath(res);
   assertEquals(path2.startsWith("/confirmed?"), true, path2);
   assertEquals(path2.startsWith("/embed"), false, path2);
-  await rm(path);
 });
 
 Deno.test('handleBookingSubmit: success under "/embed" redirects to /embed/confirmed', async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -325,14 +315,14 @@ Deno.test('handleBookingSubmit: success under "/embed" redirects to /embed/confi
   assertEquals(res.status, 303);
   const path2 = locationPath(res);
   assertEquals(path2.startsWith("/embed/confirmed?"), true, path2);
-  await rm(path);
 });
 
 // ─── Validation / rate-limit failure ──────────────────────────────────
 
 Deno.test('handleBookingSubmit: failure under "" redirects to /?err=', async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -349,12 +339,12 @@ Deno.test('handleBookingSubmit: failure under "" redirects to /?err=', async () 
   assertEquals(res.status, 303);
   const path2 = locationPath(res);
   assertEquals(path2.startsWith("/?err="), true, path2);
-  await rm(path);
 });
 
 Deno.test('handleBookingSubmit: failure under "/embed" redirects to /embed?err=', async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -369,12 +359,12 @@ Deno.test('handleBookingSubmit: failure under "/embed" redirects to /embed?err='
   assertEquals(res.status, 303);
   const path2 = locationPath(res);
   assertEquals(path2.startsWith("/embed?err="), true, path2);
-  await rm(path);
 });
 
 Deno.test("mig#15 review: a validation failure keeps slot and tz on the redirect, not just date", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -398,14 +388,14 @@ Deno.test("mig#15 review: a validation failure keeps slot and tz on the redirect
   assertEquals(url.searchParams.get("date"), date);
   assertEquals(url.searchParams.get("slot"), "09:00");
   assertEquals(url.searchParams.get("tz"), "America/New_York");
-  await rm(path);
 });
 
 // ─── mig#44: theme survives every redirect ────────────────────────────
 
 Deno.test("mig#44: a successful embed booking keeps the forced theme on the redirect", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -421,12 +411,12 @@ Deno.test("mig#44: a successful embed booking keeps the forced theme on the redi
   const url = new URL(res.headers.get("location")!);
   assertEquals(url.pathname, "/embed/confirmed");
   assertEquals(url.searchParams.get("theme"), "dark");
-  await rm(path);
 });
 
 Deno.test("mig#44: a validation failure keeps the forced theme on the redirect", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -441,12 +431,12 @@ Deno.test("mig#44: a validation failure keeps the forced theme on the redirect",
   assertEquals(res.status, 303);
   const url = new URL(res.headers.get("location")!);
   assertEquals(url.searchParams.get("theme"), "light");
-  await rm(path);
 });
 
 Deno.test("mig#44: a rate-limited redirect keeps the forced theme", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -469,12 +459,12 @@ Deno.test("mig#44: a rate-limited redirect keeps the forced theme", async () => 
   assertEquals(second.status, 303);
   const url = new URL(second.headers.get("location")!);
   assertEquals(url.searchParams.get("theme"), "dark");
-  await rm(path);
 });
 
 Deno.test("mig#44: honeypot redirect keeps the forced theme", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -492,12 +482,12 @@ Deno.test("mig#44: honeypot redirect keeps the forced theme", async () => {
   assertEquals(res.status, 303);
   const url = new URL(res.headers.get("location")!);
   assertEquals(url.searchParams.get("theme"), "dark");
-  await rm(path);
 });
 
 Deno.test("mig#44: no theme field on the form means no theme param on the redirect (standalone)", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -512,12 +502,12 @@ Deno.test("mig#44: no theme field on the form means no theme param on the redire
   assertEquals(res.status, 303);
   const url = new URL(res.headers.get("location")!);
   assertEquals(url.searchParams.has("theme"), false);
-  await rm(path);
 });
 
 Deno.test("mig#44: a slot-taken conflict keeps the forced theme on the redirect", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -537,26 +527,23 @@ Deno.test("mig#44: a slot-taken conflict keeps the forced theme on the redirect"
       status: "active",
     });
   });
-  try {
-    const ctx = stubContext({
-      config: cfg,
-      bookings,
-      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-      fields: validFields(date, "09:00", { theme: "dark" }),
-    });
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    fields: validFields(date, "09:00", { theme: "dark" }),
+  });
 
-    const res = await handleBookingSubmit(ctx, "/embed");
-    assertEquals(res.status, 303);
-    const url = new URL(res.headers.get("location")!);
-    assertEquals(url.searchParams.get("theme"), "dark");
-  } finally {
-    await rm(path);
-  }
+  const res = await handleBookingSubmit(ctx, "/embed");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  assertEquals(url.searchParams.get("theme"), "dark");
 });
 
 Deno.test("mig#44: an email-send failure keeps the forced theme on the rollback redirect", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -576,7 +563,6 @@ Deno.test("mig#44: an email-send failure keeps the forced theme on the rollback 
     assertEquals(url.searchParams.get("theme"), "light");
   } finally {
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
@@ -588,7 +574,8 @@ Deno.test("mig#44: a minimum-notice failure ('That time is no longer available.'
   // schema-valid and within MON-FRI 09:00-17:00, so this is the first
   // and only check that fails.
   const cfg = { ...fakeConfig(), minNoticeHours: 24 * 10 };
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -607,12 +594,12 @@ Deno.test("mig#44: a minimum-notice failure ('That time is no longer available.'
     "That time is no longer available.",
   );
   assertEquals(url.searchParams.get("theme"), "dark");
-  await rm(path);
 });
 
 Deno.test("an availability failure drops slot but keeps date and tz on the redirect", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -636,12 +623,12 @@ Deno.test("an availability failure drops slot but keeps date and tz on the redir
   // a slot that was never valid to begin with.
   assertEquals(url.searchParams.get("slot"), null);
   assertEquals(url.searchParams.get("tz"), "America/New_York");
-  await rm(path);
 });
 
 Deno.test("a slot-taken conflict drops slot from the redirect (keeps date and tz)", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -662,41 +649,36 @@ Deno.test("a slot-taken conflict drops slot from the redirect (keeps date and tz
       status: "active",
     });
   });
-  try {
-    const ctx = stubContext({
-      config: cfg,
-      bookings,
-      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-      fields: validFields(date, "09:00", { guestTz: "America/New_York" }),
-    });
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    fields: validFields(date, "09:00", { guestTz: "America/New_York" }),
+  });
 
-    const res = await handleBookingSubmit(ctx, "");
-    assertEquals(res.status, 303);
-    const url = new URL(res.headers.get("location")!);
-    // A gone slot must not come back on the redirect — landing on the
-    // confirm step for it would let the visitor resubmit and trigger a
-    // second, false confirmation email pair (mig#15 round 2).
-    assertEquals(url.searchParams.get("slot"), null);
-    assertEquals(url.searchParams.get("date"), date);
-    assertEquals(url.searchParams.get("tz"), "America/New_York");
-    // mig#19 review round 1: the old message ("The confirmation email
-    // you received is no longer valid") only made sense when Phase 1
-    // sent mail before checking for a conflict. Nothing is ever sent
-    // to the loser now, so the message must not claim otherwise.
-    const err = (url.searchParams.get("err") ?? "").toLowerCase();
-    assertEquals(err.includes("email"), false, err);
-  } finally {
-    // try/finally (mig#19 review round 3): a red assertion above must
-    // not skip this and leave /tmp/mig-book-test-*.json behind.
-    await rm(path);
-  }
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const url = new URL(res.headers.get("location")!);
+  // A gone slot must not come back on the redirect — landing on the
+  // confirm step for it would let the visitor resubmit and trigger a
+  // second, false confirmation email pair (mig#15 round 2).
+  assertEquals(url.searchParams.get("slot"), null);
+  assertEquals(url.searchParams.get("date"), date);
+  assertEquals(url.searchParams.get("tz"), "America/New_York");
+  // mig#19 review round 1: the old message ("The confirmation email
+  // you received is no longer valid") only made sense when Phase 1
+  // sent mail before checking for a conflict. Nothing is ever sent
+  // to the loser now, so the message must not claim otherwise.
+  const err = (url.searchParams.get("err") ?? "").toLowerCase();
+  assertEquals(err.includes("email"), false, err);
 });
 
 // ─── Rate limit ────────────────────────────────────────────────────────
 
 Deno.test("a rate-limited redirect keeps date and tz", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -725,12 +707,12 @@ Deno.test("a rate-limited redirect keeps date and tz", async () => {
   // — a rate-limited request never got far enough to confirm the slot
   // is still free.
   assertEquals(url.searchParams.get("slot"), null);
-  await rm(path);
 });
 
 Deno.test("a rate-limited redirect caps an oversized date or tz instead of carrying it whole", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -774,14 +756,14 @@ Deno.test("a rate-limited redirect caps an oversized date or tz instead of carry
   const url = new URL(loc);
   assertEquals(url.searchParams.get("date")?.length, 100);
   assertEquals(url.searchParams.get("tz")?.length, 100);
-  await rm(path);
 });
 
 // ─── Honeypot ──────────────────────────────────────────────────────────
 
 Deno.test('handleBookingSubmit: honeypot under "" redirects to /confirmed', async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -797,12 +779,12 @@ Deno.test('handleBookingSubmit: honeypot under "" redirects to /confirmed', asyn
   const path2 = locationPath(res);
   assertEquals(path2.startsWith("/confirmed?id=fake"), true, path2);
   assertEquals(bookings.list().length, 0, "honeypot must not create a booking");
-  await rm(path);
 });
 
 Deno.test("handleBookingSubmit: a honeypot of only spaces is rejected like any other filled one", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -822,12 +804,12 @@ Deno.test("handleBookingSubmit: a honeypot of only spaces is rejected like any o
     0,
     "a whitespace honeypot must not create a booking",
   );
-  await rm(path);
 });
 
 Deno.test('handleBookingSubmit: honeypot under "/embed" redirects to /embed/confirmed', async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -843,49 +825,44 @@ Deno.test('handleBookingSubmit: honeypot under "/embed" redirects to /embed/conf
   const path2 = locationPath(res);
   assertEquals(path2.startsWith("/embed/confirmed?id=fake"), true, path2);
   assertEquals(bookings.list().length, 0, "honeypot must not create a booking");
-  await rm(path);
 });
 
 // ─── mig#18: uncapped `slot` on a validation-failure redirect ────────
 
 Deno.test("a validation-failure redirect caps an oversized slot, like date and tz", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
   // Under the 64 KiB body limit (mig#73), far past the 100-char cap.
   const hugeSlot = "9".repeat(20_000);
 
-  try {
-    const ctx = stubContext({
-      config: cfg,
-      bookings,
-      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-      // An invalid email fails BookingSchema, landing on the
-      // `redirectState` branch that carries `slot` along — the one
-      // mig#18's reviewer found left uncapped.
-      fields: validFields(date, hugeSlot, { email: "not-an-email" }),
-    });
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    // An invalid email fails BookingSchema, landing on the
+    // `redirectState` branch that carries `slot` along — the one
+    // mig#18's reviewer found left uncapped.
+    fields: validFields(date, hugeSlot, { email: "not-an-email" }),
+  });
 
-    const res = await handleBookingSubmit(ctx, "");
-    assertEquals(res.status, 303);
-    const loc = res.headers.get("location")!;
-    assertEquals(loc.startsWith(cfg.publicUrl), true, loc);
-    const url = new URL(loc);
-    assertEquals(url.searchParams.get("slot")?.length, 100);
-  } finally {
-    // try/finally (mig#19 review round 1): a red assertion above must
-    // not skip this and leave /tmp/mig-book-test-*.json behind.
-    await rm(path);
-  }
+  const res = await handleBookingSubmit(ctx, "");
+  assertEquals(res.status, 303);
+  const loc = res.headers.get("location")!;
+  assertEquals(loc.startsWith(cfg.publicUrl), true, loc);
+  const url = new URL(loc);
+  assertEquals(url.searchParams.get("slot")?.length, 100);
 });
 
 // ─── mig#19: a lost race must send no email for a booking never saved ──
 
 Deno.test("mig#19: the loser of a slot race sends no email and stores no booking", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -1000,7 +977,6 @@ Deno.test("mig#19: the loser of a slot race sends no email and stores no booking
     assertEquals(daySlots.find((s) => s.time === "09:00")?.available, false);
   } finally {
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
@@ -1008,7 +984,8 @@ Deno.test("mig#19: the loser of a slot race sends no email and stores no booking
 
 Deno.test("mig#19: a failed send after a save rolls the booking back and says so", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -1042,7 +1019,6 @@ Deno.test("mig#19: a failed send after a save rolls the booking back and says so
     assertEquals(url.searchParams.get("slot"), "09:00");
   } finally {
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
@@ -1057,11 +1033,15 @@ Deno.test("a failed owner send and a failed guest send redirect with the same ne
   const neutralMessage =
     "Something went wrong, so the booking was not created. Please try again in a moment.";
 
-  const ownerFailsPath = tmpDataPath();
-  const ownerFailsStore = new BookingsStore({ filePath: ownerFailsPath });
+  await using ownerFailsFile = await tempDataFile();
+  const ownerFailsStore = new BookingsStore({
+    filePath: ownerFailsFile.path,
+  });
   await ownerFailsStore.init();
-  const guestFailsPath = tmpDataPath();
-  const guestFailsStore = new BookingsStore({ filePath: guestFailsPath });
+  await using guestFailsFile = await tempDataFile();
+  const guestFailsStore = new BookingsStore({
+    filePath: guestFailsFile.path,
+  });
   await guestFailsStore.init();
 
   try {
@@ -1106,8 +1086,6 @@ Deno.test("a failed owner send and a failed guest send redirect with the same ne
     );
   } finally {
     setTransportForTesting(defaultTransport());
-    await rm(ownerFailsPath);
-    await rm(guestFailsPath);
   }
 });
 
@@ -1115,7 +1093,8 @@ Deno.test("a failed owner send and a failed guest send redirect with the same ne
 
 Deno.test("mig#19: a persist failure on the initial save leaves nothing behind and lets a retry through", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   makePersistFailOnce(
@@ -1185,7 +1164,6 @@ Deno.test("mig#19: a persist failure on the initial save leaves nothing behind a
     );
   } finally {
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
@@ -1193,7 +1171,8 @@ Deno.test("mig#19: a persist failure on the initial save leaves nothing behind a
 
 Deno.test("rollback-failure log says the owner email was sent when the guest send is what failed", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   // Phase 1's own save (persist call #1) succeeds for real; only the
@@ -1229,13 +1208,13 @@ Deno.test("rollback-failure log says the owner email was sent when the guest sen
     assertStringIncludes(String(rollbackLog![0]), "owner email was sent");
   } finally {
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
 Deno.test("rollback-failure log says the owner email was not sent when the owner send itself failed", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   makePersistFailOnCall(
@@ -1271,7 +1250,6 @@ Deno.test("rollback-failure log says the owner email was not sent when the owner
     assertStringIncludes(String(rollbackLog![0]), "owner email was not sent");
   } finally {
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
@@ -1279,7 +1257,8 @@ Deno.test("rollback-failure log says the owner email was not sent when the owner
 
 Deno.test("mig#19: a guest-send failure corrects the owner after rolling back", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -1339,13 +1318,13 @@ Deno.test("mig#19: a guest-send failure corrects the owner after rolling back", 
     );
   } finally {
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
 Deno.test("mig#19: an owner-send failure reaches nobody, sends no correction", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -1386,7 +1365,6 @@ Deno.test("mig#19: an owner-send failure reaches nobody, sends no correction", a
     );
   } finally {
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
@@ -1394,7 +1372,8 @@ Deno.test("mig#19: an owner-send failure reaches nobody, sends no correction", a
 
 Deno.test("mig#19: a failed send pushes an NTFY notice that says the booking was not created", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -1441,7 +1420,6 @@ Deno.test("mig#19: a failed send pushes an NTFY notice that says the booking was
     Deno.env.delete("NTFY_TOKEN");
     Deno.env.delete("NTFY_MODE");
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
@@ -1449,7 +1427,8 @@ Deno.test("mig#19: a failed send pushes an NTFY notice that says the booking was
 
 Deno.test("handleBookingSubmit: a guest-send failure with a working store pushes an NTFY notice saying the booking was removed and the slot is free", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -1510,13 +1489,13 @@ Deno.test("handleBookingSubmit: a guest-send failure with a working store pushes
     Deno.env.delete("NTFY_TOKEN");
     Deno.env.delete("NTFY_MODE");
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
 Deno.test("handleBookingSubmit: a guest-send failure where the rollback write also fails pushes an NTFY notice that does not claim the booking was removed", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   // Call 1 is Phase 1's initial save (must succeed); call 2 is the
@@ -1598,7 +1577,6 @@ Deno.test("handleBookingSubmit: a guest-send failure where the rollback write al
     Deno.env.delete("NTFY_TOKEN");
     Deno.env.delete("NTFY_MODE");
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
@@ -1611,7 +1589,8 @@ Deno.test("handleBookingSubmit: a guest-send failure where the rollback write al
 // instead of the push.
 Deno.test("mig#27: the correction email does not claim removal when the rollback write also fails", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   makePersistFailOnCall(bookings, 2, "simulated disk write failure");
@@ -1671,13 +1650,13 @@ Deno.test("mig#27: the correction email does not claim removal when the rollback
     assertStringIncludes(correctionText, diskId);
   } finally {
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
 Deno.test("handleBookingSubmit: a failed owner send where the rollback write also fails pushes a neutral NTFY notice, not one naming the confirmation email", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   makePersistFailOnCall(bookings, 2, "simulated disk write failure");
@@ -1731,13 +1710,13 @@ Deno.test("handleBookingSubmit: a failed owner send where the rollback write als
     Deno.env.delete("NTFY_TOKEN");
     Deno.env.delete("NTFY_MODE");
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
 Deno.test("handleBookingSubmit: the NTFY push for a failed send happens after the rollback has already run", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
@@ -1792,7 +1771,6 @@ Deno.test("handleBookingSubmit: the NTFY push for a failed send happens after th
     Deno.env.delete("NTFY_TOKEN");
     Deno.env.delete("NTFY_MODE");
     setTransportForTesting(defaultTransport());
-    await rm(path);
   }
 });
 
@@ -1804,41 +1782,38 @@ Deno.test("handleBookingSubmit: the NTFY push for a failed send happens after th
 // resubmit the same slot, which a conflict redirect also satisfies.
 Deno.test("mig#57: a submission over the rate limit is refused with the wait time", async () => {
   const cfg = fakeConfig();
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
   const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
 
-  try {
-    await handleBookingSubmit(
-      stubContext({
-        config: cfg,
-        bookings,
-        rateLimiter,
-        fields: validFields(date, "09:00"),
-      }),
-      "",
-    );
-    const second = await handleBookingSubmit(
-      stubContext({
-        config: cfg,
-        bookings,
-        rateLimiter,
-        fields: validFields(date, "09:30"),
-      }),
-      "",
-    );
+  await handleBookingSubmit(
+    stubContext({
+      config: cfg,
+      bookings,
+      rateLimiter,
+      fields: validFields(date, "09:00"),
+    }),
+    "",
+  );
+  const second = await handleBookingSubmit(
+    stubContext({
+      config: cfg,
+      bookings,
+      rateLimiter,
+      fields: validFields(date, "09:30"),
+    }),
+    "",
+  );
 
-    const url = new URL(second.headers.get("location")!);
-    assertEquals(
-      url.searchParams.get("err"),
-      "Too many attempts. Try again in 5 minutes.",
-    );
-    assertEquals(bookings.forDate(date).length, 1);
-  } finally {
-    await rm(path);
-  }
+  const url = new URL(second.headers.get("location")!);
+  assertEquals(
+    url.searchParams.get("err"),
+    "Too many attempts. Try again in 5 minutes.",
+  );
+  assertEquals(bookings.forDate(date).length, 1);
 });
 
 // ─── Rate-limit bucket: which address counts (mig#59) ──────────────
@@ -1864,42 +1839,39 @@ async function landInSeparateBuckets(
   first: Attempt,
   second: Attempt,
 ): Promise<boolean> {
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
   const date = futureWeekday(3, HOST_TZ);
   const rateLimiter = new MemoryRateLimiter({ windowMs: 300_000, limit: 1 });
-  try {
-    const one = await handleBookingSubmit(
-      stubContext({
-        config,
-        bookings,
-        rateLimiter,
-        fields: validFields(date, "09:00"),
-        ...first,
-      }),
-      "",
-    );
-    assertEquals(locationPath(one).startsWith("/confirmed?"), true);
-    const two = await handleBookingSubmit(
-      stubContext({
-        config,
-        bookings,
-        rateLimiter,
-        fields: validFields(date, "09:30"),
-        ...second,
-      }),
-      "",
-    );
-    if (locationPath(two).startsWith("/confirmed?")) return true;
-    // Anything but the rate-limit refusal (a validation error, a taken
-    // slot) says nothing about buckets, so it fails the test instead.
-    const err = new URL(two.headers.get("location")!).searchParams.get("err");
-    assertEquals(err?.startsWith("Too many attempts."), true, `err: ${err}`);
-    return false;
-  } finally {
-    await rm(path);
-  }
+  const one = await handleBookingSubmit(
+    stubContext({
+      config,
+      bookings,
+      rateLimiter,
+      fields: validFields(date, "09:00"),
+      ...first,
+    }),
+    "",
+  );
+  assertEquals(locationPath(one).startsWith("/confirmed?"), true);
+  const two = await handleBookingSubmit(
+    stubContext({
+      config,
+      bookings,
+      rateLimiter,
+      fields: validFields(date, "09:30"),
+      ...second,
+    }),
+    "",
+  );
+  if (locationPath(two).startsWith("/confirmed?")) return true;
+  // Anything but the rate-limit refusal (a validation error, a taken
+  // slot) says nothing about buckets, so it fails the test instead.
+  const err = new URL(two.headers.get("location")!).searchParams.get("err");
+  assertEquals(err?.startsWith("Too many attempts."), true, `err: ${err}`);
+  return false;
 }
 
 for (const header of PROXY_HEADERS) {
@@ -2041,29 +2013,26 @@ Deno.test("mig#57: a slot inside the spring-forward gap is refused", async () =>
     ...fakeConfig(),
     weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
   };
-  const path = tmpDataPath();
+  await using file = await tempDataFile();
+  const path = file.path;
   const bookings = new BookingsStore({ filePath: path });
   await bookings.init();
 
-  try {
-    const res = await handleBookingSubmit(
-      stubContext({
-        config: cfg,
-        bookings,
-        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-        fields: validFields("2027-03-28", "02:30"),
-      }),
-      "",
-    );
+  const res = await handleBookingSubmit(
+    stubContext({
+      config: cfg,
+      bookings,
+      rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+      fields: validFields("2027-03-28", "02:30"),
+    }),
+    "",
+  );
 
-    const url = new URL(res.headers.get("location")!);
-    assertEquals(url.pathname, "/");
-    assertEquals(
-      url.searchParams.get("err"),
-      "That time is outside availability hours.",
-    );
-    assertEquals(bookings.forDate("2027-03-28").length, 0);
-  } finally {
-    await rm(path);
-  }
+  const url = new URL(res.headers.get("location")!);
+  assertEquals(url.pathname, "/");
+  assertEquals(
+    url.searchParams.get("err"),
+    "That time is outside availability hours.",
+  );
+  assertEquals(bookings.forDate("2027-03-28").length, 0);
 });
