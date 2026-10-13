@@ -35,6 +35,10 @@ I built it for my own site and book my calls through it at
   emails show your time and the guest's side by side.
 - **Invite and cancel built in.** Every confirmation carries an `.ics` invite
   and a signed cancel link. Optional push notifications through NTFY.
+- **No stranger's text in the guest's inbox.** Anyone can type any address into
+  the form, so mail to that address says only when the meeting is, with whom,
+  where and how to cancel. The name, the notes and the cancel reason reach you
+  alone.
 - **Embeds anywhere.** `/embed` drops the whole flow into an iframe on your
   site, resizes itself and takes your site's theme with `?theme=`.
 - **Web standards.** Fetch, Web Crypto and ES modules on Deno, with Fresh and

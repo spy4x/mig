@@ -16,6 +16,9 @@ import { formatClockLongAt, formatOwnerClock } from "./clock.ts";
 
 const PRODID = "-//mig//EN";
 
+/** Whose mailbox an invite goes to; see `bookingIcs`. */
+export type InviteRecipient = "owner" | "guest";
+
 /** Build one VCALENDAR/VEVENT invite for `booking`. DTSTART/DTEND are
  *  always UTC, computed from `booking.date`/`booking.time` interpreted
  *  in `booking.hostTz` (the real storage zone — see the `Booking`
@@ -36,7 +39,13 @@ const PRODID = "-//mig//EN";
  *  the comment above `when` below for why `displayTz` itself must
  *  never be substituted there) and `visitorTz` for the visitor side,
  *  both for the real DTSTART instant. `displayTz` is unused in this
- *  branch. */
+ *  branch.
+ *
+ *  `recipient` says whose mailbox the invite goes to. Anyone can book
+ *  with an address that is not theirs, so the guest's invite (the
+ *  default) holds nothing the booker typed except that address: no
+ *  name on the attendee and no notes in the DESCRIPTION (mig#108).
+ *  Only `"owner"` adds them. */
 export function bookingIcs(
   booking: Booking,
   config: Config,
@@ -44,6 +53,7 @@ export function bookingIcs(
   displayTz = booking.hostTz,
   visitorTz?: string,
   now = new Date(),
+  recipient: InviteRecipient = "guest",
 ): string {
   const { event, options } = bookingInvite(
     booking,
@@ -52,6 +62,7 @@ export function bookingIcs(
     displayTz,
     visitorTz,
     now,
+    recipient,
   );
   return generateIcs(event, options);
 }
@@ -66,6 +77,7 @@ export function bookingInvite(
   displayTz = booking.hostTz,
   visitorTz?: string,
   now = new Date(),
+  recipient: InviteRecipient = "guest",
 ): { event: IcsEvent; options: IcsOptions } {
   const start = zonedDateTime(booking.date, booking.time, booking.hostTz);
   displayTz = canonicalTimeZoneOr(displayTz, booking.hostTz);
@@ -86,7 +98,7 @@ export function bookingInvite(
   //   2. The meeting URL on its own line — no "Join:" label, so a
   //      fold boundary mid-line doesn't split a short word off the
   //      URL and make it ambiguous in the rendered description
-  //   3. Notes: guest's notes, if any
+  //   3. Notes: guest's notes, if any — the owner's invite only
   //   4. Cancel URL — wrapped in a single trailing line so the URL
   //      and its label travel together
   //
@@ -122,7 +134,8 @@ export function bookingInvite(
     "",
     config.meetingUrl,
   ];
-  if (booking.notes && booking.notes.trim()) {
+  const forOwner = recipient === "owner";
+  if (forOwner && booking.notes && booking.notes.trim()) {
     descLines.push("", booking.notes.trim());
   }
   descLines.push(
@@ -148,7 +161,7 @@ export function bookingInvite(
       organizer: { email: config.hostEmail, name: config.hostName },
       attendees: [{
         email: booking.guestEmail,
-        name: booking.guestName,
+        name: forOwner ? booking.guestName : undefined,
         rsvp: true,
       }],
     },

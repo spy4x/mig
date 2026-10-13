@@ -336,6 +336,116 @@ Deno.test("an apostrophe in a guest's name is escaped in the HTML email", () => 
   assertStringIncludes(emails.owner.text, "Dara O'Brien");
 });
 
+// ─── mig#108: mail to the guest's address holds nothing the booker typed ──
+// Anyone can book with an address that is not theirs. The name, the
+// notes and the cancel reason are the booker's own text, so they go to
+// the owner only.
+
+const TYPED = {
+  name: "Typedname",
+  notes: "Typednotes https://spam.example/offer",
+  reason: "Typedreason",
+};
+
+function typedBooking(): Booking {
+  return {
+    ...makeBooking("America/New_York"),
+    guestName: TYPED.name,
+    notes: TYPED.notes,
+  };
+}
+
+function unfoldIcs(ics: string): string {
+  return ics.replace(/\r\n[ \t]/g, "");
+}
+
+/** Every part of `mail` a recipient can read, the unfolded invite included. */
+function everyPart(mail: {
+  subject: string;
+  text: string;
+  html?: string;
+  attachments?: { content: string }[];
+}): string {
+  return [
+    mail.subject,
+    mail.text,
+    mail.html ?? "",
+    ...(mail.attachments ?? []).map((a) => unfoldIcs(a.content)),
+  ].join("\n");
+}
+
+Deno.test("mig#108: the guest's booking mail holds neither the name nor the notes, invite included", () => {
+  const { guest } = buildBookingEmails(
+    makeConfig(),
+    typedBooking(),
+    "https://mig.example.com/cancel",
+  );
+  assertEquals(guest.to, "visitor@example.com");
+  assertEquals(guest.attachments!.length, 1);
+  for (
+    const [part, value] of [
+      ["subject", guest.subject],
+      ["text", guest.text],
+      ["html", guest.html!],
+      ["invite", unfoldIcs(guest.attachments![0].content)],
+    ]
+  ) {
+    assertEquals(value.includes(TYPED.name), false, `name in ${part}`);
+    assertEquals(value.includes("Typednotes"), false, `notes in ${part}`);
+    assertEquals(value.includes("spam.example"), false, `notes in ${part}`);
+  }
+  assertStringIncludes(guest.text, "Hello,\n\nYour meeting with Host");
+  assertStringIncludes(guest.html!, "<p>Hello,</p>");
+});
+
+Deno.test("mig#108: the owner's booking mail still shows the name and the notes, invite included", () => {
+  const { owner } = buildBookingEmails(
+    makeConfig(),
+    typedBooking(),
+    "https://mig.example.com/cancel",
+  );
+  const ics = unfoldIcs(owner.attachments![0].content);
+  assertStringIncludes(owner.subject, TYPED.name);
+  for (const value of [owner.text, owner.html!]) {
+    assertStringIncludes(value, TYPED.name);
+    assertStringIncludes(value, TYPED.notes);
+  }
+  assertStringIncludes(ics, `CN="${TYPED.name}"`);
+  assertStringIncludes(ics, "Typednotes https://spam.example/offer");
+});
+
+Deno.test("mig#108: the guest's cancellation mail holds neither the name nor the reason", () => {
+  const { guest } = buildCancellationEmails(
+    makeConfig(),
+    { ...typedBooking(), status: "cancelled" },
+    "guest",
+    TYPED.reason,
+  );
+  assertEquals(guest.to, "visitor@example.com");
+  const all = everyPart(guest);
+  assertEquals(all.includes(TYPED.name), false);
+  assertEquals(all.includes(TYPED.reason), false);
+  assertEquals(all.includes("Typednotes"), false);
+  assertEquals(all.includes("Reason"), false);
+  assertStringIncludes(guest.text, "Hello,\n\nThe meeting scheduled for");
+  assertStringIncludes(guest.html!, "<p>Hello,</p>");
+  assertStringIncludes(guest.text, "Cancelled by: you");
+});
+
+Deno.test("mig#108: the owner's cancellation mail still shows the name and the reason", () => {
+  const { owner } = buildCancellationEmails(
+    makeConfig(),
+    { ...typedBooking(), status: "cancelled" },
+    "guest",
+    TYPED.reason,
+  );
+  assertStringIncludes(owner.subject, TYPED.name);
+  assertStringIncludes(owner.text, `with ${TYPED.name} has been cancelled`);
+  assertStringIncludes(owner.text, `Reason: ${TYPED.reason}`);
+  assertStringIncludes(owner.html!, TYPED.name);
+  assertStringIncludes(owner.html!, TYPED.reason);
+});
+
 // ─── mig#27: sendBookingCorrectionEmail must tell the truth about the rollback ──
 
 interface RecordedMail {

@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- Mail to the guest's address no longer holds anything the booker typed except
+  that address. Anyone could book with someone else's address, and the
+  confirmation greeted the booker's "name", its invite carried the name and the
+  notes, and the cancellation mail carried the cancel reason: a way to deliver a
+  stranger's text from your domain. The guest's confirmation, its `.ics` invite
+  and the guest's cancellation mail now open with "Hello," and say only when the
+  meeting is, with whom, where and how to cancel. Your own mails and your invite
+  keep the name, the notes and the reason (#108).
+- `POST /api/cancel` cuts the cancel reason to 500 characters, the limit the
+  booking form's notes have. It had no limit on the server, so one request could
+  store a reason of any size and mail it (#108).
+
 ## [0.12.0] - 2026-10-01
 
 ### Changed
