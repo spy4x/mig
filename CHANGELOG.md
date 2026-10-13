@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-14
+
 ### Changed
 
 - A new booking's id is a UUID version 7 instead of a ULID. Bookings already in
@@ -565,7 +567,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/spy4x/mig/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/spy4x/mig/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/spy4x/mig/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/spy4x/mig/compare/v0.10.0...v0.11.0
