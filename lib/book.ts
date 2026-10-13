@@ -10,7 +10,8 @@
 
 import type { Context } from "fresh";
 import type { State } from "./utils.ts";
-import { monotonicUlid, newOpaqueToken } from "@spy4x/platform/tokens";
+import { newOpaqueToken } from "@spy4x/platform/tokens";
+import { uuidV7 } from "@spy4x/platform/universal/uuid";
 import {
   sendBookingCorrectionEmail,
   sendGuestBookingEmail,
@@ -278,7 +279,7 @@ export async function handleBookingSubmit(
   const { raw: tokenRaw, hash: tokenHash } = await newOpaqueToken(
     cfg.cancelSecret,
   );
-  const bookingId = monotonicUlid();
+  const bookingId = uuidV7();
   const booking = {
     id: bookingId,
     createdAt: new Date().toISOString(),

@@ -226,6 +226,75 @@ Deno.test("an old cancel link is refused once CANCEL_SECRET changes", async () =
   );
 });
 
+// mig#110: new bookings get a UUID version 7, and the ones already in
+// the data file keep the ULID they were stored with. The id below is a
+// real ULID, 26 Crockford base32 characters, as @spy4x/platform/tokens'
+// monotonicUlid() wrote them.
+Deno.test("mig#110: a booking stored with a ULID id still opens /confirmed and /cancel, and cancels", async () => {
+  await using file = await tempDataFile();
+  const { raw, hash } = await newOpaqueToken(SECRET);
+  const stored: Booking = {
+    id: "01JA4V5W6X7Y8Z9A0B1C2D3E4F",
+    createdAt: "2026-09-01T10:00:00.000Z",
+    date: "2027-03-02",
+    time: "11:00",
+    hostTz: "Europe/Berlin",
+    guestName: "Visitor",
+    guestEmail: "visitor@example.com",
+    cancelTokenHash: hash,
+    status: "active",
+  };
+  await Deno.writeTextFile(file.path, JSON.stringify([stored]));
+  setTransportForTesting({ sendMail: () => Promise.resolve({}) });
+  const bookings = new BookingsStore({ filePath: file.path });
+  await bookings.init();
+  const state = {
+    config: fakeConfig(),
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+  };
+  const query = `id=${stored.id}&token=${raw}`;
+
+  const confirmed = await loadConfirmedData(
+    {
+      req: new Request(`http://localhost/confirmed?${query}`),
+      state,
+    } as unknown as Context<State>,
+  );
+  assertEquals(confirmed.state, "ok");
+  assertEquals(confirmed.booking?.id, stored.id);
+
+  const cancelGet = await cancelPage.GET!(
+    {
+      req: new Request(`http://localhost/cancel?${query}`),
+      state,
+    } as unknown as Context<State>,
+  );
+  const data = (cancelGet as unknown as {
+    data: { state: string; booking?: { id: string } };
+  }).data;
+  assertEquals(data.state, "ok");
+  assertEquals(data.booking?.id, stored.id);
+
+  const res = await handler.POST!(
+    {
+      req: new Request("http://localhost/api/cancel", {
+        method: "POST",
+        body: new URLSearchParams({ id: stored.id, token: raw }),
+      }),
+      state,
+    } as unknown as Context<State>,
+  ) as Response;
+  assertEquals(res.status, 303);
+  const location = new URL(res.headers.get("location")!);
+  assertEquals(location.searchParams.get("cancelled"), "1");
+  assertEquals(location.searchParams.get("id"), stored.id);
+  assertEquals(bookings.get(stored.id)?.status, "cancelled");
+  // Nothing stored is rewritten: the record on disk keeps its ULID.
+  const onDisk = JSON.parse(await Deno.readTextFile(file.path));
+  assertEquals(onDisk[0].id, stored.id);
+});
+
 // mig#108: the form's maxlength is a browser's promise only. A request
 // written by hand carried a 200,000-character reason into the stored
 // booking and into a 400 KB mail.

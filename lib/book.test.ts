@@ -14,6 +14,7 @@ import type { State } from "./utils.ts";
 import type { Config } from "./types.ts";
 import { BookingsStore } from "./bookings.ts";
 import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
+import { isUuid } from "@spy4x/platform/universal/uuid";
 import { getSlotsForDate, parseWeeklyAvailability } from "./availability.ts";
 import { futureWeekday } from "./test-dates.ts";
 import { setTransportForTesting } from "./email.ts";
@@ -295,6 +296,29 @@ Deno.test('handleBookingSubmit: success under "" redirects to /confirmed', async
   const path2 = locationPath(res);
   assertEquals(path2.startsWith("/confirmed?"), true, path2);
   assertEquals(path2.startsWith("/embed"), false, path2);
+});
+
+Deno.test("a new booking's id is a UUID version 7, stored and in the redirect", async () => {
+  const cfg = fakeConfig();
+  await using file = await tempDataFile();
+  const bookings = new BookingsStore({ filePath: file.path });
+  await bookings.init();
+  const date = futureWeekday(3, HOST_TZ);
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    fields: validFields(date, "09:00"),
+  });
+
+  const res = await handleBookingSubmit(ctx, "");
+
+  assertEquals(res.status, 303);
+  const stored = bookings.list();
+  assertEquals(stored.length, 1);
+  assert(isUuid(stored[0].id, 7), `stored id: ${stored[0].id}`);
+  const location = new URL(res.headers.get("location")!);
+  assertEquals(location.searchParams.get("id"), stored[0].id);
 });
 
 Deno.test('handleBookingSubmit: success under "/embed" redirects to /embed/confirmed', async () => {
