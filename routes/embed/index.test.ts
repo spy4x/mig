@@ -6,34 +6,34 @@
 // renders from it (the picked day, the grid header's zone, the time
 // card's date).
 
-import { assert, assertEquals, assertFalse } from "@std/assert";
-import { renderToString } from "preact-render-to-string";
-import type { Context } from "fresh";
-import type { State } from "../../lib/utils.ts";
-import type { Config } from "../../lib/types.ts";
-import { BookingsStore } from "../../lib/bookings.ts";
-import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
-import { parseWeeklyAvailability } from "../../lib/availability.ts";
-import { zonedDateTime } from "@spy4x/time/tz";
-import { futureWeekday } from "../../lib/test-dates.ts";
-import EmbedPage, { handler } from "./index.tsx";
-import type { EmbedData } from "./index.tsx";
-import { tempDataFile } from "../../lib/test-temp.ts";
+import { assert, assertEquals, assertFalse } from "@std/assert"
+import { renderToString } from "preact-render-to-string"
+import type { Context } from "fresh"
+import type { State } from "../../lib/utils.ts"
+import type { Config } from "../../lib/types.ts"
+import { BookingsStore } from "../../lib/bookings.ts"
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory"
+import { parseWeeklyAvailability } from "../../lib/availability.ts"
+import { zonedDateTime } from "@spy4x/time/tz"
+import { futureWeekday } from "../../lib/test-dates.ts"
+import EmbedPage, { handler } from "./index.tsx"
+import type { EmbedData } from "./index.tsx"
+import { tempDataFile } from "../../lib/test-temp.ts"
 
-type SlotCell = EmbedData["slots"][number];
+type SlotCell = EmbedData["slots"][number]
 
 // Host in Ho Chi Minh (no DST — always UTC+7). October keeps New York
 // unambiguously in EDT (UTC-4) — see lib/clock.test.ts for the same
 // choice. 2026-10-06 is a Tuesday within MON-FRI 09:00-17:00.
-const HOST_TZ = "Asia/Ho_Chi_Minh";
-const TEST_DATE = "2026-10-06";
+const HOST_TZ = "Asia/Ho_Chi_Minh"
+const TEST_DATE = "2026-10-06"
 
 /** A weekday two or more days ahead in the host's zone: past the
  *  minimum notice and inside the booking horizon whenever the suite
  *  runs. TEST_DATE is in the past, so its slots are never available;
  *  a test that needs an available slot uses this instead. */
 function bookableDate(): string {
-  return futureWeekday(2, HOST_TZ);
+  return futureWeekday(2, HOST_TZ)
 }
 
 function fakeConfig(): Config {
@@ -63,19 +63,19 @@ function fakeConfig(): Config {
     hideBranding: false,
     githubUrl: "https://github.com/spy4x/mig",
     version: "test",
-  };
+  }
 }
 
 async function handlerData(
   url: string,
   cfgOverrides: Partial<Config> = {},
 ): Promise<EmbedData> {
-  const cfg = { ...fakeConfig(), ...cfgOverrides };
-  await using file = await tempDataFile();
-  const path = file.path;
-  const bookings = new BookingsStore({ filePath: path });
-  await bookings.init();
-  const req = new Request(url);
+  const cfg = { ...fakeConfig(), ...cfgOverrides }
+  await using file = await tempDataFile()
+  const path = file.path
+  const bookings = new BookingsStore({ filePath: path })
+  await bookings.init()
+  const req = new Request(url)
   const ctx = {
     req,
     state: {
@@ -83,22 +83,22 @@ async function handlerData(
       bookings,
       rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     },
-  } as unknown as Context<State>;
-  const res = await handler.GET!(ctx);
+  } as unknown as Context<State>
+  const res = await handler.GET!(ctx)
   // define.handlers' GET returns { data } (a Fresh RouteConfig
   // response), not a Response — cast through unknown, same as the
   // response shape routes/embed/embed.test.tsx's fakePageProps relies
   // on for `data`.
-  return (res as unknown as { data: EmbedData }).data;
+  return (res as unknown as { data: EmbedData }).data
 }
 
 /** The labels BookingFlow renders from the handler's data, read back
  *  from the page: the date card's day, the grid header's zone and the
  *  time card's date. `null` when that element isn't on the page. */
 interface RenderedLabels {
-  selectedDateLabel: string | null;
-  zoneLabel: string | null;
-  slotDateLabel: string | null;
+  selectedDateLabel: string | null
+  zoneLabel: string | null
+  slotDateLabel: string | null
 }
 
 function renderedLabels(html: string): RenderedLabels {
@@ -110,7 +110,7 @@ function renderedLabels(html: string): RenderedLabels {
       html.match(/<p class="text-xs text-ink-subtle mt-0\.5">([^<]*)<\/p>/)
         ?.[1] ?? null,
     slotDateLabel: html.match(/· ([^<]+)</)?.[1] ?? null,
-  };
+  }
 }
 
 // The handler's data rendered through the page itself: the month grid
@@ -119,11 +119,11 @@ async function renderEmbed(
   url: string,
   cfgOverrides: Partial<Config> = {},
 ): Promise<{ data: EmbedData; html: string }> {
-  const data = await handlerData(url, cfgOverrides);
-  const config = { ...fakeConfig(), ...cfgOverrides };
+  const data = await handlerData(url, cfgOverrides)
+  const config = { ...fakeConfig(), ...cfgOverrides }
   // deno-lint-ignore no-explicit-any
-  const html = renderToString((EmbedPage as any)({ data, state: { config } }));
-  return { data, html };
+  const html = renderToString((EmbedPage as any)({ data, state: { config } }))
+  return { data, html }
 }
 
 /** The handler's data plus the labels the page renders from it. */
@@ -131,20 +131,20 @@ async function getEmbedData(
   url: string,
   cfgOverrides: Partial<Config> = {},
 ): Promise<EmbedData & RenderedLabels> {
-  const { data, html } = await renderEmbed(url, cfgOverrides);
-  return { ...data, ...renderedLabels(html) };
+  const { data, html } = await renderEmbed(url, cfgOverrides)
+  return { ...data, ...renderedLabels(html) }
 }
 
 Deno.test("after a conflict, the slot list shows the taken slot disabled", async () => {
   // Companion to lib/book.test.ts's conflict-drops-slot test: once the
   // booking exists, the picker route itself (not the write path) must
   // show that slot disabled so the visitor can't pick it again.
-  const cfg = fakeConfig();
-  const date = bookableDate();
-  await using file = await tempDataFile();
-  const path = file.path;
-  const bookings = new BookingsStore({ filePath: path });
-  await bookings.init();
+  const cfg = fakeConfig()
+  const date = bookableDate()
+  await using file = await tempDataFile()
+  const path = file.path
+  const bookings = new BookingsStore({ filePath: path })
+  await bookings.init()
   await bookings.mutate((draft) => {
     draft.push({
       id: "01EXISTING",
@@ -156,9 +156,9 @@ Deno.test("after a conflict, the slot list shows the taken slot disabled", async
       guestEmail: "else@example.com",
       cancelTokenHash: "h",
       status: "active",
-    });
-  });
-  const req = new Request(`http://localhost/embed?date=${date}`);
+    })
+  })
+  const req = new Request(`http://localhost/embed?date=${date}`)
   const ctx = {
     req,
     state: {
@@ -166,35 +166,35 @@ Deno.test("after a conflict, the slot list shows the taken slot disabled", async
       bookings,
       rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     },
-  } as unknown as Context<State>;
-  const res = await handler.GET!(ctx);
-  const data = (res as unknown as { data: EmbedData }).data;
-  const taken = data.slots.find((s: SlotCell) => s.time === "09:00");
-  const free = data.slots.find((s: SlotCell) => s.time === "09:30");
-  assertEquals(taken?.available, false);
-  assertEquals(free?.available, true);
-});
+  } as unknown as Context<State>
+  const res = await handler.GET!(ctx)
+  const data = (res as unknown as { data: EmbedData }).data
+  const taken = data.slots.find((s: SlotCell) => s.time === "09:00")
+  const free = data.slots.find((s: SlotCell) => s.time === "09:30")
+  assertEquals(taken?.available, false)
+  assertEquals(free?.available, true)
+})
 
 Deno.test("mig#15: /embed with a valid tz renders the slot list in the visitor's zone", async () => {
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&tz=America%2FNew_York`,
-  );
+  )
 
-  assertEquals(data.tz, "America/New_York");
-  assert(data.slots.length > 0, "expected slots for a MON-FRI date");
+  assertEquals(data.tz, "America/New_York")
+  assert(data.slots.length > 0, "expected slots for a MON-FRI date")
   // 09:00 host-local (Ho Chi Minh) is 22:00 the previous day in New York.
-  const first = data.slots.find((s: SlotCell) => s.time === "09:00");
-  assert(first, "expected the 09:00 host-local slot");
+  const first = data.slots.find((s: SlotCell) => s.time === "09:00")
+  assert(first, "expected the 09:00 host-local slot")
   // mig#48: the slot itself only carries the bare time now — the zone
   // ("New York, UTC-4") renders once, in the grid's header.
-  assertEquals(first!.displayHHMM, "22:00");
-  assertEquals(first!.ariaZoneLabel, "New York, UTC-4");
-  assertEquals(data.zoneLabel, "New York, UTC-4");
+  assertEquals(first!.displayHHMM, "22:00")
+  assertEquals(first!.ariaZoneLabel, "New York, UTC-4")
+  assertEquals(data.zoneLabel, "New York, UTC-4")
   assert(
     data.selectedDateLabel?.includes("October 2026"),
     `expected an October 2026 date label, got "${data.selectedDateLabel}"`,
-  );
-});
+  )
+})
 
 Deno.test("slotDateLabel comes from the slot's own instant, not noon of the host day", async () => {
   // The 09:00 Ho Chi Minh slot on 2026-10-06 (Tuesday) is 22:00 the
@@ -205,9 +205,9 @@ Deno.test("slotDateLabel comes from the slot's own instant, not noon of the host
   // Sept") would make this assert "Tuesday, 6 October 2026" instead.
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&slot=09:00&tz=America%2FNew_York`,
-  );
-  assertEquals(data.slotDateLabel, "Monday, 5 October 2026");
-});
+  )
+  assertEquals(data.slotDateLabel, "Monday, 5 October 2026")
+})
 
 Deno.test("mig#15, mig#50: picked-day label converts into the visitor's zone when no slot falls on the clicked day", async () => {
   // Auckland (UTC+13 from late September) 09:00-10:00 on Tuesday 6
@@ -223,54 +223,54 @@ Deno.test("mig#15, mig#50: picked-day label converts into the visitor's zone whe
       hostTz: "Pacific/Auckland",
       weeklyAvailability: parseWeeklyAvailability("TUE 09:00-10:00"),
     },
-  );
-  assertEquals(data.selectedDateLabel, "Monday, 5 October 2026");
-  assertEquals(data.slots.map((s) => s.dateNote), [undefined, undefined]);
-});
+  )
+  assertEquals(data.selectedDateLabel, "Monday, 5 October 2026")
+  assertEquals(data.slots.map((s) => s.dateNote), [undefined, undefined])
+})
 
 Deno.test("mig#15: /embed's slot list is sorted by instant and labels a slot whose visitor date differs from the picked day", async () => {
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&tz=America%2FNew_York`,
-  );
+  )
   // Every slot from 09:00 host-local onward is 22:00+ the previous
   // evening in New York until the host's midday; those slots must
   // still come FIRST (true chronological order), not after the ones
   // that stay on the picked day.
   const instants = data.slots.map((s) =>
     zonedDateTime(TEST_DATE, s.time, HOST_TZ).getTime()
-  );
-  const sorted = [...instants].sort((a, b) => a - b);
-  assertEquals(instants, sorted, "slots must already be instant-sorted");
-  const wrapped = data.slots.find((s) => s.time === "09:00");
-  assertEquals(wrapped?.dateNote, "Mon 5 Oct");
+  )
+  const sorted = [...instants].sort((a, b) => a - b)
+  assertEquals(instants, sorted, "slots must already be instant-sorted")
+  const wrapped = data.slots.find((s) => s.time === "09:00")
+  assertEquals(wrapped?.dateNote, "Mon 5 Oct")
   // 16:30 host-local (the last slot; availability ends 17:00) is
   // 05:30 the *same* New York calendar day — no note expected.
-  const sameDay = data.slots.find((s) => s.time === "16:30");
-  assertEquals(sameDay?.dateNote, undefined);
-});
+  const sameDay = data.slots.find((s) => s.time === "16:30")
+  assertEquals(sameDay?.dateNote, undefined)
+})
 
 Deno.test("mig#15: /embed with no tz param falls back to the host's zone", async () => {
-  const data = await getEmbedData(`http://localhost/embed?date=${TEST_DATE}`);
+  const data = await getEmbedData(`http://localhost/embed?date=${TEST_DATE}`)
 
-  assertEquals(data.tz, null);
-  const first = data.slots.find((s: SlotCell) => s.time === "09:00");
-  assert(first, "expected the 09:00 host-local slot");
-  assertEquals(first!.displayHHMM, "09:00");
-  assertEquals(first!.ariaZoneLabel, "Ho Chi Minh, UTC+7");
-  assertEquals(data.zoneLabel, "Ho Chi Minh, UTC+7");
-});
+  assertEquals(data.tz, null)
+  const first = data.slots.find((s: SlotCell) => s.time === "09:00")
+  assert(first, "expected the 09:00 host-local slot")
+  assertEquals(first!.displayHHMM, "09:00")
+  assertEquals(first!.ariaZoneLabel, "Ho Chi Minh, UTC+7")
+  assertEquals(data.zoneLabel, "Ho Chi Minh, UTC+7")
+})
 
 Deno.test("mig#15: /embed with an invalid tz falls back to the host's zone", async () => {
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&tz=Not%2FA_Timezone`,
-  );
+  )
 
-  assertEquals(data.tz, null);
-  const first = data.slots.find((s: SlotCell) => s.time === "09:00");
-  assertEquals(first!.displayHHMM, "09:00");
-  assertEquals(first!.ariaZoneLabel, "Ho Chi Minh, UTC+7");
-  assertEquals(data.zoneLabel, "Ho Chi Minh, UTC+7");
-});
+  assertEquals(data.tz, null)
+  const first = data.slots.find((s: SlotCell) => s.time === "09:00")
+  assertEquals(first!.displayHHMM, "09:00")
+  assertEquals(first!.ariaZoneLabel, "Ho Chi Minh, UTC+7")
+  assertEquals(data.zoneLabel, "Ho Chi Minh, UTC+7")
+})
 
 Deno.test("/embed keeps modern zone names exactly as sent (never a legacy rename)", async () => {
   // Deno's ICU (and any other browser/runtime) rewrites these four
@@ -282,18 +282,18 @@ Deno.test("/embed keeps modern zone names exactly as sent (never a legacy rename
     ["Asia/Kolkata", "Kolkata"],
     ["Europe/Kyiv", "Kyiv"],
     ["Asia/Ho_Chi_Minh", "Ho Chi Minh"],
-  ];
+  ]
   for (const [tz, city] of cases) {
     const data = await getEmbedData(
       `http://localhost/embed?date=${TEST_DATE}&tz=${encodeURIComponent(tz)}`,
-    );
-    assertEquals(data.tz, tz, `expected tz to stay "${tz}"`);
+    )
+    assertEquals(data.tz, tz, `expected tz to stay "${tz}"`)
     assert(
       data.zoneLabel?.includes(city),
       `expected the grid header's zoneLabel to include "${city}", got "${data.zoneLabel}"`,
-    );
+    )
   }
-});
+})
 
 Deno.test("mig#15: /embed canonicalizes a legacy zone alias in the tz param", async () => {
   // "Japan" has no "/" so, pre-canonicalization, it looked like a
@@ -301,13 +301,13 @@ Deno.test("mig#15: /embed canonicalizes a legacy zone alias in the tz param", as
   // form is "Asia/Tokyo".
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&tz=Japan`,
-  );
-  assertEquals(data.tz, "Asia/Tokyo");
-  const first = data.slots.find((s: SlotCell) => s.time === "09:00");
-  assertEquals(first!.displayHHMM, "11:00");
-  assertEquals(first!.ariaZoneLabel, "Tokyo, UTC+9");
-  assertEquals(data.zoneLabel, "Tokyo, UTC+9");
-});
+  )
+  assertEquals(data.tz, "Asia/Tokyo")
+  const first = data.slots.find((s: SlotCell) => s.time === "09:00")
+  assertEquals(first!.displayHHMM, "11:00")
+  assertEquals(first!.ariaZoneLabel, "Tokyo, UTC+9")
+  assertEquals(data.zoneLabel, "Tokyo, UTC+9")
+})
 
 // ─── mig#48 review: header comes from the FIRST slot, not host noon ──
 // A Tokyo host (UTC+9, no DST) and a New York visitor (America/New_York)
@@ -320,8 +320,8 @@ Deno.test("mig#15: /embed canonicalizes a legacy zone alias in the tz param", as
 // crossed the transition while the visible slots, earlier in the host
 // day, hadn't).
 
-const TOKYO_HOST_TZ = "Asia/Tokyo";
-const NY_VISITOR_TZ = "America/New_York";
+const TOKYO_HOST_TZ = "Asia/Tokyo"
+const NY_VISITOR_TZ = "America/New_York"
 
 Deno.test("mig#48 review: 8 Mar 2026 (the transition day itself), slots entirely after the spring-forward change — header is the new offset, no slot carries its own", async () => {
   // This runs ON the transition day itself (2026-03-08, a Sunday) —
@@ -341,17 +341,17 @@ Deno.test("mig#48 review: 8 Mar 2026 (the transition day itself), slots entirely
       weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
       bookingHorizonDays: 3650,
     },
-  );
-  assertEquals(data.zoneLabel, "New York, UTC-4");
-  assert(data.slots.length > 0, "expected slots for the SUN date");
+  )
+  assertEquals(data.zoneLabel, "New York, UTC-4")
+  assert(data.slots.length > 0, "expected slots for the SUN date")
   for (const s of data.slots) {
     assertEquals(
       s.offsetNote,
       undefined,
       `expected no slot to carry its own offset, got one on host time ${s.time}`,
-    );
+    )
   }
-});
+})
 
 Deno.test("mig#48 review: 8 Mar 2026, slots straddling the spring-forward change — only the later slots carry their own offset", async () => {
   // 2026-03-08 (Sunday) 06:00-18:00 host-local straddles the
@@ -366,24 +366,24 @@ Deno.test("mig#48 review: 8 Mar 2026, slots straddling the spring-forward change
       weeklyAvailability: parseWeeklyAvailability("SUN 06:00-18:00"),
       bookingHorizonDays: 3650,
     },
-  );
+  )
   // Header comes from the FIRST slot (06:00 host, UTC-5) — still
   // standard time, pre-transition.
-  assertEquals(data.zoneLabel, "New York, UTC-5");
-  const before = data.slots.find((s) => s.time === "15:00");
-  const after = data.slots.find((s) => s.time === "16:00");
-  assert(before && after, "expected slots either side of the transition");
+  assertEquals(data.zoneLabel, "New York, UTC-5")
+  const before = data.slots.find((s) => s.time === "15:00")
+  const after = data.slots.find((s) => s.time === "16:00")
+  assert(before && after, "expected slots either side of the transition")
   assertEquals(
     before!.offsetNote,
     undefined,
     "expected the pre-transition slot to agree with the header",
-  );
+  )
   assertEquals(
     after!.offsetNote,
     "UTC-4",
     "expected the post-transition slot to carry its own offset",
-  );
-});
+  )
+})
 
 Deno.test("mig#48 review: 1 Nov 2026 (the transition day itself), slots entirely after the fall-back change — header is the new offset, no slot carries its own", async () => {
   // This runs ON the transition day itself (2026-11-01, a Sunday) —
@@ -403,17 +403,17 @@ Deno.test("mig#48 review: 1 Nov 2026 (the transition day itself), slots entirely
       weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
       bookingHorizonDays: 3650,
     },
-  );
-  assertEquals(data.zoneLabel, "New York, UTC-5");
-  assert(data.slots.length > 0, "expected slots for the SUN date");
+  )
+  assertEquals(data.zoneLabel, "New York, UTC-5")
+  assert(data.slots.length > 0, "expected slots for the SUN date")
   for (const s of data.slots) {
     assertEquals(
       s.offsetNote,
       undefined,
       `expected no slot to carry its own offset, got one on host time ${s.time}`,
-    );
+    )
   }
-});
+})
 
 Deno.test("mig#48 review: 1 Nov 2026, slots straddling the fall-back change — only the later slots carry their own offset", async () => {
   // 2026-11-01 (Sunday) 06:00-20:00 host-local straddles the
@@ -428,24 +428,24 @@ Deno.test("mig#48 review: 1 Nov 2026, slots straddling the fall-back change — 
       weeklyAvailability: parseWeeklyAvailability("SUN 06:00-20:00"),
       bookingHorizonDays: 3650,
     },
-  );
+  )
   // Header comes from the FIRST slot (06:00 host, UTC-4) — still
   // daylight time, pre-transition.
-  assertEquals(data.zoneLabel, "New York, UTC-4");
-  const before = data.slots.find((s) => s.time === "14:00");
-  const after = data.slots.find((s) => s.time === "15:00");
-  assert(before && after, "expected slots either side of the transition");
+  assertEquals(data.zoneLabel, "New York, UTC-4")
+  const before = data.slots.find((s) => s.time === "14:00")
+  const after = data.slots.find((s) => s.time === "15:00")
+  assert(before && after, "expected slots either side of the transition")
   assertEquals(
     before!.offsetNote,
     undefined,
     "expected the pre-transition slot to agree with the header",
-  );
+  )
   assertEquals(
     after!.offsetNote,
     "UTC-5",
     "expected the post-transition slot to carry its own offset",
-  );
-});
+  )
+})
 
 // ─── mig#57: dates and times that do not exist ───────────────────────
 
@@ -455,26 +455,26 @@ Deno.test("mig#48 review: 1 Nov 2026, slots straddling the fall-back change — 
 Deno.test("mig#57: /embed ignores a date or slot param that is not on the calendar", async () => {
   const data = await getEmbedData(
     "http://localhost/embed?date=2026-02-31&slot=24:00",
-  );
+  )
 
-  assertEquals(data.date, null);
-  assertEquals(data.slot, null);
-});
+  assertEquals(data.date, null)
+  assertEquals(data.slot, null)
+})
 
 // Berlin's clocks jump from 02:00 to 03:00 on 2027-03-28, a Sunday.
 Deno.test("mig#57: /embed offers no slot inside the spring-forward gap", async () => {
   const data = await getEmbedData("http://localhost/embed?date=2027-03-28", {
     hostTz: "Europe/Berlin",
     weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
-  });
+  })
 
   assertEquals(data.slots.map((s) => s.time), [
     "01:00",
     "01:30",
     "03:00",
     "03:30",
-  ]);
-});
+  ])
+})
 
 // mig#57: Phoenix ran on UTC-7:28:18 until noon on 1883-11-18. Noon
 // resolves, the morning slots and the days before do not, and
@@ -488,18 +488,18 @@ Deno.test("mig#57: /embed ignores a date before 1980", async () => {
       hostTz: "America/Phoenix",
       weeklyAvailability: parseWeeklyAvailability("MON-SUN 09:00-17:00"),
     },
-  );
+  )
   const lastBefore = await renderEmbed(
     "http://localhost/embed?date=1979-12-31",
-  );
-  const first = await renderEmbed("http://localhost/embed?date=1980-01-01");
+  )
+  const first = await renderEmbed("http://localhost/embed?date=1980-01-01")
 
-  assertEquals(data.date, null);
-  assertEquals(data.slots, []);
-  assertFalse(html.includes("1883"));
-  assertEquals(lastBefore.data.date, null);
-  assertEquals(first.data.date, "1980-01-01");
-});
+  assertEquals(data.date, null)
+  assertEquals(data.slots, [])
+  assertFalse(html.includes("1883"))
+  assertEquals(lastBefore.data.date, null)
+  assertEquals(first.data.date, "1980-01-01")
+})
 
 // mig#57: the month grid runs the host zone's math on every day it
 // shows. Dublin kept UTC-0:25:21 until 1916, and Santiago went back to
@@ -508,23 +508,23 @@ Deno.test("mig#57: /embed ignores a date before 1980", async () => {
 Deno.test("mig#57: /embed ignores a month before 1980", async () => {
   const dublin = await renderEmbed("http://localhost/embed?month=1900-01", {
     hostTz: "Europe/Dublin",
-  });
+  })
   const santiago = await renderEmbed(
     "http://localhost/embed?month=1916-07",
     { hostTz: "America/Santiago" },
-  );
+  )
   const lastBefore = await renderEmbed(
     "http://localhost/embed?month=1979-12",
-  );
-  const first = await renderEmbed("http://localhost/embed?month=1980-01");
+  )
+  const first = await renderEmbed("http://localhost/embed?month=1980-01")
 
-  assertFalse(dublin.data.monthAnchor.startsWith("1900"));
-  assertFalse(dublin.html.includes("January 1900"));
-  assertFalse(santiago.data.monthAnchor.startsWith("1916"));
-  assertFalse(santiago.html.includes("July 1916"));
-  assertFalse(lastBefore.html.includes("December 1979"));
-  assert(first.html.includes("January 1980"), "expected January 1980's grid");
-});
+  assertFalse(dublin.data.monthAnchor.startsWith("1900"))
+  assertFalse(dublin.html.includes("January 1900"))
+  assertFalse(santiago.data.monthAnchor.startsWith("1916"))
+  assertFalse(santiago.html.includes("July 1916"))
+  assertFalse(lastBefore.html.includes("December 1979"))
+  assert(first.html.includes("January 1980"), "expected January 1980's grid")
+})
 
 // ─── mig#50: the picked day's label ──────────────────────────────────
 
@@ -538,14 +538,14 @@ Deno.test("mig#50: /embed with a Tokyo host and a New York visitor labels 1 Nove
       weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
       slotDurationMin: 60,
     },
-  );
-  assertEquals(data.selectedDateLabel, "Sunday, 1 November 2026");
+  )
+  assertEquals(data.selectedDateLabel, "Sunday, 1 November 2026")
   assertEquals(data.slots.map((s) => s.dateNote), [
     undefined,
     undefined,
     undefined,
-  ]);
-});
+  ])
+})
 
 Deno.test("mig#50: /embed names the picked calendar day when it has no slots", async () => {
   const data = await getEmbedData(
@@ -555,10 +555,10 @@ Deno.test("mig#50: /embed names the picked calendar day when it has no slots", a
       weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
       blockedDates: new Set(["2026-11-01"]),
     },
-  );
-  assertEquals(data.slots, []);
-  assertEquals(data.selectedDateLabel, "Sunday, 1 November 2026");
-});
+  )
+  assertEquals(data.slots, [])
+  assertEquals(data.selectedDateLabel, "Sunday, 1 November 2026")
+})
 
 Deno.test("mig#50: /embed names the clicked day when some slots fall on it, and notes only the slots on another day", async () => {
   // Ho Chi Minh 09:00-17:00 on Tuesday 6 October is 22:00 Monday to
@@ -566,9 +566,9 @@ Deno.test("mig#50: /embed names the clicked day when some slots fall on it, and 
   // so that is the label; the four Monday-evening ones carry a note.
   const data = await getEmbedData(
     `http://localhost/embed?date=${TEST_DATE}&tz=America%2FNew_York`,
-  );
-  assertEquals(data.selectedDateLabel, "Tuesday, 6 October 2026");
-  assertEquals(data.slots.length, 16);
+  )
+  assertEquals(data.selectedDateLabel, "Tuesday, 6 October 2026")
+  assertEquals(data.slots.length, 16)
   assertEquals(
     data.slots.filter((s) => s.dateNote).map((s) => [s.time, s.dateNote]),
     [
@@ -577,5 +577,5 @@ Deno.test("mig#50: /embed names the clicked day when some slots fall on it, and 
       ["10:00", "Mon 5 Oct"],
       ["10:30", "Mon 5 Oct"],
     ],
-  );
-});
+  )
+})

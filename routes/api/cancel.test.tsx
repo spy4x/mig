@@ -2,23 +2,23 @@
 // still opens and cancels: /confirmed, /cancel and POST /api/cancel,
 // including the cancellation emails.
 
-import { assert, assertEquals } from "@std/assert";
-import { renderToString } from "preact-render-to-string";
-import type { Context, PageProps } from "fresh";
-import type { State } from "../../lib/utils.ts";
-import type { Booking, Config } from "../../lib/types.ts";
-import { BookingsStore } from "../../lib/bookings.ts";
-import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
-import { parseWeeklyAvailability } from "../../lib/availability.ts";
-import { newOpaqueToken } from "@spy4x/platform/tokens";
-import { setTransportForTesting } from "../../lib/email.ts";
-import { loadConfirmedData } from "../../lib/confirmed-data.ts";
-import CancelPage, { handler as cancelPage } from "../cancel.tsx";
-import { handler } from "./cancel.ts";
-import { tempDataFile } from "../../lib/test-temp.ts";
-import { NOTES_MAX_LENGTH } from "../../lib/validators.ts";
+import { assert, assertEquals } from "@std/assert"
+import { renderToString } from "preact-render-to-string"
+import type { Context, PageProps } from "fresh"
+import type { State } from "../../lib/utils.ts"
+import type { Booking, Config } from "../../lib/types.ts"
+import { BookingsStore } from "../../lib/bookings.ts"
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory"
+import { parseWeeklyAvailability } from "../../lib/availability.ts"
+import { newOpaqueToken } from "@spy4x/platform/tokens"
+import { setTransportForTesting } from "../../lib/email.ts"
+import { loadConfirmedData } from "../../lib/confirmed-data.ts"
+import CancelPage, { handler as cancelPage } from "../cancel.tsx"
+import { handler } from "./cancel.ts"
+import { tempDataFile } from "../../lib/test-temp.ts"
+import { NOTES_MAX_LENGTH } from "../../lib/validators.ts"
 
-const SECRET = "fake-cancel-secret-only-for-tests";
+const SECRET = "fake-cancel-secret-only-for-tests"
 
 function fakeConfig(): Config {
   return {
@@ -47,17 +47,17 @@ function fakeConfig(): Config {
     hideBranding: false,
     githubUrl: "https://github.com/spy4x/mig",
     version: "test",
-  };
+  }
 }
 
 // On main, POST /api/book accepted date=2027-02-30 and slot=10:60 and
 // told the visitor Tuesday 2 March 2027, 11:00. The record on disk kept
 // the impossible values.
 Deno.test("mig#57: a booking stored with an impossible date still opens and cancels, emails included", async () => {
-  const cfg = fakeConfig();
-  await using file = await tempDataFile();
-  const path = file.path;
-  const { raw, hash } = await newOpaqueToken(SECRET);
+  const cfg = fakeConfig()
+  await using file = await tempDataFile()
+  const path = file.path
+  const { raw, hash } = await newOpaqueToken(SECRET)
   const stored: Booking = {
     id: "01JIMPOSSIBLEDATE00000000",
     createdAt: "2026-09-01T10:00:00.000Z",
@@ -68,43 +68,43 @@ Deno.test("mig#57: a booking stored with an impossible date still opens and canc
     guestEmail: "visitor@example.com",
     cancelTokenHash: hash,
     status: "active",
-  };
-  await Deno.writeTextFile(path, JSON.stringify([stored]));
-  const subjects: string[] = [];
+  }
+  await Deno.writeTextFile(path, JSON.stringify([stored]))
+  const subjects: string[] = []
   setTransportForTesting({
     sendMail(message) {
-      subjects.push(String(message.subject));
-      return Promise.resolve({});
+      subjects.push(String(message.subject))
+      return Promise.resolve({})
     },
-  });
+  })
 
   try {
-    const bookings = new BookingsStore({ filePath: path });
-    await bookings.init();
+    const bookings = new BookingsStore({ filePath: path })
+    await bookings.init()
     const state = {
       config: cfg,
       bookings,
       rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-    };
-    const query = `id=${stored.id}&token=${raw}`;
+    }
+    const query = `id=${stored.id}&token=${raw}`
 
     const confirmed = await loadConfirmedData(
       {
         req: new Request(`http://localhost/confirmed?${query}`),
         state,
       } as unknown as Context<State>,
-    );
-    assertEquals(confirmed.state, "ok");
-    assertEquals(confirmed.booking?.date, "2027-03-02");
-    assertEquals(confirmed.booking?.time, "11:00");
+    )
+    assertEquals(confirmed.state, "ok")
+    assertEquals(confirmed.booking?.date, "2027-03-02")
+    assertEquals(confirmed.booking?.time, "11:00")
 
     const cancelGet = await cancelPage.GET!(
       {
         req: new Request(`http://localhost/cancel?${query}`),
         state,
       } as unknown as Context<State>,
-    );
-    const data = (cancelGet as unknown as { data: unknown }).data;
+    )
+    const data = (cancelGet as unknown as { data: unknown }).data
     const html = renderToString(
       <CancelPage
         {...({
@@ -113,10 +113,10 @@ Deno.test("mig#57: a booking stored with an impossible date still opens and canc
           url: new URL(`http://localhost/cancel?${query}`),
         } as unknown as PageProps<never, State>)}
       />,
-    );
-    assert(html.includes("Tuesday, 2 March 2027"), "cancel page date");
+    )
+    assert(html.includes("Tuesday, 2 March 2027"), "cancel page date")
 
-    const form = new URLSearchParams({ id: stored.id, token: raw });
+    const form = new URLSearchParams({ id: stored.id, token: raw })
     const res = await handler.POST!(
       {
         req: new Request("http://localhost/api/cancel", {
@@ -125,23 +125,23 @@ Deno.test("mig#57: a booking stored with an impossible date still opens and canc
         }),
         state,
       } as unknown as Context<State>,
-    ) as Response;
+    ) as Response
 
-    assertEquals(res.status, 303);
+    assertEquals(res.status, 303)
     assertEquals(
       new URL(res.headers.get("location")!).searchParams.get("cancelled"),
       "1",
-    );
-    assertEquals(bookings.get(stored.id)?.status, "cancelled");
-    assertEquals(subjects.length, 2);
+    )
+    assertEquals(bookings.get(stored.id)?.status, "cancelled")
+    assertEquals(subjects.length, 2)
     assert(
       subjects.every((s) => s.includes("Tue 2 Mar 11:00")),
       subjects.join(" | "),
-    );
+    )
   } finally {
-    setTransportForTesting({ sendMail: () => Promise.resolve({}) });
+    setTransportForTesting({ sendMail: () => Promise.resolve({}) })
   }
-});
+})
 
 // mig#73: cancel links are minted and checked by @spy4x/platform/tokens
 // now, not by mig's own lib/tokens.ts. A link already in a guest's inbox
@@ -155,14 +155,14 @@ const OLD_LINK = {
   secret: "test-cancel-secret-not-real-0123456789",
   raw: "ognPt508-hJgz9bmhInMMw",
   hash: "0634781f3e8d9e639d865217c8d729cf9a12cb5e2c9437043c2c81facdfc1c69",
-};
+}
 
 async function withOldLinkBooking(
   secret: string,
   fn: (state: State, id: string) => Promise<void>,
 ): Promise<void> {
-  await using file = await tempDataFile();
-  const path = file.path;
+  await using file = await tempDataFile()
+  const path = file.path
   const stored: Booking = {
     id: "01JOLDCANCELLINK000000000",
     createdAt: "2026-09-01T10:00:00.000Z",
@@ -173,27 +173,27 @@ async function withOldLinkBooking(
     guestEmail: "visitor@example.com",
     cancelTokenHash: OLD_LINK.hash,
     status: "active",
-  };
-  await Deno.writeTextFile(path, JSON.stringify([stored]));
-  const bookings = new BookingsStore({ filePath: path });
-  await bookings.init();
+  }
+  await Deno.writeTextFile(path, JSON.stringify([stored]))
+  const bookings = new BookingsStore({ filePath: path })
+  await bookings.init()
   await fn({
     config: { ...fakeConfig(), cancelSecret: secret },
     bookings,
     rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-  } as State, stored.id);
+  } as State, stored.id)
 }
 
 Deno.test("a cancel link minted by the old lib/tokens.ts still opens /confirmed and cancels", async () => {
   await withOldLinkBooking(OLD_LINK.secret, async (state, id) => {
-    const query = `id=${id}&token=${OLD_LINK.raw}`;
+    const query = `id=${id}&token=${OLD_LINK.raw}`
     const confirmed = await loadConfirmedData(
       {
         req: new Request(`http://localhost/confirmed?${query}`),
         state,
       } as unknown as Context<State>,
-    );
-    assertEquals(confirmed.state, "ok");
+    )
+    assertEquals(confirmed.state, "ok")
 
     const res = await handler.POST!(
       {
@@ -203,11 +203,11 @@ Deno.test("a cancel link minted by the old lib/tokens.ts still opens /confirmed 
         }),
         state,
       } as unknown as Context<State>,
-    ) as Response;
-    assertEquals(res.status, 303);
-    assertEquals(state.bookings.get(id)?.status, "cancelled");
-  });
-});
+    ) as Response
+    assertEquals(res.status, 303)
+    assertEquals(state.bookings.get(id)?.status, "cancelled")
+  })
+})
 
 Deno.test("an old cancel link is refused once CANCEL_SECRET changes", async () => {
   await withOldLinkBooking(
@@ -220,19 +220,19 @@ Deno.test("an old cancel link is refused once CANCEL_SECRET changes", async () =
           ),
           state,
         } as unknown as Context<State>,
-      );
-      assertEquals(confirmed.state, "invalid");
+      )
+      assertEquals(confirmed.state, "invalid")
     },
-  );
-});
+  )
+})
 
 // mig#110: new bookings get a UUID version 7, and the ones already in
 // the data file keep the ULID they were stored with. The id below is a
 // real ULID, 26 Crockford base32 characters, as @spy4x/platform/tokens'
 // monotonicUlid() wrote them.
 Deno.test("mig#110: a booking stored with a ULID id still opens /confirmed and /cancel, and cancels", async () => {
-  await using file = await tempDataFile();
-  const { raw, hash } = await newOpaqueToken(SECRET);
+  await using file = await tempDataFile()
+  const { raw, hash } = await newOpaqueToken(SECRET)
   const stored: Booking = {
     id: "01JA4V5W6X7Y8Z9A0B1C2D3E4F",
     createdAt: "2026-09-01T10:00:00.000Z",
@@ -243,38 +243,38 @@ Deno.test("mig#110: a booking stored with a ULID id still opens /confirmed and /
     guestEmail: "visitor@example.com",
     cancelTokenHash: hash,
     status: "active",
-  };
-  await Deno.writeTextFile(file.path, JSON.stringify([stored]));
-  setTransportForTesting({ sendMail: () => Promise.resolve({}) });
-  const bookings = new BookingsStore({ filePath: file.path });
-  await bookings.init();
+  }
+  await Deno.writeTextFile(file.path, JSON.stringify([stored]))
+  setTransportForTesting({ sendMail: () => Promise.resolve({}) })
+  const bookings = new BookingsStore({ filePath: file.path })
+  await bookings.init()
   const state = {
     config: fakeConfig(),
     bookings,
     rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
-  };
-  const query = `id=${stored.id}&token=${raw}`;
+  }
+  const query = `id=${stored.id}&token=${raw}`
 
   const confirmed = await loadConfirmedData(
     {
       req: new Request(`http://localhost/confirmed?${query}`),
       state,
     } as unknown as Context<State>,
-  );
-  assertEquals(confirmed.state, "ok");
-  assertEquals(confirmed.booking?.id, stored.id);
+  )
+  assertEquals(confirmed.state, "ok")
+  assertEquals(confirmed.booking?.id, stored.id)
 
   const cancelGet = await cancelPage.GET!(
     {
       req: new Request(`http://localhost/cancel?${query}`),
       state,
     } as unknown as Context<State>,
-  );
+  )
   const data = (cancelGet as unknown as {
-    data: { state: string; booking?: { id: string } };
-  }).data;
-  assertEquals(data.state, "ok");
-  assertEquals(data.booking?.id, stored.id);
+    data: { state: string; booking?: { id: string } }
+  }).data
+  assertEquals(data.state, "ok")
+  assertEquals(data.booking?.id, stored.id)
 
   const res = await handler.POST!(
     {
@@ -284,38 +284,38 @@ Deno.test("mig#110: a booking stored with a ULID id still opens /confirmed and /
       }),
       state,
     } as unknown as Context<State>,
-  ) as Response;
-  assertEquals(res.status, 303);
-  const location = new URL(res.headers.get("location")!);
-  assertEquals(location.searchParams.get("cancelled"), "1");
-  assertEquals(location.searchParams.get("id"), stored.id);
-  assertEquals(bookings.get(stored.id)?.status, "cancelled");
+  ) as Response
+  assertEquals(res.status, 303)
+  const location = new URL(res.headers.get("location")!)
+  assertEquals(location.searchParams.get("cancelled"), "1")
+  assertEquals(location.searchParams.get("id"), stored.id)
+  assertEquals(bookings.get(stored.id)?.status, "cancelled")
   // Nothing stored is rewritten: the record on disk keeps its ULID.
-  const onDisk = JSON.parse(await Deno.readTextFile(file.path));
-  assertEquals(onDisk[0].id, stored.id);
-});
+  const onDisk = JSON.parse(await Deno.readTextFile(file.path))
+  assertEquals(onDisk[0].id, stored.id)
+})
 
 // mig#108: the form's maxlength is a browser's promise only. A request
 // written by hand carried a 200,000-character reason into the stored
 // booking and into a 400 KB mail.
 Deno.test("mig#108: a cancel reason over the notes limit is cut before it is stored or mailed", async () => {
-  const mails: { to: string; text: string; html: string }[] = [];
+  const mails: { to: string; text: string; html: string }[] = []
   setTransportForTesting({
     sendMail(message) {
       mails.push({
         to: String(message.to),
         text: String(message.text),
         html: String(message.html),
-      });
-      return Promise.resolve({});
+      })
+      return Promise.resolve({})
     },
-  });
+  })
   try {
     await withOldLinkBooking(OLD_LINK.secret, async (state, id) => {
       // 499 letters, then an emoji whose two code units straddle the
       // limit, then far more than fits.
-      const kept = "r".repeat(NOTES_MAX_LENGTH - 1);
-      const reason = `  ${kept}\u{1F600}${"X".repeat(200_000)}`;
+      const kept = "r".repeat(NOTES_MAX_LENGTH - 1)
+      const reason = `  ${kept}\u{1F600}${"X".repeat(200_000)}`
       const res = await handler.POST!(
         {
           req: new Request("http://localhost/api/cancel", {
@@ -324,26 +324,26 @@ Deno.test("mig#108: a cancel reason over the notes limit is cut before it is sto
           }),
           state,
         } as unknown as Context<State>,
-      ) as Response;
+      ) as Response
 
-      assertEquals(res.status, 303);
-      assertEquals(state.bookings.get(id)?.status, "cancelled");
-      assertEquals(state.bookings.get(id)?.cancelledReason, kept);
+      assertEquals(res.status, 303)
+      assertEquals(state.bookings.get(id)?.status, "cancelled")
+      assertEquals(state.bookings.get(id)?.cancelledReason, kept)
 
       assertEquals(mails.map((m) => m.to), [
         "visitor@example.com",
         "jane@example.com",
-      ]);
-      const [guest, owner] = mails;
-      assert(owner.text.includes(`Reason: ${kept}\n`), "owner's reason");
+      ])
+      const [guest, owner] = mails
+      assert(owner.text.includes(`Reason: ${kept}\n`), "owner's reason")
       for (const mail of mails) {
-        assertEquals(mail.text.includes("X"), false, `text to ${mail.to}`);
-        assertEquals(mail.html.includes("XX"), false, `html to ${mail.to}`);
+        assertEquals(mail.text.includes("X"), false, `text to ${mail.to}`)
+        assertEquals(mail.html.includes("XX"), false, `html to ${mail.to}`)
       }
-      assertEquals(guest.text.includes("rrr"), false, "guest's mail");
-      assertEquals(guest.html.includes("rrr"), false, "guest's mail");
-    });
+      assertEquals(guest.text.includes("rrr"), false, "guest's mail")
+      assertEquals(guest.html.includes("rrr"), false, "guest's mail")
+    })
   } finally {
-    setTransportForTesting({ sendMail: () => Promise.resolve({}) });
+    setTransportForTesting({ sendMail: () => Promise.resolve({}) })
   }
-});
+})

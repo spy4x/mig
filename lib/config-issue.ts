@@ -5,7 +5,7 @@
 // so these variables keep a message chosen by hand here (mig#42). A fixed
 // string is never built from the value, so it can list accepted values
 // without risking a leak.
-import type { ConfigIssue } from "@spy4x/server/config";
+import type { ConfigIssue } from "@spy4x/server/config"
 
 // Looked up with `Object.hasOwn`, not `in`: `name` comes from the
 // library's cross-field label or a variable name, and `in` would walk the
@@ -22,7 +22,7 @@ const FIXED_MESSAGES: Record<string, string> = {
   CANCEL_SECRET:
     "must be at least 32 printable ASCII characters, not counting spaces at either end",
   SMTP_FROM: "must be an address or Name <address>, with no control characters",
-};
+}
 
 /** Renders the issues of a `ConfigError` as startup-log lines, one per
  *  variable, naming the variable and never its value. A variable that is
@@ -35,5 +35,5 @@ export function formatConfigIssues(issues: readonly ConfigIssue[]): string {
         ? `  ${name}: ${FIXED_MESSAGES[name]}`
         : `  ${name}: ${reason}`
     )
-    .join("\n");
+    .join("\n")
 }

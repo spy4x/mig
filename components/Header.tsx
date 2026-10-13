@@ -1,6 +1,6 @@
-import { Logo } from "./Logo.tsx";
-import ThemeToggle from "../islands/ThemeToggle.tsx";
-import type { ThemeParam } from "../lib/theme.ts";
+import { Logo } from "./Logo.tsx"
+import ThemeToggle from "../islands/ThemeToggle.tsx"
+import type { ThemeParam } from "../lib/theme.ts"
 
 /*
   Top app chrome. Slim, sticky, hairline bottom border, blurred
@@ -13,11 +13,11 @@ import type { ThemeParam } from "../lib/theme.ts";
 
 interface HeaderProps {
   /** Used by the embed variant to swap to a tighter header. */
-  compact?: boolean;
+  compact?: boolean
   /** False hides the theme button, for pages rendered without the theme script (mig#63). */
-  themeToggle?: boolean;
+  themeToggle?: boolean
   /** The owner's `THEME`, the toggle's default when nothing is stored. */
-  defaultTheme: ThemeParam;
+  defaultTheme: ThemeParam
 }
 
 export function Header({ themeToggle = true, defaultTheme }: HeaderProps) {
@@ -28,5 +28,5 @@ export function Header({ themeToggle = true, defaultTheme }: HeaderProps) {
         {themeToggle && <ThemeToggle defaultTheme={defaultTheme} />}
       </div>
     </header>
-  );
+  )
 }

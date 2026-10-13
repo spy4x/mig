@@ -8,11 +8,11 @@
 // routes/embed/book.ts instead, which shares the same logic with a
 // different base path — see lib/book.ts.
 
-import { define } from "../../lib/utils.ts";
-import { handleBookingSubmit } from "../../lib/book.ts";
+import { define } from "../../lib/utils.ts"
+import { handleBookingSubmit } from "../../lib/book.ts"
 
 export const handler = define.handlers({
   POST(ctx) {
-    return handleBookingSubmit(ctx, "");
+    return handleBookingSubmit(ctx, "")
   },
-});
+})

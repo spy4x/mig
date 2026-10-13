@@ -1,16 +1,16 @@
-import { buttonClasses } from "@spy4x/preact-ui/button";
-import { EmptyState } from "@spy4x/preact-ui/empty-state";
-import { define } from "../lib/utils.ts";
-import { Header } from "../components/Header.tsx";
-import { Footer } from "../components/Footer.tsx";
-import { forcedThemeFor } from "../lib/theme.ts";
+import { buttonClasses } from "@spy4x/preact-ui/button"
+import { EmptyState } from "@spy4x/preact-ui/empty-state"
+import { define } from "../lib/utils.ts"
+import { Header } from "../components/Header.tsx"
+import { Footer } from "../components/Footer.tsx"
+import { forcedThemeFor } from "../lib/theme.ts"
 
 export default define.page(function Error(
   // deno-lint-ignore no-explicit-any
   { error, state, url }: { error?: any; state?: any; url?: URL },
 ) {
-  const cfg = state?.config;
-  const message = error?.message ?? "Unexpected error.";
+  const cfg = state?.config
+  const message = error?.message ?? "Unexpected error."
   return (
     <div class="min-h-dvh flex flex-col">
       {cfg && (
@@ -46,5 +46,5 @@ export default define.page(function Error(
         />
       )}
     </div>
-  );
-});
+  )
+})

@@ -1,22 +1,22 @@
-import { useEffect } from "preact/hooks";
-import { useSignal } from "@preact/signals";
-import { EmptyState } from "@spy4x/preact-ui/empty-state";
-import { LoadingSpinner } from "@spy4x/preact-ui/loading-spinner";
-import { PickerCalendar } from "../components/PickerCalendar.tsx";
-import { gridDay, TimeSlots } from "../components/TimeSlots.tsx";
-import { DateCard } from "../components/DateCard.tsx";
-import { TimeCard } from "../components/TimeCard.tsx";
-import { BookingForm } from "../components/BookingForm.tsx";
-import { SummaryBar } from "../components/SummaryBar.tsx";
-import { pickerLinks } from "../lib/picker-links.ts";
-import { isoDateInTz, zonedDateTime } from "@spy4x/time/tz";
+import { useEffect } from "preact/hooks"
+import { useSignal } from "@preact/signals"
+import { EmptyState } from "@spy4x/preact-ui/empty-state"
+import { LoadingSpinner } from "@spy4x/preact-ui/loading-spinner"
+import { PickerCalendar } from "../components/PickerCalendar.tsx"
+import { gridDay, TimeSlots } from "../components/TimeSlots.tsx"
+import { DateCard } from "../components/DateCard.tsx"
+import { TimeCard } from "../components/TimeCard.tsx"
+import { BookingForm } from "../components/BookingForm.tsx"
+import { SummaryBar } from "../components/SummaryBar.tsx"
+import { pickerLinks } from "../lib/picker-links.ts"
+import { isoDateInTz, zonedDateTime } from "@spy4x/time/tz"
 import {
   formatClockAt,
   formatGridHeader,
   formatHostDateIn,
   formatShortDateAt,
   formatSlotDisplay,
-} from "../lib/clock.ts";
+} from "../lib/clock.ts"
 
 /*
   BookingFlow — client-driven booking picker.
@@ -59,29 +59,29 @@ import {
 */
 
 interface DateCell {
-  date: string;
-  slots: number;
+  date: string
+  slots: number
 }
 
 interface SlotCell {
-  time: string;
-  available: boolean;
-  displayHHMM?: string;
-  ariaZoneLabel?: string;
-  offsetNote?: string;
-  dateNote?: string;
+  time: string
+  available: boolean
+  displayHHMM?: string
+  ariaZoneLabel?: string
+  offsetNote?: string
+  dateNote?: string
 }
 
 interface BookingFlowProps {
-  dates: DateCell[];
-  slots: SlotCell[];
-  selectedDate: string | null;
-  selectedSlot: string | null;
-  monthAnchor: string;
-  durationMin: number;
-  hostName: string;
-  hostTz: string;
-  error: string | null;
+  dates: DateCell[]
+  slots: SlotCell[]
+  selectedDate: string | null
+  selectedSlot: string | null
+  monthAnchor: string
+  durationMin: number
+  hostName: string
+  hostTz: string
+  error: string | null
   /** The visitor's IANA zone, once known from the server-side `tz`
    *  query param (mig#18) — canonicalized the same way /embed does
    *  (routes/index.tsx). `null` when missing or invalid. This is the
@@ -95,14 +95,14 @@ interface BookingFlowProps {
    *  page, went untested for this, so a change that broke it (e.g.
    *  building the date from noon instead of the slot's own instant)
    *  left every existing test green (mig#18 round 4 review). */
-  tz: string | null;
+  tz: string | null
   /** "" for the standalone page (default), "/embed" for the iframe
    *  variant (mig#85) — threaded into every link, pushed address and
    *  the form action so the flow never leaves /embed (issue #11). */
-  basePath?: string;
+  basePath?: string
   /** /embed's forced theme (mig#44), `null` for "auto". Carried on
    *  every link, pushed address and the form's hidden `theme` field. */
-  theme?: string | null;
+  theme?: string | null
 }
 
 // ─── Client-side time helpers ────────────────────────────────────────
@@ -121,9 +121,9 @@ function formatClockInTz(
   displayTz: string,
 ): string | null {
   try {
-    return formatClockAt(zonedDateTime(date, time, hostTz), displayTz);
+    return formatClockAt(zonedDateTime(date, time, hostTz), displayTz)
   } catch {
-    return null;
+    return null
   }
 }
 
@@ -138,57 +138,57 @@ function formatConfirmLabelWithClock(
   displayTz: string,
   visitorClock: string,
 ): string {
-  const dt = zonedDateTime(date, time, hostTz);
+  const dt = zonedDateTime(date, time, hostTz)
   const weekday = new Intl.DateTimeFormat("en-GB", {
     timeZone: displayTz,
     weekday: "short",
-  }).format(dt);
+  }).format(dt)
   const day = new Intl.DateTimeFormat("en-GB", {
     timeZone: displayTz,
     day: "numeric",
-  }).format(dt);
+  }).format(dt)
   const month = new Intl.DateTimeFormat("en-GB", {
     timeZone: displayTz,
     month: "short",
-  }).format(dt);
-  return `Confirm — ${weekday}, ${day} ${month}, ${visitorClock}`;
+  }).format(dt)
+  return `Confirm — ${weekday}, ${day} ${month}, ${visitorClock}`
 }
 
 // ─── URL helpers ─────────────────────────────────────────────────────
 
 export default function BookingFlow(props: BookingFlowProps) {
-  const hostTz = props.hostTz;
-  const basePath = props.basePath ?? "";
-  const embed = basePath !== "";
+  const hostTz = props.hostTz
+  const basePath = props.basePath ?? ""
+  const embed = basePath !== ""
 
   // Signal-based state. Each signal is read inline below — Preact
   // re-renders the component when any signal changes.
-  const date = useSignal<string | null>(props.selectedDate);
-  const slot = useSignal<string | null>(props.selectedSlot);
-  const month = useSignal<string>(props.monthAnchor);
-  const slots = useSignal<SlotCell[]>(props.slots);
-  const loading = useSignal(false);
-  const fetchError = useSignal<string | null>(null);
+  const date = useSignal<string | null>(props.selectedDate)
+  const slot = useSignal<string | null>(props.selectedSlot)
+  const month = useSignal<string>(props.monthAnchor)
+  const slots = useSignal<SlotCell[]>(props.slots)
+  const loading = useSignal(false)
+  const fetchError = useSignal<string | null>(null)
   // Visitor timezone — read once on mount. Used to re-format the
   // date/time labels in the visitor's local TZ.
-  const guestTz = useSignal<string>("");
+  const guestTz = useSignal<string>("")
   // True once the island has mounted. Used to gate visitor-TZ
   // re-formatting (so SSR markup keeps the route's labels for
   // crawlers + no-JS clients — the same labels the server render has).
-  const mounted = useSignal(false);
+  const mounted = useSignal(false)
   // Inline error from server-side validation (?err=…). Mirrors the
   // SSR error prop, but dismissible so a stale error doesn't haunt
   // the visitor after they edit the form.
-  const serverError = useSignal<string | null>(props.error);
+  const serverError = useSignal<string | null>(props.error)
 
   useEffect(() => {
-    mounted.value = true;
+    mounted.value = true
     try {
-      guestTz.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      guestTz.value = Intl.DateTimeFormat().resolvedOptions().timeZone
     } catch {
       // Empty fallback — server-side stays host-local.
     }
-  }, []);
+  }, [])
 
   // ─── Effects ──────────────────────────────────────────────────────
 
@@ -197,21 +197,21 @@ export default function BookingFlow(props: BookingFlowProps) {
   // do NOT call pushState here — that would create a loop.
   useEffect(() => {
     function onPop() {
-      const u = new URL(globalThis.location.href);
-      const d = u.searchParams.get("date");
-      const s = u.searchParams.get("slot");
-      const m = u.searchParams.get("month");
-      date.value = d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
-      slot.value = s && /^\d{2}:\d{2}$/.test(s) ? s : null;
-      if (m && /^\d{4}-\d{2}-\d{2}$/.test(m)) month.value = m;
+      const u = new URL(globalThis.location.href)
+      const d = u.searchParams.get("date")
+      const s = u.searchParams.get("slot")
+      const m = u.searchParams.get("month")
+      date.value = d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null
+      slot.value = s && /^\d{2}:\d{2}$/.test(s) ? s : null
+      if (m && /^\d{4}-\d{2}-\d{2}$/.test(m)) month.value = m
       // Re-fetch slots for the (possibly new) date so the grid is
       // accurate after back-navigation.
-      if (date.value && !slot.value) void fetchSlots(date.value);
-      else if (!date.value) slots.value = [];
+      if (date.value && !slot.value) void fetchSlots(date.value)
+      else if (!date.value) slots.value = []
     }
-    globalThis.addEventListener("popstate", onPop);
-    return () => globalThis.removeEventListener("popstate", onPop);
-  }, []);
+    globalThis.addEventListener("popstate", onPop)
+    return () => globalThis.removeEventListener("popstate", onPop)
+  }, [])
 
   // ─── Fetch /api/slots ────────────────────────────────────────────
 
@@ -222,38 +222,38 @@ export default function BookingFlow(props: BookingFlowProps) {
   // (A then B with A responding slower than B) leave `slots.value`
   // showing A's slots while `date.value === B`. Server-side validation
   // catches any actual booking attempt, but the UX is misleading.
-  let slotsReqToken = 0;
+  let slotsReqToken = 0
 
   async function fetchSlots(forDate: string): Promise<void> {
-    const myToken = ++slotsReqToken;
-    loading.value = true;
-    fetchError.value = null;
+    const myToken = ++slotsReqToken
+    loading.value = true
+    fetchError.value = null
     try {
       const r = await fetch(`/api/slots?date=${encodeURIComponent(forDate)}`, {
         headers: { accept: "application/json" },
-      });
-      if (myToken !== slotsReqToken) return; // superseded
+      })
+      if (myToken !== slotsReqToken) return // superseded
       if (!r.ok) {
-        fetchError.value = "Could not load times. Please try again.";
-        return;
+        fetchError.value = "Could not load times. Please try again."
+        return
       }
-      const body = await r.json() as { slots?: SlotCell[] };
-      if (myToken !== slotsReqToken) return; // superseded between ok + json
-      slots.value = Array.isArray(body.slots) ? body.slots : [];
+      const body = await r.json() as { slots?: SlotCell[] }
+      if (myToken !== slotsReqToken) return // superseded between ok + json
+      slots.value = Array.isArray(body.slots) ? body.slots : []
     } catch {
-      if (myToken !== slotsReqToken) return;
-      fetchError.value = "Network error. Please try again.";
+      if (myToken !== slotsReqToken) return
+      fetchError.value = "Network error. Please try again."
     } finally {
-      if (myToken === slotsReqToken) loading.value = false;
+      if (myToken === slotsReqToken) loading.value = false
     }
   }
 
   // ─── URL sync ────────────────────────────────────────────────────
 
   function pushUrl(next: {
-    date: string | null;
-    slot?: string | null;
-    month?: string;
+    date: string | null
+    slot?: string | null
+    month?: string
   }): void {
     // `links` (declared further down, closed over here — pushUrl is
     // only ever called from a handler, after the initial render has
@@ -267,56 +267,56 @@ export default function BookingFlow(props: BookingFlowProps) {
     // stays green; see pickerPushAddress's doc comment in
     // lib/picker-links.ts for the full picture of what is and isn't
     // caught.
-    const url = links.pushAddress(next);
+    const url = links.pushAddress(next)
     if (globalThis.location.pathname + globalThis.location.search !== url) {
-      globalThis.history.pushState({}, "", url);
+      globalThis.history.pushState({}, "", url)
     }
   }
 
   // ─── Handlers ────────────────────────────────────────────────────
 
   function onSelectDate(d: string): void {
-    if (date.value === d) return;
-    date.value = d;
-    slot.value = null;
-    serverError.value = null;
-    pushUrl({ date: d });
-    void fetchSlots(d);
+    if (date.value === d) return
+    date.value = d
+    slot.value = null
+    serverError.value = null
+    pushUrl({ date: d })
+    void fetchSlots(d)
   }
 
   function onSelectMonth(m: string): void {
-    if (month.value === m) return;
-    month.value = m;
-    pushUrl({ date: date.value, slot: slot.value, month: m });
+    if (month.value === m) return
+    month.value = m
+    pushUrl({ date: date.value, slot: slot.value, month: m })
   }
 
   function onSelectSlot(d: string, s: string): void {
-    date.value = d;
-    slot.value = s;
-    serverError.value = null;
-    pushUrl({ date: d, slot: s });
+    date.value = d
+    slot.value = s
+    serverError.value = null
+    pushUrl({ date: d, slot: s })
     // Scroll the booking form into view smoothly. setTimeout gives
     // the new section a tick to render before we measure.
     globalThis.setTimeout(() => {
       document.getElementById("step-details")?.scrollIntoView({
         behavior: "smooth",
         block: "start",
-      });
-    }, 30);
+      })
+    }, 30)
   }
 
   function clearDate(): void {
-    date.value = null;
-    slot.value = null;
-    slots.value = [];
-    serverError.value = null;
-    pushUrl({ date: null, slot: null });
+    date.value = null
+    slot.value = null
+    slots.value = []
+    serverError.value = null
+    pushUrl({ date: null, slot: null })
   }
 
   function clearSlot(): void {
-    slot.value = null;
-    serverError.value = null;
-    pushUrl({ date: date.value, slot: null });
+    slot.value = null
+    serverError.value = null
+    pushUrl({ date: date.value, slot: null })
   }
 
   // ─── Derived labels (visitor TZ after hydration) ────────────────
@@ -328,10 +328,10 @@ export default function BookingFlow(props: BookingFlowProps) {
   // always `hostTz`, so a visitor sharing a `?tz=` link (or a no-JS
   // client) saw the host's time even though the server itself knew
   // better.
-  const initialDisplayTz = props.tz ?? hostTz;
+  const initialDisplayTz = props.tz ?? hostTz
   const displayTz = (mounted.value && guestTz.value)
     ? guestTz.value
-    : initialDisplayTz;
+    : initialDisplayTz
 
   // The zone reflected in every `<a href>` this island's children
   // render for the no-JS / pre-hydration fallback, and in the URL
@@ -342,13 +342,13 @@ export default function BookingFlow(props: BookingFlowProps) {
   // carrying that instead of the query param they arrived with.
   const linkTz: string | null = (mounted.value && guestTz.value)
     ? guestTz.value
-    : props.tz;
+    : props.tz
 
   // Shared by every `<a href>` below (`links.tz`) and by `pushUrl`
   // (`links.pushAddress`) — see lib/picker-links.ts's pickerLinks doc
   // comment for why binding `linkTz` once here, instead of passing it
   // separately to each, is the point.
-  const links = pickerLinks(linkTz, basePath, props.theme ?? null);
+  const links = pickerLinks(linkTz, basePath, props.theme ?? null)
 
   // The selected slot's own date, from its exact instant, not noon of
   // the host day (mig#15 review) — feeds TimeCard specifically.
@@ -356,7 +356,7 @@ export default function BookingFlow(props: BookingFlowProps) {
   // which shows the *picked day*, not a specific time.
   const slotDateLabel: string | null = date.value && slot.value
     ? formatHostDateIn(date.value, slot.value, hostTz, displayTz)
-    : null;
+    : null
 
   // Slot clock in visitor TZ ("11:00, New York, UTC-4" — mig#15). The
   // slot grid is rendered in host TZ (HH:MM strings are host-local by
@@ -364,7 +364,7 @@ export default function BookingFlow(props: BookingFlowProps) {
   // visitor clock on the confirm button + TimeCard.
   const slotLabelVisitorTz: string | null = date.value && slot.value
     ? formatClockInTz(date.value, slot.value, hostTz, displayTz)
-    : null;
+    : null
 
   const confirmLabel: string | null = date.value && slot.value
     ? formatConfirmLabelWithClock(
@@ -374,7 +374,7 @@ export default function BookingFlow(props: BookingFlowProps) {
       displayTz,
       slotLabelVisitorTz ?? slot.value,
     )
-    : null;
+    : null
 
   // Every slot's instant, host-local `time` + `hostTz` (mig#48 review)
   // — cheap even pre-mount (`zonedDateTime` needs no visitor zone),
@@ -385,7 +385,7 @@ export default function BookingFlow(props: BookingFlowProps) {
       ...s,
       instant: zonedDateTime(date.value!, s.time, hostTz),
     }))
-    : [];
+    : []
 
   // Display order: pre-mount this is `slots.value`'s own order (the
   // route's host-chronological push order, unchanged); post-mount,
@@ -400,13 +400,13 @@ export default function BookingFlow(props: BookingFlowProps) {
     ? [...slotsWithInstant].sort((a, b) =>
       a.instant.getTime() - b.instant.getTime()
     )
-    : slotsWithInstant;
+    : slotsWithInstant
 
   const header = formatGridHeader(
     orderedSlots.map((s) => s.instant),
     displayTz,
-  );
-  const gridZoneLabel = header?.label ?? null;
+  )
+  const gridZoneLabel = header?.label ?? null
 
   // The picked day as the visitor sees it (mig#50, see gridDay): the
   // clicked date when a slot falls on it in the display zone, else the
@@ -419,9 +419,9 @@ export default function BookingFlow(props: BookingFlowProps) {
       date.value,
       displayTz,
     )
-    : null;
-  const dateLabel: string | null = day?.long ?? null;
-  const dateLabelShort: string | null = day?.short ?? null;
+    : null
+  const dateLabel: string | null = day?.long ?? null
+  const dateLabelShort: string | null = day?.short ?? null
 
   // Re-derive every slot's visitor-TZ HH:MM + own offset for display
   // (mig#15, mig#48). Before mount the route's own `displayHHMM` is
@@ -431,8 +431,8 @@ export default function BookingFlow(props: BookingFlowProps) {
   // the surrounding DOM structure stays identical.
   const slotsForDisplay = (mounted.value && date.value)
     ? orderedSlots.map((s) => {
-      const visitorDate = isoDateInTz(s.instant, displayTz);
-      const display = formatSlotDisplay(s.instant, displayTz, header!.offset);
+      const visitorDate = isoDateInTz(s.instant, displayTz)
+      const display = formatSlotDisplay(s.instant, displayTz, header!.offset)
       return {
         ...s,
         displayHHMM: display.hhmm,
@@ -441,19 +441,19 @@ export default function BookingFlow(props: BookingFlowProps) {
         dateNote: visitorDate !== day!.date
           ? formatShortDateAt(s.instant, displayTz)
           : undefined,
-      };
+      }
     }).map(({ instant: _instant, ...s }) => s)
-    : slots.value;
+    : slots.value
 
   // ─── Render ──────────────────────────────────────────────────────
 
-  const hasDate = !!date.value;
-  const hasSlot = !!slot.value;
+  const hasDate = !!date.value
+  const hasSlot = !!slot.value
 
   // Error banner: serverError (from ?err=… redirect) OR fetchError
   // (slots fetch failed). Both shown inline so the user knows the
   // picker is in a degraded state.
-  const error = serverError.value ?? fetchError.value;
+  const error = serverError.value ?? fetchError.value
 
   // Gate the interactive handlers on mounted.value. On the SSR pass
   // (and in any pre-hydration render) mounted is false, so Calendar
@@ -463,7 +463,7 @@ export default function BookingFlow(props: BookingFlowProps) {
   // which swaps <a> → <button>. The DOM swap happens once, on mount,
   // and is invisible to the user (the SSR + hydrated JSX only differ
   // by element type, not by position or content).
-  const interactive = mounted.value;
+  const interactive = mounted.value
 
   return (
     <div class="space-y-5 sm:space-y-7">
@@ -603,37 +603,37 @@ export default function BookingFlow(props: BookingFlowProps) {
         />
       )}
     </div>
-  );
+  )
 }
 
 // ─── Static helpers (local to this file) ─────────────────────────────
 
 function slotsByDate(dates: DateCell[]): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const d of dates) out[d.date] = d.slots;
-  return out;
+  const out: Record<string, number> = {}
+  for (const d of dates) out[d.date] = d.slots
+  return out
 }
 
 function minDate(dates: DateCell[], hostTz: string): string {
-  let min = "";
-  for (const d of dates) if (!min || d.date < min) min = d.date;
+  let min = ""
+  for (const d of dates) if (!min || d.date < min) min = d.date
   // Fallback should never hit (getCandidateDates always returns ≥1
   // entry), but use host-TZ today if it ever does — UTC would be
   // off-by-one near midnight in the host's TZ.
-  return min || isoDateInTz(new Date(), hostTz);
+  return min || isoDateInTz(new Date(), hostTz)
 }
 
 function maxDate(dates: DateCell[], hostTz: string): string {
-  let max = "";
-  for (const d of dates) if (!max || d.date > max) max = d.date;
-  return max || isoDateInTz(new Date(), hostTz);
+  let max = ""
+  for (const d of dates) if (!max || d.date > max) max = d.date
+  return max || isoDateInTz(new Date(), hostTz)
 }
 
 function StepHeader(
   { step, label, active }: {
-    step: number;
-    label: string;
-    active?: boolean;
+    step: number
+    label: string
+    active?: boolean
   },
 ) {
   return (
@@ -656,5 +656,5 @@ function StepHeader(
         {label}
       </h2>
     </div>
-  );
+  )
 }

@@ -1,13 +1,13 @@
-import type { SmtpTransport } from "@spy4x/email/smtp";
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import type { SmtpTransport } from "@spy4x/email/smtp"
+import { assertEquals, assertStringIncludes } from "@std/assert"
 import {
   buildBookingEmails,
   buildCancellationEmails,
   sendBookingCorrectionEmail,
   sendEmail,
   setTransportForTesting,
-} from "./email.ts";
-import type { Booking, Config } from "./types.ts";
+} from "./email.ts"
+import type { Booking, Config } from "./types.ts"
 
 function makeConfig(): Config {
   return {
@@ -44,7 +44,7 @@ function makeConfig(): Config {
     hideBranding: false,
     githubUrl: "https://github.com/spy4x/mig",
     version: "test",
-  };
+  }
 }
 
 function makeBooking(guestTz?: string): Booking {
@@ -59,7 +59,7 @@ function makeBooking(guestTz?: string): Booking {
     guestEmail: "visitor@example.com",
     cancelTokenHash: "hash",
     status: "active",
-  };
+  }
 }
 
 Deno.test("booking emails use recipient timezones", () => {
@@ -67,28 +67,28 @@ Deno.test("booking emails use recipient timezones", () => {
     makeConfig(),
     makeBooking("America/New_York"),
     "https://mig.example.com/cancel",
-  );
+  )
 
   // Guest: only their own clock, never the host's raw IANA name.
-  assertStringIncludes(emails.guest.subject, "04:00");
-  assertStringIncludes(emails.guest.subject, "New York, UTC-4");
-  assertStringIncludes(emails.guest.text, "04:00");
-  assertStringIncludes(emails.guest.text, "New York, UTC-4");
+  assertStringIncludes(emails.guest.subject, "04:00")
+  assertStringIncludes(emails.guest.subject, "New York, UTC-4")
+  assertStringIncludes(emails.guest.text, "04:00")
+  assertStringIncludes(emails.guest.text, "New York, UTC-4")
   assertStringIncludes(
     emails.guest.attachments![0].content.replace(/\r\n[ \t]/g, ""),
     "New York",
-  );
+  )
   // Owner: host clock plus the visitor's clock alongside it (mig#15).
-  assertStringIncludes(emails.owner.subject, "10:00");
-  assertStringIncludes(emails.owner.subject, "Berlin, UTC+2");
-  assertStringIncludes(emails.owner.text, "10:00");
-  assertStringIncludes(emails.owner.text, "Berlin, UTC+2");
-  assertStringIncludes(emails.owner.text, "visitor: 04:00, New York, UTC-4");
+  assertStringIncludes(emails.owner.subject, "10:00")
+  assertStringIncludes(emails.owner.subject, "Berlin, UTC+2")
+  assertStringIncludes(emails.owner.text, "10:00")
+  assertStringIncludes(emails.owner.text, "Berlin, UTC+2")
+  assertStringIncludes(emails.owner.text, "visitor: 04:00, New York, UTC-4")
   assertStringIncludes(
     emails.owner.attachments![0].content.replace(/\r\n[ \t]/g, ""),
     "Berlin",
-  );
-});
+  )
+})
 
 // mig#24 review follow-up: buildBookingEmails's ownerIcs used to pass
 // only booking.hostTz through to generateIcs, so the owner's calendar
@@ -100,47 +100,47 @@ Deno.test("owner invite ICS carries the visitor's clock alongside the host's", (
     makeConfig(),
     makeBooking("America/New_York"),
     "https://mig.example.com/cancel",
-  );
+  )
   const ownerIcs = emails.owner.attachments![0].content.replace(
     /\r\n[ \t]/g,
     "",
-  );
-  assertStringIncludes(ownerIcs, "10:00");
-  assertStringIncludes(ownerIcs, "Berlin");
-  assertStringIncludes(ownerIcs, "visitor: 04:00");
-  assertStringIncludes(ownerIcs, "New York");
-});
+  )
+  assertStringIncludes(ownerIcs, "10:00")
+  assertStringIncludes(ownerIcs, "Berlin")
+  assertStringIncludes(ownerIcs, "visitor: 04:00")
+  assertStringIncludes(ownerIcs, "New York")
+})
 
 Deno.test("owner invite ICS shows the host clock alone when no visitor zone was captured", () => {
   const emails = buildBookingEmails(
     makeConfig(),
     makeBooking(undefined),
     "https://mig.example.com/cancel",
-  );
+  )
   const ownerIcs = emails.owner.attachments![0].content.replace(
     /\r\n[ \t]/g,
     "",
-  );
-  assertStringIncludes(ownerIcs, "Berlin");
-  assertEquals(ownerIcs.includes("visitor:"), false);
-});
+  )
+  assertStringIncludes(ownerIcs, "Berlin")
+  assertEquals(ownerIcs.includes("visitor:"), false)
+})
 
 Deno.test("guest invite ICS is unaffected by the owner invite's visitor-clock change", () => {
   const emails = buildBookingEmails(
     makeConfig(),
     makeBooking("America/New_York"),
     "https://mig.example.com/cancel",
-  );
+  )
   const guestIcs = emails.guest.attachments![0].content.replace(
     /\r\n[ \t]/g,
     "",
-  );
+  )
   // Same DESCRIPTION time string the guest email itself shows — the
   // guest's own booking confirmation, never the owner's combined one.
-  assertStringIncludes(guestIcs, "04:00");
-  assertStringIncludes(guestIcs, "New York");
-  assertEquals(guestIcs.includes("visitor:"), false);
-});
+  assertStringIncludes(guestIcs, "04:00")
+  assertStringIncludes(guestIcs, "New York")
+  assertEquals(guestIcs.includes("visitor:"), false)
+})
 
 Deno.test("cancellation emails use recipient timezones", () => {
   const emails = buildCancellationEmails(
@@ -148,11 +148,11 @@ Deno.test("cancellation emails use recipient timezones", () => {
     makeBooking("America/New_York"),
     "guest",
     undefined,
-  );
+  )
 
-  assertStringIncludes(emails.guest.text, "04:00, New York, UTC-4");
-  assertStringIncludes(emails.owner.text, "10:00, Berlin, UTC+2");
-});
+  assertStringIncludes(emails.guest.text, "04:00, New York, UTC-4")
+  assertStringIncludes(emails.owner.text, "10:00, Berlin, UTC+2")
+})
 
 Deno.test("email output falls back for missing or invalid visitor timezone", () => {
   for (const guestTz of [undefined, "Not/A_Timezone"]) {
@@ -160,22 +160,22 @@ Deno.test("email output falls back for missing or invalid visitor timezone", () 
       makeConfig(),
       makeBooking(guestTz),
       "https://mig.example.com/cancel",
-    );
+    )
 
-    assertStringIncludes(emails.guest.text, "10:00, Berlin, UTC+2");
+    assertStringIncludes(emails.guest.text, "10:00, Berlin, UTC+2")
     assertEquals(
       emails.guest.subject,
       "Booking confirmed: Fri 28 Aug 10:00, Berlin, UTC+2",
-    );
+    )
     // No visitor zone known — the owner's email shows the host clock
     // alone, never a guessed visitor zone.
     assertEquals(
       emails.owner.text.includes("visitor:"),
       false,
       "owner email must not claim a visitor timezone that was never captured",
-    );
+    )
   }
-});
+})
 
 // ─── mig#15: two zones, two clocks ────────────────────────────────────
 // Host in Ho Chi Minh (no DST, always UTC+7), guest in New York (EDT,
@@ -184,7 +184,7 @@ Deno.test("email output falls back for missing or invalid visitor timezone", () 
 // York.
 
 function makeHoChiMinhConfig(): Config {
-  return { ...makeConfig(), hostTz: "Asia/Ho_Chi_Minh" };
+  return { ...makeConfig(), hostTz: "Asia/Ho_Chi_Minh" }
 }
 
 function makeCrossZoneBooking(): Booking {
@@ -199,7 +199,7 @@ function makeCrossZoneBooking(): Booking {
     guestEmail: "visitor@example.com",
     cancelTokenHash: "hash",
     status: "active",
-  };
+  }
 }
 
 Deno.test("mig#15: guest email (incl. subject) shows only the visitor's labelled clock", () => {
@@ -207,26 +207,26 @@ Deno.test("mig#15: guest email (incl. subject) shows only the visitor's labelled
     makeHoChiMinhConfig(),
     makeCrossZoneBooking(),
     "https://mig.example.com/cancel",
-  );
+  )
 
-  assertStringIncludes(emails.guest.subject, "New York, UTC-4");
-  assertStringIncludes(emails.guest.subject, "22:00");
-  assertStringIncludes(emails.guest.text, "22:00, New York, UTC-4");
-  assertStringIncludes(emails.guest.html!, "22:00, New York, UTC-4");
-});
+  assertStringIncludes(emails.guest.subject, "New York, UTC-4")
+  assertStringIncludes(emails.guest.subject, "22:00")
+  assertStringIncludes(emails.guest.text, "22:00, New York, UTC-4")
+  assertStringIncludes(emails.guest.html!, "22:00, New York, UTC-4")
+})
 
 Deno.test("mig#15: owner email shows both the host's and the visitor's labelled clock", () => {
   const emails = buildBookingEmails(
     makeHoChiMinhConfig(),
     makeCrossZoneBooking(),
     "https://mig.example.com/cancel",
-  );
+  )
 
   for (const body of [emails.owner.text, emails.owner.html!]) {
-    assertStringIncludes(body, "Ho Chi Minh, UTC+7");
-    assertStringIncludes(body, "New York, UTC-4");
+    assertStringIncludes(body, "Ho Chi Minh, UTC+7")
+    assertStringIncludes(body, "New York, UTC-4")
   }
-});
+})
 
 Deno.test("mig#15 review: owner booking subject shows the visitor's clock and date, not just the host's", () => {
   // The reviewer's exact regression: the owner subject only ever
@@ -237,13 +237,13 @@ Deno.test("mig#15 review: owner booking subject shows the visitor's clock and da
     makeHoChiMinhConfig(),
     makeCrossZoneBooking(),
     "https://mig.example.com/cancel",
-  );
-  assertStringIncludes(emails.owner.subject, "Ho Chi Minh, UTC+7");
+  )
+  assertStringIncludes(emails.owner.subject, "Ho Chi Minh, UTC+7")
   assertStringIncludes(
     emails.owner.subject,
     "visitor: Mon 5 Oct 22:00, New York, UTC-4",
-  );
-});
+  )
+})
 
 Deno.test("mig#15 review: owner cancellation subject and body show the visitor's clock", () => {
   const emails = buildCancellationEmails(
@@ -251,18 +251,18 @@ Deno.test("mig#15 review: owner cancellation subject and body show the visitor's
     makeCrossZoneBooking(),
     "guest",
     "changed my mind",
-  );
-  assertStringIncludes(emails.owner.subject, "Ho Chi Minh, UTC+7");
+  )
+  assertStringIncludes(emails.owner.subject, "Ho Chi Minh, UTC+7")
   assertStringIncludes(
     emails.owner.subject,
     "visitor: Mon 5 Oct 22:00, New York, UTC-4",
-  );
-  assertStringIncludes(emails.owner.text, "Ho Chi Minh, UTC+7");
+  )
+  assertStringIncludes(emails.owner.text, "Ho Chi Minh, UTC+7")
   assertStringIncludes(
     emails.owner.text,
     "visitor: Mon 5 Oct 22:00, New York, UTC-4",
-  );
-});
+  )
+})
 
 Deno.test("mig#15 review: the owner cancellation subject never drops the host city (mutation guard)", () => {
   // Regression guard: a naive fix could rebuild the subject from just
@@ -273,68 +273,68 @@ Deno.test("mig#15 review: the owner cancellation subject never drops the host ci
     makeBooking("America/New_York"),
     "owner",
     undefined,
-  );
-  assertStringIncludes(emails.owner.subject, "Berlin, UTC+2");
-});
+  )
+  assertStringIncludes(emails.owner.subject, "Berlin, UTC+2")
+})
 
 Deno.test("mig#15 review: no raw ISO timestamps in cancellation or booking emails", () => {
-  const isoPattern = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+  const isoPattern = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
   const booking = buildBookingEmails(
     makeHoChiMinhConfig(),
     makeCrossZoneBooking(),
     "https://mig.example.com/cancel",
-  );
-  assertEquals(isoPattern.test(booking.owner.text), false, "Booked at");
-  assertStringIncludes(booking.owner.text, "Booked at: Thu 1 Oct");
+  )
+  assertEquals(isoPattern.test(booking.owner.text), false, "Booked at")
+  assertStringIncludes(booking.owner.text, "Booked at: Thu 1 Oct")
 
   const cancel = buildCancellationEmails(
     makeHoChiMinhConfig(),
     makeCrossZoneBooking(),
     "guest",
     "test",
-  );
+  )
   assertEquals(
     isoPattern.test(cancel.guest.text),
     false,
     "guest Cancelled at",
-  );
+  )
   assertEquals(
     isoPattern.test(cancel.owner.text),
     false,
     "owner Cancelled at",
-  );
+  )
   // Guest reads their own zone, owner reads the host's — never a raw
   // timestamp with no zone attached.
-  assertStringIncludes(cancel.guest.text, "New York, UTC-4");
-  assertStringIncludes(cancel.owner.text, "Ho Chi Minh, UTC+7");
-});
+  assertStringIncludes(cancel.guest.text, "New York, UTC-4")
+  assertStringIncludes(cancel.owner.text, "Ho Chi Minh, UTC+7")
+})
 
 Deno.test("mig#15 review: guest email notes the host-timezone fallback when the guest zone is unknown", () => {
   const emails = buildBookingEmails(
     makeHoChiMinhConfig(),
     { ...makeCrossZoneBooking(), guestTz: undefined },
     "https://mig.example.com/cancel",
-  );
+  )
   assertStringIncludes(
     emails.guest.text,
     "Times are shown in the host's timezone.",
-  );
+  )
   assertStringIncludes(
     emails.guest.html!,
     "Times are shown in the host&#39;s timezone.",
-  );
-});
+  )
+})
 
 Deno.test("an apostrophe in a guest's name is escaped in the HTML email", () => {
   const emails = buildBookingEmails(
     makeHoChiMinhConfig(),
     { ...makeCrossZoneBooking(), guestName: "Dara O'Brien" },
     "https://mig.example.com/cancel",
-  );
-  assertStringIncludes(emails.owner.html!, "Dara O&#39;Brien");
-  assertEquals(emails.owner.html!.includes("O'Brien"), false);
-  assertStringIncludes(emails.owner.text, "Dara O'Brien");
-});
+  )
+  assertStringIncludes(emails.owner.html!, "Dara O&#39;Brien")
+  assertEquals(emails.owner.html!.includes("O'Brien"), false)
+  assertStringIncludes(emails.owner.text, "Dara O'Brien")
+})
 
 // ─── mig#108: mail to the guest's address holds nothing the booker typed ──
 // Anyone can book with an address that is not theirs. The name, the
@@ -345,33 +345,33 @@ const TYPED = {
   name: "Typedname",
   notes: "Typednotes https://spam.example/offer",
   reason: "Typedreason",
-};
+}
 
 function typedBooking(): Booking {
   return {
     ...makeBooking("America/New_York"),
     guestName: TYPED.name,
     notes: TYPED.notes,
-  };
+  }
 }
 
 function unfoldIcs(ics: string): string {
-  return ics.replace(/\r\n[ \t]/g, "");
+  return ics.replace(/\r\n[ \t]/g, "")
 }
 
 /** Every part of `mail` a recipient can read, the unfolded invite included. */
 function everyPart(mail: {
-  subject: string;
-  text: string;
-  html?: string;
-  attachments?: { content: string }[];
+  subject: string
+  text: string
+  html?: string
+  attachments?: { content: string }[]
 }): string {
   return [
     mail.subject,
     mail.text,
     mail.html ?? "",
     ...(mail.attachments ?? []).map((a) => unfoldIcs(a.content)),
-  ].join("\n");
+  ].join("\n")
 }
 
 Deno.test("mig#108: the guest's booking mail holds neither the name nor the notes, invite included", () => {
@@ -379,9 +379,9 @@ Deno.test("mig#108: the guest's booking mail holds neither the name nor the note
     makeConfig(),
     typedBooking(),
     "https://mig.example.com/cancel",
-  );
-  assertEquals(guest.to, "visitor@example.com");
-  assertEquals(guest.attachments!.length, 1);
+  )
+  assertEquals(guest.to, "visitor@example.com")
+  assertEquals(guest.attachments!.length, 1)
   for (
     const [part, value] of [
       ["subject", guest.subject],
@@ -390,29 +390,29 @@ Deno.test("mig#108: the guest's booking mail holds neither the name nor the note
       ["invite", unfoldIcs(guest.attachments![0].content)],
     ]
   ) {
-    assertEquals(value.includes(TYPED.name), false, `name in ${part}`);
-    assertEquals(value.includes("Typednotes"), false, `notes in ${part}`);
-    assertEquals(value.includes("spam.example"), false, `notes in ${part}`);
+    assertEquals(value.includes(TYPED.name), false, `name in ${part}`)
+    assertEquals(value.includes("Typednotes"), false, `notes in ${part}`)
+    assertEquals(value.includes("spam.example"), false, `notes in ${part}`)
   }
-  assertStringIncludes(guest.text, "Hello,\n\nYour meeting with Host");
-  assertStringIncludes(guest.html!, "<p>Hello,</p>");
-});
+  assertStringIncludes(guest.text, "Hello,\n\nYour meeting with Host")
+  assertStringIncludes(guest.html!, "<p>Hello,</p>")
+})
 
 Deno.test("mig#108: the owner's booking mail still shows the name and the notes, invite included", () => {
   const { owner } = buildBookingEmails(
     makeConfig(),
     typedBooking(),
     "https://mig.example.com/cancel",
-  );
-  const ics = unfoldIcs(owner.attachments![0].content);
-  assertStringIncludes(owner.subject, TYPED.name);
+  )
+  const ics = unfoldIcs(owner.attachments![0].content)
+  assertStringIncludes(owner.subject, TYPED.name)
   for (const value of [owner.text, owner.html!]) {
-    assertStringIncludes(value, TYPED.name);
-    assertStringIncludes(value, TYPED.notes);
+    assertStringIncludes(value, TYPED.name)
+    assertStringIncludes(value, TYPED.notes)
   }
-  assertStringIncludes(ics, `CN="${TYPED.name}"`);
-  assertStringIncludes(ics, "Typednotes https://spam.example/offer");
-});
+  assertStringIncludes(ics, `CN="${TYPED.name}"`)
+  assertStringIncludes(ics, "Typednotes https://spam.example/offer")
+})
 
 Deno.test("mig#108: the guest's cancellation mail holds neither the name nor the reason", () => {
   const { guest } = buildCancellationEmails(
@@ -420,17 +420,17 @@ Deno.test("mig#108: the guest's cancellation mail holds neither the name nor the
     { ...typedBooking(), status: "cancelled" },
     "guest",
     TYPED.reason,
-  );
-  assertEquals(guest.to, "visitor@example.com");
-  const all = everyPart(guest);
-  assertEquals(all.includes(TYPED.name), false);
-  assertEquals(all.includes(TYPED.reason), false);
-  assertEquals(all.includes("Typednotes"), false);
-  assertEquals(all.includes("Reason"), false);
-  assertStringIncludes(guest.text, "Hello,\n\nThe meeting scheduled for");
-  assertStringIncludes(guest.html!, "<p>Hello,</p>");
-  assertStringIncludes(guest.text, "Cancelled by: you");
-});
+  )
+  assertEquals(guest.to, "visitor@example.com")
+  const all = everyPart(guest)
+  assertEquals(all.includes(TYPED.name), false)
+  assertEquals(all.includes(TYPED.reason), false)
+  assertEquals(all.includes("Typednotes"), false)
+  assertEquals(all.includes("Reason"), false)
+  assertStringIncludes(guest.text, "Hello,\n\nThe meeting scheduled for")
+  assertStringIncludes(guest.html!, "<p>Hello,</p>")
+  assertStringIncludes(guest.text, "Cancelled by: you")
+})
 
 Deno.test("mig#108: the owner's cancellation mail still shows the name and the reason", () => {
   const { owner } = buildCancellationEmails(
@@ -438,21 +438,21 @@ Deno.test("mig#108: the owner's cancellation mail still shows the name and the r
     { ...typedBooking(), status: "cancelled" },
     "guest",
     TYPED.reason,
-  );
-  assertStringIncludes(owner.subject, TYPED.name);
-  assertStringIncludes(owner.text, `with ${TYPED.name} has been cancelled`);
-  assertStringIncludes(owner.text, `Reason: ${TYPED.reason}`);
-  assertStringIncludes(owner.html!, TYPED.name);
-  assertStringIncludes(owner.html!, TYPED.reason);
-});
+  )
+  assertStringIncludes(owner.subject, TYPED.name)
+  assertStringIncludes(owner.text, `with ${TYPED.name} has been cancelled`)
+  assertStringIncludes(owner.text, `Reason: ${TYPED.reason}`)
+  assertStringIncludes(owner.html!, TYPED.name)
+  assertStringIncludes(owner.html!, TYPED.reason)
+})
 
 // ─── mig#27: sendBookingCorrectionEmail must tell the truth about the rollback ──
 
 interface RecordedMail {
-  to?: string;
-  subject?: string;
-  text?: string;
-  html?: string;
+  to?: string
+  subject?: string
+  text?: string
+  html?: string
 }
 
 /** Test-only transport: records every email sent to it and resolves
@@ -465,10 +465,10 @@ function recordingTransport(sent: RecordedMail[]): SmtpTransport {
         subject: message.subject,
         text: message.text === undefined ? undefined : String(message.text),
         html: message.html === undefined ? undefined : String(message.html),
-      });
-      return Promise.resolve({});
+      })
+      return Promise.resolve({})
     },
-  };
+  }
 }
 
 // mig#31: the round-3 reviewer of #30 changed several sentences in this
@@ -479,17 +479,17 @@ function recordingTransport(sent: RecordedMail[]): SmtpTransport {
 // appends a "(visitor: ...)" suffix — one less moving part in the
 // fixture).
 Deno.test("sendBookingCorrectionEmail: rolledBack true pins the whole removed/free email", async () => {
-  const sent: RecordedMail[] = [];
-  setTransportForTesting(recordingTransport(sent));
+  const sent: RecordedMail[] = []
+  setTransportForTesting(recordingTransport(sent))
   try {
     await sendBookingCorrectionEmail(makeConfig(), makeBooking(), {
       rolledBack: true,
-    });
-    assertEquals(sent.length, 1);
+    })
+    assertEquals(sent.length, 1)
     assertEquals(
       sent[0].subject,
       "Not booked: Visitor, Fri 28 Aug 10:00, Berlin, UTC+2",
-    );
+    )
     assertEquals(
       sent[0].text,
       `Hi Host,
@@ -502,7 +502,7 @@ When:  Friday, 28 August 2026 at 10:00, Berlin, UTC+2
 The guest's confirmation email failed to send, so the booking was removed and the slot is free again. Please disregard the "New booking" email and calendar invite you received a moment ago.
 
 — Sent by mig`,
-    );
+    )
     assertEquals(
       sent[0].html,
       `<!doctype html>
@@ -530,27 +530,27 @@ The guest's confirmation email failed to send, so the booking was removed and th
 
 </div>
 </body></html>`,
-    );
+    )
   } finally {
-    setTransportForTesting(null);
+    setTransportForTesting(null)
   }
-});
+})
 
 Deno.test("sendBookingCorrectionEmail: rolledBack false pins the whole not-removed email", async () => {
-  const sent: RecordedMail[] = [];
-  setTransportForTesting(recordingTransport(sent));
+  const sent: RecordedMail[] = []
+  setTransportForTesting(recordingTransport(sent))
   try {
-    const booking = makeBooking();
+    const booking = makeBooking()
     await sendBookingCorrectionEmail(makeConfig(), booking, {
       rolledBack: false,
-    });
-    assertEquals(sent.length, 1);
-    const text = sent[0].text ?? "";
-    const html = sent[0].html ?? "";
+    })
+    assertEquals(sent.length, 1)
+    const text = sent[0].text ?? ""
+    const html = sent[0].html ?? ""
     assertEquals(
       sent[0].subject,
       "Not booked, remove by hand: Visitor, Fri 28 Aug 10:00, Berlin, UTC+2",
-    );
+    )
     assertEquals(
       text,
       `Hi Host,
@@ -563,7 +563,7 @@ When:  Friday, 28 August 2026 at 10:00, Berlin, UTC+2
 The guest's confirmation email failed to send, and removing the booking failed too. It may still be on disk and come back after a restart. Remove it by hand: booking id 01HXYZBK8M in the data file. Please disregard the "New booking" email and calendar invite you received a moment ago.
 
 — Sent by mig`,
-    );
+    )
     assertEquals(
       html,
       `<!doctype html>
@@ -592,21 +592,21 @@ The guest's confirmation email failed to send, and removing the booking failed t
 
 </div>
 </body></html>`,
-    );
-    assertEquals(/removed|free/i.test(text), false, `text: ${text}`);
-    assertEquals(/removed|free/i.test(html), false, `html: ${html}`);
+    )
+    assertEquals(/removed|free/i.test(text), false, `text: ${text}`)
+    assertEquals(/removed|free/i.test(html), false, `html: ${html}`)
     // The HTML wraps "NOT" in <strong>...</strong>, so a plain
     // substring check on "NOT created" would never match either way —
     // the text regex allows only whitespace between "not" and
     // "created" (there is none in the text template), while the HTML
     // one also allows tags, so both actually exercise the wording
     // instead of the markup around it.
-    assertEquals(/not\s*created/i.test(text), false, `text: ${text}`);
+    assertEquals(/not\s*created/i.test(text), false, `text: ${text}`)
     assertEquals(
       /not(<[^>]+>|\s)*created/i.test(html),
       false,
       `html: ${html}`,
-    );
+    )
     // mig#31: the host's only cue, when NTFY is off, to disregard the
     // earlier "New booking" email and clean up the stray booking by
     // hand — the assertEquals calls above already pin these exact
@@ -614,83 +614,83 @@ The guest's confirmation email failed to send, and removing the booking failed t
     // explicit, case-insensitive check too, in both text and HTML, so
     // dropping any one of them turns this test red on its own even if
     // a future edit also changes surrounding wording.
-    assertStringIncludes(text.toLowerCase(), "disregard");
-    assertStringIncludes(html.toLowerCase(), "disregard");
-    assertStringIncludes(text.toLowerCase(), "remove it by hand");
-    assertStringIncludes(html.toLowerCase(), "remove it by hand");
+    assertStringIncludes(text.toLowerCase(), "disregard")
+    assertStringIncludes(html.toLowerCase(), "disregard")
+    assertStringIncludes(text.toLowerCase(), "remove it by hand")
+    assertStringIncludes(html.toLowerCase(), "remove it by hand")
   } finally {
-    setTransportForTesting(null);
+    setTransportForTesting(null)
   }
-});
+})
 
 Deno.test("sendBookingCorrectionEmail: rolledBack false HTML-escapes the booking id", async () => {
-  const sent: RecordedMail[] = [];
-  setTransportForTesting(recordingTransport(sent));
+  const sent: RecordedMail[] = []
+  setTransportForTesting(recordingTransport(sent))
   try {
-    const booking = { ...makeBooking(), id: `id<&">` };
+    const booking = { ...makeBooking(), id: `id<&">` }
     await sendBookingCorrectionEmail(makeConfig(), booking, {
       rolledBack: false,
-    });
-    assertEquals(sent.length, 1);
-    const html = sent[0].html ?? "";
-    assertStringIncludes(html, "id&lt;&amp;&quot;&gt;");
-    assertEquals(html.includes(booking.id), false, `html: ${html}`);
+    })
+    assertEquals(sent.length, 1)
+    const html = sent[0].html ?? ""
+    assertStringIncludes(html, "id&lt;&amp;&quot;&gt;")
+    assertEquals(html.includes(booking.id), false, `html: ${html}`)
   } finally {
-    setTransportForTesting(null);
+    setTransportForTesting(null)
   }
-});
+})
 
 Deno.test("a failed send never carries the SMTP password in its error", async () => {
-  const config = makeConfig();
-  const pass = "not-a-real-password-0123";
+  const config = makeConfig()
+  const pass = "not-a-real-password-0123"
   setTransportForTesting({
     sendMail: () =>
       Promise.reject(new Error(`535 auth failed for user:${pass} (${pass})`)),
-  });
+  })
   try {
     const sent = await sendEmail(
       { ...config, smtp: { ...config.smtp, pass } },
       { to: "visitor@example.com", subject: "Hi", text: "Hi" },
-    );
-    assertEquals(sent.ok, false);
-    if (sent.ok) return;
-    assertEquals(sent.error.includes(pass), false, sent.error);
-    assertStringIncludes(sent.error, "<REDACTED:CREDENTIAL>");
+    )
+    assertEquals(sent.ok, false)
+    if (sent.ok) return
+    assertEquals(sent.error.includes(pass), false, sent.error)
+    assertStringIncludes(sent.error, "<REDACTED:CREDENTIAL>")
   } finally {
-    setTransportForTesting(null);
+    setTransportForTesting(null)
   }
-});
+})
 
 Deno.test("a send the transport rejects returns a failed result instead of throwing", async () => {
   setTransportForTesting({
     sendMail: () => Promise.reject(new Error("connection refused")),
-  });
+  })
   try {
     const sent = await sendEmail(makeConfig(), {
       to: "visitor@example.com",
       subject: "Hi",
       text: "Hi",
-    });
-    assertEquals(sent.ok, false);
-    if (!sent.ok) assertStringIncludes(sent.error, "connection refused");
+    })
+    assertEquals(sent.ok, false)
+    if (!sent.ok) assertStringIncludes(sent.error, "connection refused")
   } finally {
-    setTransportForTesting(null);
+    setTransportForTesting(null)
   }
-});
+})
 
 Deno.test("the invite attachment's Content-Type carries a charset and the calendar's METHOD", () => {
   const emails = buildBookingEmails(
     makeHoChiMinhConfig(),
     makeCrossZoneBooking(),
     "https://mig.example.com/cancel",
-  );
+  )
   for (const email of [emails.guest, emails.owner]) {
-    const [invite] = email.attachments ?? [];
-    assertEquals(invite.filename, "meeting.ics");
+    const [invite] = email.attachments ?? []
+    assertEquals(invite.filename, "meeting.ics")
     assertEquals(
       invite.contentType,
       "text/calendar; charset=utf-8; method=REQUEST",
-    );
-    assertStringIncludes(invite.content, "METHOD:REQUEST");
+    )
+    assertStringIncludes(invite.content, "METHOD:REQUEST")
   }
-});
+})

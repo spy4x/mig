@@ -14,12 +14,12 @@ import {
   themeBootstrapScript,
   type ThemePreference,
   ThemeValue,
-} from "@spy4x/preact-signals/theme";
+} from "@spy4x/preact-signals/theme"
 
-export type ThemeParam = "light" | "dark" | "auto";
+export type ThemeParam = "light" | "dark" | "auto"
 
 /** Where a visitor's choice is kept, as before the shared store. */
-export const THEME_STORAGE_KEY = "mig-theme";
+export const THEME_STORAGE_KEY = "mig-theme"
 
 /** Parses `/embed`'s `?theme=` query param (mig#44). Anything other
  *  than exactly `"light"` or `"dark"` — missing, empty, or any other
@@ -28,16 +28,16 @@ export const THEME_STORAGE_KEY = "mig-theme";
  *  below). The raw value is never reflected back into the page
  *  unescaped: only this parsed, three-way result is ever used. */
 export function parseThemeParam(raw: string | null): ThemeParam {
-  return raw === "light" || raw === "dark" ? raw : "auto";
+  return raw === "light" || raw === "dark" ? raw : "auto"
 }
 
 /** mig's `THEME` value as the shared store's preference; anything
  *  unknown is `auto`, so `system`. */
 export function themePreference(mode: ThemeParam): ThemePreference {
-  const parsed = parseThemeParam(mode);
-  if (parsed === "light") return ThemeValue.LIGHT;
-  if (parsed === "dark") return ThemeValue.DARK;
-  return ThemeValue.SYSTEM;
+  const parsed = parseThemeParam(mode)
+  if (parsed === "light") return ThemeValue.LIGHT
+  if (parsed === "dark") return ThemeValue.DARK
+  return ThemeValue.SYSTEM
 }
 
 // Before the shared store, "follow the system" was stored as `auto`.
@@ -46,7 +46,7 @@ export function themePreference(mode: ThemeParam): ThemePreference {
 // first, and that visitor keeps following their system.
 const MIGRATE_STORED_AUTO =
   `(function(){try{if(localStorage.getItem("${THEME_STORAGE_KEY}")==="auto")` +
-  `localStorage.setItem("${THEME_STORAGE_KEY}","system")}catch(e){}})();`;
+  `localStorage.setItem("${THEME_STORAGE_KEY}","system")}catch(e){}})();`
 
 /** The inline `<head>` script: migrate a stored `auto`, then paint the
  *  stored theme, or the owner's `THEME` (mig#52) when nothing is
@@ -66,13 +66,13 @@ export function themeScript(
     storageKey: THEME_STORAGE_KEY,
     defaultPreference: themePreference(defaultMode),
     followSystem,
-  });
+  })
 }
 
 /** Whether the page at `url` renders without the ThemeToggle island:
  *  every `/embed` page. */
 export function pageHasNoThemeToggle(url: URL): boolean {
-  return url.pathname === "/embed" || url.pathname.startsWith("/embed/");
+  return url.pathname === "/embed" || url.pathname.startsWith("/embed/")
 }
 
 // mig#44 — /embed's forced theme (`?theme=dark|light`) is read straight
@@ -99,8 +99,8 @@ export function forcedThemeFor(
   url: URL,
   configured: ThemeParam,
 ): "light" | "dark" | null {
-  if (!url.pathname.startsWith("/embed")) return null;
-  const parsed = parseThemeParam(url.searchParams.get("theme"));
-  if (parsed !== "auto") return parsed;
-  return configured === "auto" ? null : configured;
+  if (!url.pathname.startsWith("/embed")) return null
+  const parsed = parseThemeParam(url.searchParams.get("theme"))
+  if (parsed !== "auto") return parsed
+  return configured === "auto" ? null : configured
 }

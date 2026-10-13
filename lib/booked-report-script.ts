@@ -30,7 +30,7 @@ export function bookedReportScript(bookingId: string): string {
   const key = JSON.stringify(`mig:booked:${bookingId}`).replaceAll(
     "<",
     "\\u003c",
-  );
+  )
   return `(function(){try{
 if(window.parent===window)return;
 var key=${key};
@@ -39,5 +39,5 @@ if(window.sessionStorage.getItem(key))return;
 window.sessionStorage.setItem(key,"1");
 }catch(_s){}
 window.parent.postMessage({type:"mig:booked"},"*");
-}catch(_e){}})();`;
+}catch(_e){}})();`
 }

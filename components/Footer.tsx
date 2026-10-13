@@ -16,26 +16,26 @@
 */
 
 interface FooterProps {
-  githubUrl: string;
-  hidden?: boolean;
+  githubUrl: string
+  hidden?: boolean
   /** Build identifier (semver recommended, e.g. "0.2.0"). The `v`
    *  prefix is added at render time so callers can pass either with
    *  or without it. Falls back to `"dev"` when unset. */
-  version?: string;
+  version?: string
 }
 
 function formatVersion(raw: string | undefined): string {
-  const v = (raw && raw.trim()) || "dev";
+  const v = (raw && raw.trim()) || "dev"
   // Strip a leading "v" so callers can pass either "0.2.0" or
   // "v0.2.0" — both should render as "v0.2.0".
-  return v.startsWith("v") ? v : `v${v}`;
+  return v.startsWith("v") ? v : `v${v}`
 }
 
 export function Footer(
   { githubUrl, hidden = false, version }: FooterProps,
 ) {
-  if (hidden) return null;
-  const v = formatVersion(version);
+  if (hidden) return null
+  const v = formatVersion(version)
   return (
     <footer class="mt-16 pt-6 pb-6 border-t border-line">
       <div class="mx-auto max-w-2xl px-4 sm:px-6 flex items-center justify-between text-xs text-ink-subtle">
@@ -56,5 +56,5 @@ export function Footer(
         </a>
       </div>
     </footer>
-  );
+  )
 }

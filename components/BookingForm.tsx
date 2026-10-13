@@ -27,38 +27,38 @@
   real <button type="submit"> with the same label.
 */
 
-import { Button } from "@spy4x/preact-ui/button";
-import { Field } from "@spy4x/preact-ui/field";
-import { honeypotField } from "@spy4x/preact-ui/honeypot";
-import { Input, Textarea } from "@spy4x/preact-ui/input";
-import BookingSubmit from "../islands/BookingSubmit.tsx";
-import { guestTzCaptureScript } from "../lib/guest-tz-script.ts";
+import { Button } from "@spy4x/preact-ui/button"
+import { Field } from "@spy4x/preact-ui/field"
+import { honeypotField } from "@spy4x/preact-ui/honeypot"
+import { Input, Textarea } from "@spy4x/preact-ui/input"
+import BookingSubmit from "../islands/BookingSubmit.tsx"
+import { guestTzCaptureScript } from "../lib/guest-tz-script.ts"
 
-const GUEST_TZ_INPUT_ID = "mig-embed-guest-tz";
+const GUEST_TZ_INPUT_ID = "mig-embed-guest-tz"
 
 interface BookingFormProps {
-  date: string;
-  slot: string;
-  dateLabel: string;
-  durationMin: number;
-  hostName: string;
+  date: string
+  slot: string
+  dateLabel: string
+  durationMin: number
+  hostName: string
   /** Server-rendered inline error from ?err= query param. */
-  error?: string | null;
+  error?: string | null
   /** Pre-computed confirm button label — "Confirm — Fri, 28 Aug,
    *  14:00". Computed by the route so it stays in lockstep with
    *  the rest of the host-local time presentation. */
-  confirmLabel: string;
+  confirmLabel: string
   /** "" for the standalone page (posts to /api/book, BookingSubmit island), "/embed"
    *  for the iframe variant (posts to /embed/book, plain button). Defaults
    *  to "". */
-  basePath?: string;
+  basePath?: string
   /** The visitor's IANA zone, already known from /embed's `tz` query
    *  param (mig#15) — pre-fills the hidden `guestTz` field so a
    *  booking is correct even if the confirm step's inline capture
    *  script (below) never runs. Ignored on the standalone page, which
    *  has no query-param zone and relies on the BookingSubmit island
    *  instead. */
-  guestTz?: string | null;
+  guestTz?: string | null
   /** /embed's forced theme, once known (mig#44) — carried as a hidden
    *  `theme` field so a redirect back to /embed after a failed
    *  submission (lib/book.ts's errRedirect) still knows which theme to
@@ -66,7 +66,7 @@ interface BookingFormProps {
    *  field — a request that never named a theme shouldn't gain one on
    *  its first failure. Ignored on the standalone page (no embed
    *  theme to carry). */
-  theme?: string | null;
+  theme?: string | null
 }
 
 export function BookingForm({
@@ -81,8 +81,8 @@ export function BookingForm({
   guestTz,
   theme,
 }: BookingFormProps) {
-  const embed = basePath !== "";
-  const action = embed ? `${basePath}/book` : "/api/book";
+  const embed = basePath !== ""
+  const action = embed ? `${basePath}/book` : "/api/book"
   return (
     <div class="rounded-2xl border border-line bg-surface overflow-hidden">
       <div class="px-5 py-4 border-b border-line">
@@ -180,7 +180,7 @@ export function BookingForm({
         </div>
       </form>
     </div>
-  );
+  )
 }
 
 // "Fri, 28 Aug, 14:00" — short enough to fit on one line in the
@@ -201,5 +201,5 @@ function PlainSubmitButton({ label }: { label: string }) {
     <Button type="submit" class="w-full sm:w-auto">
       {label}
     </Button>
-  );
+  )
 }

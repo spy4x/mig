@@ -1,48 +1,48 @@
-import { Button } from "@spy4x/preact-ui/button";
-import { Field } from "@spy4x/preact-ui/field";
-import { Textarea } from "@spy4x/preact-ui/input";
-import { define } from "../lib/utils.ts";
-import { NOTES_MAX_LENGTH } from "../lib/validators.ts";
-import { verifyOpaqueToken } from "@spy4x/platform/tokens";
-import { Header } from "../components/Header.tsx";
-import { Footer } from "../components/Footer.tsx";
-import { canonicalTimeZoneOr, isValidTimeZone } from "@spy4x/time/tz";
+import { Button } from "@spy4x/preact-ui/button"
+import { Field } from "@spy4x/preact-ui/field"
+import { Textarea } from "@spy4x/preact-ui/input"
+import { define } from "../lib/utils.ts"
+import { NOTES_MAX_LENGTH } from "../lib/validators.ts"
+import { verifyOpaqueToken } from "@spy4x/platform/tokens"
+import { Header } from "../components/Header.tsx"
+import { Footer } from "../components/Footer.tsx"
+import { canonicalTimeZoneOr, isValidTimeZone } from "@spy4x/time/tz"
 import {
   formatClockShortAt,
   formatHostClockIn,
   formatHostDateIn,
-} from "../lib/clock.ts";
-import { IconInformationCircle } from "@spy4x/preact-icons";
+} from "../lib/clock.ts"
+import { IconInformationCircle } from "@spy4x/preact-icons"
 
 interface CancelData {
-  state: "ok" | "missing" | "invalid" | "not-found" | "already-cancelled";
+  state: "ok" | "missing" | "invalid" | "not-found" | "already-cancelled"
   booking:
     | {
-      id: string;
-      date: string;
-      time: string;
-      hostTz: string;
-      guestTz: string | null;
-      guestName: string;
+      id: string
+      date: string
+      time: string
+      hostTz: string
+      guestTz: string | null
+      guestName: string
     }
-    | null;
-  token: string | null;
-  cancelledAt: string | null;
+    | null
+  token: string | null
+  cancelledAt: string | null
   // Needed to format `cancelledAt` in the right zone for the
   // "already-cancelled" state, which otherwise carries no booking
   // (mig#15 round 2 — this used to fall back to
   // `Date.toLocaleString()`, which reads the *server process's* zone,
   // not the visitor's or the host's).
-  hostTz: string | null;
-  guestTz: string | null;
+  hostTz: string | null
+  guestTz: string | null
 }
 
 export const handler = define.handlers({
   async GET(ctx) {
-    const cfg = ctx.state.config;
-    const url = new URL(ctx.req.url);
-    const id = url.searchParams.get("id") ?? "";
-    const token = url.searchParams.get("token") ?? "";
+    const cfg = ctx.state.config
+    const url = new URL(ctx.req.url)
+    const id = url.searchParams.get("id") ?? ""
+    const token = url.searchParams.get("token") ?? ""
 
     if (!id || !token) {
       return {
@@ -54,10 +54,10 @@ export const handler = define.handlers({
           hostTz: null,
           guestTz: null,
         } satisfies CancelData,
-      };
+      }
     }
 
-    const booking = ctx.state.bookings.get(id);
+    const booking = ctx.state.bookings.get(id)
     if (!booking) {
       return {
         data: {
@@ -68,14 +68,14 @@ export const handler = define.handlers({
           hostTz: null,
           guestTz: null,
         } satisfies CancelData,
-      };
+      }
     }
 
     const ok = await verifyOpaqueToken(
       token,
       booking.cancelTokenHash,
       cfg.cancelSecret,
-    );
+    )
     if (!ok) {
       return {
         data: {
@@ -86,7 +86,7 @@ export const handler = define.handlers({
           hostTz: null,
           guestTz: null,
         } satisfies CancelData,
-      };
+      }
     }
 
     if (booking.status === "cancelled") {
@@ -99,7 +99,7 @@ export const handler = define.handlers({
           hostTz: booking.hostTz,
           guestTz: booking.guestTz ?? null,
         } satisfies CancelData,
-      };
+      }
     }
 
     return {
@@ -118,31 +118,31 @@ export const handler = define.handlers({
         hostTz: booking.hostTz,
         guestTz: booking.guestTz ?? null,
       } satisfies CancelData,
-    };
+    }
   },
-});
+})
 
 export default define.page<typeof handler>(function Cancel({ data, state }) {
-  const cfg = state.config;
+  const cfg = state.config
   const errStates: Array<typeof data.state> = [
     "missing",
     "invalid",
     "not-found",
     "already-cancelled",
-  ];
+  ]
 
   if (errStates.includes(data.state)) {
     // "Already cancelled" needs the cancellation instant formatted in
     // the visitor's zone when known, else the host's — never
     // `Date.toLocaleString()`, which reads the *server process's own*
     // zone (mig#15 round 2), unrelated to either party's.
-    const cancelKnownGuestTz = !!data.guestTz && isValidTimeZone(data.guestTz);
+    const cancelKnownGuestTz = !!data.guestTz && isValidTimeZone(data.guestTz)
     const cancelDisplayTz = data.hostTz
       ? canonicalTimeZoneOr(data.guestTz ?? undefined, data.hostTz)
-      : null;
+      : null
     const cancelledAtLabel = data.cancelledAt && cancelDisplayTz
       ? formatClockShortAt(new Date(data.cancelledAt), cancelDisplayTz)
-      : null;
+      : null
 
     const messages: Record<typeof data.state, { title: string; body: string }> =
       {
@@ -166,10 +166,10 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
             ? `This booking was cancelled on ${cancelledAtLabel}.`
             : "This booking was cancelled on an earlier date.",
         },
-      };
-    const msg = messages[data.state];
+      }
+    const msg = messages[data.state]
     const showCancelTzNote = data.state === "already-cancelled" &&
-      cancelledAtLabel && !cancelKnownGuestTz;
+      cancelledAtLabel && !cancelKnownGuestTz
     return (
       <div class="min-h-dvh flex flex-col">
         <Header compact defaultTheme={cfg.theme} />
@@ -207,21 +207,21 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
           version={cfg.version}
         />
       </div>
-    );
+    )
   }
 
-  const b = data.booking!;
-  const token = data.token!;
+  const b = data.booking!
+  const token = data.token!
   // Render the booking time in the visitor's TZ when we captured one
   // at submit time — same convention as the /confirmed page. Falls
   // back to host TZ for older bookings without guestTz, or for
   // invalid values. Both helpers need `b.hostTz` (the zone `b.date`/
   // `b.time` are actually stored in) as well as `displayTz` — see
   // lib/clock.ts, mig#15.
-  const knownGuestTz = !!b.guestTz && isValidTimeZone(b.guestTz);
-  const displayTz = canonicalTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
-  const whenDate = formatHostDateIn(b.date, b.time, b.hostTz, displayTz);
-  const whenTime = formatHostClockIn(b.date, b.time, b.hostTz, displayTz);
+  const knownGuestTz = !!b.guestTz && isValidTimeZone(b.guestTz)
+  const displayTz = canonicalTimeZoneOr(b.guestTz ?? undefined, b.hostTz)
+  const whenDate = formatHostDateIn(b.date, b.time, b.hostTz, displayTz)
+  const whenTime = formatHostClockIn(b.date, b.time, b.hostTz, displayTz)
 
   return (
     <div class="min-h-dvh flex flex-col">
@@ -282,5 +282,5 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
         version={cfg.version}
       />
     </div>
-  );
-});
+  )
+})

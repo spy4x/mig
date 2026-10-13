@@ -13,24 +13,24 @@
       they use the DateCard's Change button.
 */
 
-import { IconCalendar } from "@spy4x/preact-icons";
+import { IconCalendar } from "@spy4x/preact-icons"
 
 interface SummaryBarProps {
   /** "none"  → bar is hidden.
    *  "date"  → date picked, no slot yet. Pill shows the date.
    *  "slot"  → date + slot picked, form is on screen. Bar stays out
    *            of the way — the in-page submit button is the CTA. */
-  state: "none" | "date" | "slot";
-  date: string | null;
-  dateLabel: string | null;
-  slot: string | null;
+  state: "none" | "date" | "slot"
+  date: string | null
+  dateLabel: string | null
+  slot: string | null
 }
 
 export function SummaryBar(props: SummaryBarProps) {
-  const { state, date, dateLabel, slot } = props;
+  const { state, date, dateLabel, slot } = props
   // Hide entirely on step 3 — the in-page form already provides the
   // primary CTA and a floating bar here would just eat screen.
-  if (state !== "date") return null;
+  if (state !== "date") return null
 
   return (
     <div class="fixed inset-x-0 bottom-0 z-30 md:hidden pointer-events-none">
@@ -51,5 +51,5 @@ export function SummaryBar(props: SummaryBarProps) {
         </div>
       </div>
     </div>
-  );
+  )
 }

@@ -1,10 +1,10 @@
 // POST /api/cancel — cancel a booking. Form fields: id, token, reason.
 
-import { define } from "../../lib/utils.ts";
-import { verifyOpaqueToken } from "@spy4x/platform/tokens";
-import { sendCancellationEmails } from "../../lib/email.ts";
-import { notifyBookingCancelled } from "../../lib/notify.ts";
-import { NOTES_MAX_LENGTH } from "../../lib/validators.ts";
+import { define } from "../../lib/utils.ts"
+import { verifyOpaqueToken } from "@spy4x/platform/tokens"
+import { sendCancellationEmails } from "../../lib/email.ts"
+import { notifyBookingCancelled } from "../../lib/notify.ts"
+import { NOTES_MAX_LENGTH } from "../../lib/validators.ts"
 
 /** The reason as it is stored and mailed to the owner: trimmed and cut
  *  to the length the booking form's notes may have. The form's own
@@ -13,73 +13,73 @@ import { NOTES_MAX_LENGTH } from "../../lib/validators.ts";
  *  (mig#108). A cut never leaves half of a surrogate pair behind. */
 function boundedReason(raw: string): string {
   return raw.trim().slice(0, NOTES_MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, "")
-    .trimEnd();
+    .trimEnd()
 }
 
 export const handler = define.handlers({
   async POST(ctx) {
-    const cfg = ctx.state.config;
-    const form = await ctx.req.formData();
-    const id = String(form.get("id") ?? "");
-    const token = String(form.get("token") ?? "");
-    const reason = boundedReason(String(form.get("reason") ?? ""));
+    const cfg = ctx.state.config
+    const form = await ctx.req.formData()
+    const id = String(form.get("id") ?? "")
+    const token = String(form.get("token") ?? "")
+    const reason = boundedReason(String(form.get("reason") ?? ""))
 
     if (!id || !token) {
       return Response.redirect(
         new URL("/cancel?err=missing", cfg.publicUrl).toString(),
         303,
-      );
+      )
     }
 
-    const booking = ctx.state.bookings.get(id);
+    const booking = ctx.state.bookings.get(id)
     if (!booking) {
       return Response.redirect(
         new URL(`/cancel?id=${id}&token=${token}`, cfg.publicUrl).toString(),
         303,
-      );
+      )
     }
     const tokenOk = await verifyOpaqueToken(
       token,
       booking.cancelTokenHash,
       cfg.cancelSecret,
-    );
+    )
     if (!tokenOk || booking.status === "cancelled") {
       return Response.redirect(
         new URL(`/cancel?id=${id}&token=${token}`, cfg.publicUrl).toString(),
         303,
-      );
+      )
     }
 
     // Determine who is cancelling. The cancel URL is the same for owner
     // and guest — the recipient of the cancellation email reveals it.
     // Owner always receives the email; guest only receives if they cancel.
-    const cancelledBy: "owner" | "guest" = "guest"; // best guess; refined below
-    const cancelledAt = new Date().toISOString();
+    const cancelledBy: "owner" | "guest" = "guest" // best guess; refined below
+    const cancelledAt = new Date().toISOString()
 
     try {
       await ctx.state.bookings.mutate((draft) => {
-        const b = draft.find((x) => x.id === id);
-        if (!b) return;
-        b.status = "cancelled";
-        b.cancelledAt = cancelledAt;
-        b.cancelledBy = cancelledBy;
-        b.cancelledReason = reason || undefined;
-      });
+        const b = draft.find((x) => x.id === id)
+        if (!b) return
+        b.status = "cancelled"
+        b.cancelledAt = cancelledAt
+        b.cancelledBy = cancelledBy
+        b.cancelledReason = reason || undefined
+      })
     } catch (e) {
-      console.error("mig: cancel failed:", e);
+      console.error("mig: cancel failed:", e)
       return Response.redirect(
         new URL(`/cancel?id=${id}&token=${token}`, cfg.publicUrl).toString(),
         303,
-      );
+      )
     }
 
     // Re-fetch to get the freshly-mutated record
-    const updated = ctx.state.bookings.get(id);
+    const updated = ctx.state.bookings.get(id)
     if (!updated) {
       return Response.redirect(
         new URL("/?err=cancel", cfg.publicUrl).toString(),
         303,
-      );
+      )
     }
 
     const sent = await sendCancellationEmails(
@@ -87,18 +87,18 @@ export const handler = define.handlers({
       updated,
       cancelledBy,
       reason,
-    );
+    )
     if (!sent.ok) {
-      console.error("mig: cancellation email failed:", sent.error);
+      console.error("mig: cancellation email failed:", sent.error)
     }
 
     // NTFY push for the cancellation (subject to NTFY_MODE).
-    await notifyBookingCancelled(cfg, updated, cancelledBy, reason);
+    await notifyBookingCancelled(cfg, updated, cancelledBy, reason)
 
     return Response.redirect(
       new URL(`/confirmed?id=${id}&token=${token}&cancelled=1`, cfg.publicUrl)
         .toString(),
       303,
-    );
+    )
   },
-});
+})

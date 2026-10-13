@@ -9,7 +9,7 @@
 // developer's `.env` happens to set. The script itself is still referenced
 // by its real (absolute) path, since the child's cwd no longer contains it.
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert"
 
 const VALID_ENV: Record<string, string> = {
   HOST_NAME: "Jane Doe",
@@ -26,13 +26,13 @@ const VALID_ENV: Record<string, string> = {
   // Not a real secret — a fixed fixture string, long enough to satisfy the
   // >=32-char constraint under test.
   CANCEL_SECRET: "test-cancel-secret-not-real-00000",
-};
+}
 
-const CONFIG_SCRIPT_PATH = new URL("./config.ts", import.meta.url);
+const CONFIG_SCRIPT_PATH = new URL("./config.ts", import.meta.url)
 // The child's cwd is a temp dir with no deno.json, so bare specifiers
 // like "arktype" (mapped in the repo's deno.json) would fail to resolve
 // without pointing it at the real config explicitly.
-const DENO_CONFIG_PATH = new URL("../deno.json", import.meta.url);
+const DENO_CONFIG_PATH = new URL("../deno.json", import.meta.url)
 
 /** Runs `fn` with a fresh, empty temp directory as `cwd`-equivalent
  *  isolation for a child `Deno.Command`, removing the directory
@@ -40,11 +40,11 @@ const DENO_CONFIG_PATH = new URL("../deno.json", import.meta.url);
 async function withIsolatedCwd<T>(
   fn: (cwd: string) => Promise<T>,
 ): Promise<T> {
-  const dir = await Deno.makeTempDir();
+  const dir = await Deno.makeTempDir()
   try {
-    return await fn(dir);
+    return await fn(dir)
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await Deno.remove(dir, { recursive: true })
   }
 }
 
@@ -66,10 +66,10 @@ async function runConfig(
       clearEnv: true,
       stdout: "null",
       stderr: "piped",
-    });
-    const { code, stderr } = await command.output();
-    return { code, stderr: new TextDecoder().decode(stderr) };
-  });
+    })
+    const { code, stderr } = await command.output()
+    return { code, stderr: new TextDecoder().decode(stderr) }
+  })
 }
 
 /** Boots config.ts in a child process and prints one field of the
@@ -101,62 +101,62 @@ async function runConfigField(
       clearEnv: true,
       stdout: "piped",
       stderr: "piped",
-    });
-    const { code, stdout, stderr } = await command.output();
+    })
+    const { code, stdout, stderr } = await command.output()
     if (code !== 0) {
       throw new Error(
         `child exited ${code}: ${new TextDecoder().decode(stderr)}`,
-      );
+      )
     }
-    return JSON.parse(new TextDecoder().decode(stdout));
-  });
+    return JSON.parse(new TextDecoder().decode(stdout))
+  })
 }
 
 Deno.test("config: boots with a fully valid env", async () => {
-  const { code, stderr } = await runConfig(VALID_ENV);
-  assertEquals(code, 0, stderr);
-});
+  const { code, stderr } = await runConfig(VALID_ENV)
+  assertEquals(code, 0, stderr)
+})
 
 Deno.test("config: exits 1 naming a non-numeric SLOT_DURATION_MIN", async () => {
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     SLOT_DURATION_MIN: "not-a-number",
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "SLOT_DURATION_MIN");
-});
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "SLOT_DURATION_MIN")
+})
 
 Deno.test("config: exits 1 naming a missing required var", async () => {
-  const env = { ...VALID_ENV };
-  delete env.HOST_EMAIL;
-  const { code, stderr } = await runConfig(env);
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "HOST_EMAIL");
-});
+  const env = { ...VALID_ENV }
+  delete env.HOST_EMAIL
+  const { code, stderr } = await runConfig(env)
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "HOST_EMAIL")
+})
 
 Deno.test("config: exits 1 naming a malformed HOST_EMAIL", async () => {
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     HOST_EMAIL: "not-an-email",
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "HOST_EMAIL");
-});
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "HOST_EMAIL")
+})
 
 Deno.test("config: exits 1 naming a too-short CANCEL_SECRET", async () => {
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     CANCEL_SECRET: "short",
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "CANCEL_SECRET");
-});
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "CANCEL_SECRET")
+})
 
 Deno.test("config: exits 1 naming an invalid THEME", async () => {
-  const { code, stderr } = await runConfig({ ...VALID_ENV, THEME: "blue" });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "THEME");
-});
+  const { code, stderr } = await runConfig({ ...VALID_ENV, THEME: "blue" })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "THEME")
+})
 
 // HOST_EMAIL goes through the same `emailAddress` rule as
 // BookingSchema's email field — pin the same boundary here too.
@@ -164,17 +164,17 @@ Deno.test("config: accepts an apostrophe in HOST_EMAIL's local part", async () =
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     HOST_EMAIL: "o'brien@example.com",
-  });
-  assertEquals(code, 0, stderr);
-});
+  })
+  assertEquals(code, 0, stderr)
+})
 
 Deno.test("config: accepts a percent sign in HOST_EMAIL's local part", async () => {
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     HOST_EMAIL: "a%b@example.com",
-  });
-  assertEquals(code, 0, stderr);
-});
+  })
+  assertEquals(code, 0, stderr)
+})
 
 for (
   const bad of [
@@ -186,37 +186,37 @@ for (
   ]
 ) {
   Deno.test(`config: rejects HOST_EMAIL=${bad}`, async () => {
-    const { code, stderr } = await runConfig({ ...VALID_ENV, HOST_EMAIL: bad });
-    assertEquals(code, 1);
-    assertStringIncludes(stderr, "HOST_EMAIL");
-  });
+    const { code, stderr } = await runConfig({ ...VALID_ENV, HOST_EMAIL: bad })
+    assertEquals(code, 1)
+    assertStringIncludes(stderr, "HOST_EMAIL")
+  })
 }
 
 Deno.test("config: MIN_NOTICE_HOURS defaults to 6 when unset", async () => {
-  const env = { ...VALID_ENV };
-  delete env.MIN_NOTICE_HOURS;
-  const value = await runConfigField(env, "minNoticeHours");
-  assertEquals(value, 6);
-});
+  const env = { ...VALID_ENV }
+  delete env.MIN_NOTICE_HOURS
+  const value = await runConfigField(env, "minNoticeHours")
+  assertEquals(value, 6)
+})
 
 // mig#3 review round 1: arktype's default messages echo the actual bad
 // value ("... (was \"<value>\")"), which for a type/pattern mismatch is
 // the raw env string itself — a malformed MEETING_URL carrying a
 // passcode-looking query param must not reach the container's logs.
 Deno.test("config: a malformed MEETING_URL is named but its value is not echoed to stderr", async () => {
-  const secretLooking = "not a url ?token=SUPER-SECRET-PASSCODE";
+  const secretLooking = "not a url ?token=SUPER-SECRET-PASSCODE"
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     MEETING_URL: secretLooking,
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "MEETING_URL");
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "MEETING_URL")
   assertEquals(
     stderr.includes("SUPER-SECRET-PASSCODE"),
     false,
     `stderr echoed the bad value:\n${stderr}`,
-  );
-});
+  )
+})
 
 // arktype reports two or more rules failing on the same field
 // (SLOT_DURATION_MIN "500.5" is both non-integer and over 480) as a
@@ -227,27 +227,27 @@ Deno.test("config: a value failing two rules at once names the field with both r
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     SLOT_DURATION_MIN: "500.5",
-  });
-  assertEquals(code, 1);
+  })
+  assertEquals(code, 1)
   assertStringIncludes(
     stderr,
     "  SLOT_DURATION_MIN: must be an integer and at most 480",
-  );
+  )
   assertEquals(
     stderr.includes("500.5"),
     false,
     `stderr echoed the bad value:\n${stderr}`,
-  );
-});
+  )
+})
 
 Deno.test("config: SLOT_DURATION_MIN accepts 480, rejects 481", async () => {
-  const at480 = await runConfig({ ...VALID_ENV, SLOT_DURATION_MIN: "480" });
-  assertEquals(at480.code, 0, at480.stderr);
+  const at480 = await runConfig({ ...VALID_ENV, SLOT_DURATION_MIN: "480" })
+  assertEquals(at480.code, 0, at480.stderr)
 
-  const at481 = await runConfig({ ...VALID_ENV, SLOT_DURATION_MIN: "481" });
-  assertEquals(at481.code, 1);
-  assertStringIncludes(at481.stderr, "SLOT_DURATION_MIN");
-});
+  const at481 = await runConfig({ ...VALID_ENV, SLOT_DURATION_MIN: "481" })
+  assertEquals(at481.code, 1)
+  assertStringIncludes(at481.stderr, "SLOT_DURATION_MIN")
+})
 
 // mig#73: @spy4x/platform/tokens needs 32 characters, so a shorter
 // secret must stop startup instead of failing the first booking.
@@ -255,39 +255,39 @@ Deno.test("config: CANCEL_SECRET accepts 32 chars, rejects 31", async () => {
   const at32 = await runConfig({
     ...VALID_ENV,
     CANCEL_SECRET: "a".repeat(32),
-  });
-  assertEquals(at32.code, 0, at32.stderr);
+  })
+  assertEquals(at32.code, 0, at32.stderr)
 
   const at31 = await runConfig({
     ...VALID_ENV,
     CANCEL_SECRET: "a".repeat(31),
-  });
-  assertEquals(at31.code, 1);
+  })
+  assertEquals(at31.code, 1)
   assertStringIncludes(
     at31.stderr,
     "CANCEL_SECRET: must be at least 32 printable ASCII characters",
-  );
-});
+  )
+})
 
 Deno.test("config: CANCEL_SECRET padded to 32 with spaces is rejected", async () => {
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     CANCEL_SECRET: ` ${"a".repeat(30)} `,
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "CANCEL_SECRET");
-});
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "CANCEL_SECRET")
+})
 
 Deno.test("config: CANCEL_SECRET with a non-ASCII character is rejected, not echoed", async () => {
-  const secret = `${"a".repeat(32)}é`;
+  const secret = `${"a".repeat(32)}é`
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     CANCEL_SECRET: secret,
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "CANCEL_SECRET");
-  assertEquals(stderr.includes(secret), false, stderr);
-});
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "CANCEL_SECRET")
+  assertEquals(stderr.includes(secret), false, stderr)
+})
 
 Deno.test("config: SMTP_FROM with a CR or LF in the display name stops startup", async () => {
   for (
@@ -296,14 +296,14 @@ Deno.test("config: SMTP_FROM with a CR or LF in the display name stops startup",
       "Book\nBcc: x@example.com <book@example.com>",
     ]
   ) {
-    const { code, stderr } = await runConfig({ ...VALID_ENV, SMTP_FROM: from });
-    assertEquals(code, 1, JSON.stringify(from));
+    const { code, stderr } = await runConfig({ ...VALID_ENV, SMTP_FROM: from })
+    assertEquals(code, 1, JSON.stringify(from))
     assertStringIncludes(
       stderr,
       "SMTP_FROM: must be an address or Name <address>",
-    );
+    )
   }
-});
+})
 
 Deno.test("config: SMTP_FROM as a bare address or Name <address> is accepted", async () => {
   for (
@@ -313,83 +313,83 @@ Deno.test("config: SMTP_FROM as a bare address or Name <address> is accepted", a
       '"Jane, Bookings" <book@example.com>',
     ]
   ) {
-    const { code, stderr } = await runConfig({ ...VALID_ENV, SMTP_FROM: from });
-    assertEquals(code, 0, `${from}: ${stderr}`);
+    const { code, stderr } = await runConfig({ ...VALID_ENV, SMTP_FROM: from })
+    assertEquals(code, 0, `${from}: ${stderr}`)
   }
-});
+})
 
 // Pins the PORT default at 8080, not 8081.
 Deno.test("config: PORT defaults to 8080 when unset", async () => {
-  const env = { ...VALID_ENV };
-  delete env.PORT;
-  const value = await runConfigField(env, "port");
-  assertEquals(value, 8080);
-});
+  const env = { ...VALID_ENV }
+  delete env.PORT
+  const value = await runConfigField(env, "port")
+  assertEquals(value, 8080)
+})
 
 // mig#36: a startup error must never leak the offending value, even when
 // the value itself contains text shaped like the strip patterns a prior
 // approach used (a line separator, or the literal text a two-rule failure
 // message uses). Each marker below is unique and must never reach stderr.
 Deno.test("config: a MEETING_URL with a line separator is named but not echoed", async () => {
-  const marker = "LINESEP-MARKER-7f3a";
+  const marker = "LINESEP-MARKER-7f3a"
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     MEETING_URL: `not a url ${marker}`,
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "MEETING_URL");
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "MEETING_URL")
   assertEquals(
     stderr.includes(marker),
     false,
     `stderr echoed the bad value:\n${stderr}`,
-  );
-});
+  )
+})
 
 Deno.test("config: a MEETING_URL containing ') must be (' is named but not echoed", async () => {
-  const marker = "PARENMARKER-9c21";
+  const marker = "PARENMARKER-9c21"
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     MEETING_URL: `not a url ${marker}) must be (`,
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "MEETING_URL");
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "MEETING_URL")
   assertEquals(
     stderr.includes(marker),
     false,
     `stderr echoed the bad value:\n${stderr}`,
-  );
-});
+  )
+})
 
 Deno.test("config: a missing HOST_NAME is reported as 'is missing'", async () => {
-  const env = { ...VALID_ENV };
-  delete env.HOST_NAME;
-  const { code, stderr } = await runConfig(env);
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "  HOST_NAME: is missing");
-});
+  const env = { ...VALID_ENV }
+  delete env.HOST_NAME
+  const { code, stderr } = await runConfig(env)
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "  HOST_NAME: is missing")
+})
 
 Deno.test("config: a THEME value with a unique marker is named but not echoed", async () => {
-  const marker = "THEME-MARKER-6ax1";
+  const marker = "THEME-MARKER-6ax1"
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     THEME: `bogus-${marker}`,
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "THEME");
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "THEME")
   assertEquals(
     stderr.includes(marker),
     false,
     `stderr echoed the bad value:\n${stderr}`,
-  );
-});
+  )
+})
 
 Deno.test("config: MIG_VERSION is trimmed", async () => {
   const value = await runConfigField(
     { ...VALID_ENV, MIG_VERSION: "  1.2.3  " },
     "version",
-  );
-  assertEquals(value, "1.2.3");
-});
+  )
+  assertEquals(value, "1.2.3")
+})
 
 // mig#35: HIDE_BRANDING was parsed with Boolean(raw), so "false" and "0"
 // (and any other non-empty string) turned into true. Each accepted
@@ -402,9 +402,9 @@ for (
     const value = await runConfigField(
       { ...VALID_ENV, HIDE_BRANDING: raw },
       "hideBranding",
-    );
-    assertEquals(value, false);
-  });
+    )
+    assertEquals(value, false)
+  })
 }
 
 for (
@@ -414,33 +414,33 @@ for (
     const value = await runConfigField(
       { ...VALID_ENV, HIDE_BRANDING: raw },
       "hideBranding",
-    );
-    assertEquals(value, true);
-  });
+    )
+    assertEquals(value, true)
+  })
 }
 
 Deno.test("config: HIDE_BRANDING empty string shows the branding", async () => {
   const value = await runConfigField(
     { ...VALID_ENV, HIDE_BRANDING: "" },
     "hideBranding",
-  );
-  assertEquals(value, false);
-});
+  )
+  assertEquals(value, false)
+})
 
 Deno.test("config: HIDE_BRANDING whitespace-only shows the branding", async () => {
   const value = await runConfigField(
     { ...VALID_ENV, HIDE_BRANDING: "   " },
     "hideBranding",
-  );
-  assertEquals(value, false);
-});
+  )
+  assertEquals(value, false)
+})
 
 Deno.test("config: HIDE_BRANDING absent shows the branding", async () => {
-  const env = { ...VALID_ENV };
-  delete env.HIDE_BRANDING;
-  const value = await runConfigField(env, "hideBranding");
-  assertEquals(value, false);
-});
+  const env = { ...VALID_ENV }
+  delete env.HIDE_BRANDING
+  const value = await runConfigField(env, "hideBranding")
+  assertEquals(value, false)
+})
 
 // Each raw value here doubles as its own marker: it must be rejected
 // verbatim (not just "some invalid string"), so the test can't swap in an
@@ -452,13 +452,13 @@ Deno.test("config: HIDE_BRANDING absent shows the branding", async () => {
 // value as a whole token (not preceded/followed by an identifier
 // character) instead.
 function assertRawValueNotLeaked(stderr: string, raw: string): void {
-  const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`(?<![A-Za-z0-9_])${escaped}(?![A-Za-z0-9_])`);
+  const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const pattern = new RegExp(`(?<![A-Za-z0-9_])${escaped}(?![A-Za-z0-9_])`)
   assertEquals(
     pattern.test(stderr),
     false,
     `stderr echoed the bad value:\n${stderr}`,
-  );
+  )
 }
 
 // mig#42: the fixed message below (lib/config-issue.ts's FIXED_MESSAGES)
@@ -475,11 +475,11 @@ for (const raw of ["on", "off", "2", "-1", "truee", "y"]) {
     const { code, stderr } = await runConfig({
       ...VALID_ENV,
       HIDE_BRANDING: raw,
-    });
-    assertEquals(code, 1);
-    assertStringIncludes(stderr, "HIDE_BRANDING");
-    assertRawValueNotLeaked(stderr, raw);
-  });
+    })
+    assertEquals(code, 1)
+    assertStringIncludes(stderr, "HIDE_BRANDING")
+    assertRawValueNotLeaked(stderr, raw)
+  })
 }
 
 // mig#42: HIDE_BRANDING's startup error used to just say "has an invalid
@@ -488,14 +488,14 @@ Deno.test("config: HIDE_BRANDING=on prints the accepted values, not just 'invali
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     HIDE_BRANDING: "on",
-  });
-  assertEquals(code, 1);
+  })
+  assertEquals(code, 1)
   assertStringIncludes(
     stderr,
     "  HIDE_BRANDING: must be true, false, 1, 0, yes, no or empty",
-  );
-  assertRawValueNotLeaked(stderr, "on");
-});
+  )
+  assertRawValueNotLeaked(stderr, "on")
+})
 
 // mig#38: HOST_TZ, WEEKLY_AVAILABILITY and BLOCKED_DATES bypass
 // ConfigSchema (they're checked by hand after arktype passes, see
@@ -505,15 +505,15 @@ Deno.test("config: HIDE_BRANDING=on prints the accepted values, not just 'invali
 // position of the bad entry, must.
 
 Deno.test("config: an invalid HOST_TZ is named but not echoed", async () => {
-  const marker = "TZ-MARKER-4k9d";
+  const marker = "TZ-MARKER-4k9d"
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     HOST_TZ: `Not/A/Zone-${marker}`,
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "HOST_TZ");
-  assertRawValueNotLeaked(stderr, marker);
-});
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "HOST_TZ")
+  assertRawValueNotLeaked(stderr, marker)
+})
 
 // mig#38 round 2: only a BLOCKED_DATES *range* runs Intl-backed tz math
 // against HOST_TZ (via parseBlockedDates -> expandDateRange -> addDays) —
@@ -524,21 +524,21 @@ Deno.test("config: an invalid HOST_TZ is named but not echoed", async () => {
 // specified: <the HOST_TZ value>` — the timezone's own value, leaked
 // through a variable it doesn't even belong to.
 Deno.test("config: an invalid HOST_TZ is reported as HOST_TZ, not BLOCKED_DATES, with a blocked-date range set", async () => {
-  const marker = "TZ-ORDER-MARKER-7q2w";
+  const marker = "TZ-ORDER-MARKER-7q2w"
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     HOST_TZ: `Not/A/Real/Zone-${marker}`,
     BLOCKED_DATES: "2026-12-24..2026-12-26",
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "HOST_TZ");
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "HOST_TZ")
   assertEquals(
     stderr.includes("BLOCKED_DATES"),
     false,
     `stderr blamed BLOCKED_DATES instead of HOST_TZ:\n${stderr}`,
-  );
-  assertRawValueNotLeaked(stderr, marker);
-});
+  )
+  assertRawValueNotLeaked(stderr, marker)
+})
 
 // Each WEEKLY_AVAILABILITY case below is built to reach its own message,
 // not the generic "invalid, expected e.g." fallback every case used to
@@ -551,53 +551,53 @@ Deno.test("config: a WEEKLY_AVAILABILITY unknown day (inside a range) is named b
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     WEEKLY_AVAILABILITY: "MON 09:00-17:00, MON-QZX 09:00-17:00",
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "WEEKLY_AVAILABILITY: entry 2: unknown day");
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "WEEKLY_AVAILABILITY: entry 2: unknown day")
   assertEquals(
     stderr.includes("QZX"),
     false,
     `stderr echoed the bad day code:\n${stderr}`,
-  );
-});
+  )
+})
 
 Deno.test("config: a WEEKLY_AVAILABILITY time out of range is named by position, value-free", async () => {
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     WEEKLY_AVAILABILITY: "MON 09:00-17:00, TUE 25:00-26:00",
-  });
-  assertEquals(code, 1);
+  })
+  assertEquals(code, 1)
   assertStringIncludes(
     stderr,
     "WEEKLY_AVAILABILITY: entry 2: time out of range (hour 0-24, minute 0-59)",
-  );
-  assertEquals(stderr.includes("25:00"), false, `stderr echoed:\n${stderr}`);
-});
+  )
+  assertEquals(stderr.includes("25:00"), false, `stderr echoed:\n${stderr}`)
+})
 
 Deno.test("config: a WEEKLY_AVAILABILITY 24:00 with minutes is named by position, value-free", async () => {
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     WEEKLY_AVAILABILITY: "MON 09:00-17:00, TUE 09:00-24:30",
-  });
-  assertEquals(code, 1);
+  })
+  assertEquals(code, 1)
   assertStringIncludes(
     stderr,
     "WEEKLY_AVAILABILITY: entry 2: 24:00 must be exact, no other minutes allowed",
-  );
-  assertEquals(stderr.includes("24:30"), false, `stderr echoed:\n${stderr}`);
-});
+  )
+  assertEquals(stderr.includes("24:30"), false, `stderr echoed:\n${stderr}`)
+})
 
 Deno.test("config: a WEEKLY_AVAILABILITY backwards day range is named by position, value-free", async () => {
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     WEEKLY_AVAILABILITY: "MON 09:00-17:00, FRI-MON 09:00-17:00",
-  });
-  assertEquals(code, 1);
+  })
+  assertEquals(code, 1)
   assertStringIncludes(
     stderr,
     "WEEKLY_AVAILABILITY: entry 2: day range goes backwards",
-  );
-});
+  )
+})
 
 // Pins the mig#38 round 2 wording ("must be after", not "is before") and
 // the equal-times boundary from the issue's own example (09:00-09:00).
@@ -605,13 +605,13 @@ Deno.test("config: a WEEKLY_AVAILABILITY end time not after start is named by po
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     WEEKLY_AVAILABILITY: "MON 09:00-17:00, TUE 09:00-09:00",
-  });
-  assertEquals(code, 1);
+  })
+  assertEquals(code, 1)
   assertStringIncludes(
     stderr,
     "WEEKLY_AVAILABILITY: entry 2: end time must be after start time",
-  );
-});
+  )
+})
 
 for (
   const [label, value] of [
@@ -623,16 +623,16 @@ for (
     const { code, stderr } = await runConfig({
       ...VALID_ENV,
       BLOCKED_DATES: value,
-    });
-    assertEquals(code, 1);
-    assertStringIncludes(stderr, "BLOCKED_DATES");
-    assertStringIncludes(stderr, "entry 2");
+    })
+    assertEquals(code, 1)
+    assertStringIncludes(stderr, "BLOCKED_DATES")
+    assertStringIncludes(stderr, "entry 2")
     assertEquals(
       /MARKER-[a-f]\d/.test(stderr),
       false,
       `stderr echoed the bad value:\n${stderr}`,
-    );
-  });
+    )
+  })
 }
 
 // Reaches parseSingleDate's own message (called from inside a ".." range)
@@ -640,52 +640,52 @@ for (
 // a distinct code path, unlike the previous round's tests which (despite
 // their different labels) all funneled into the same message.
 Deno.test("config: a BLOCKED_DATES malformed date inside a range is named by position, not echoed", async () => {
-  const marker = "MARKER-QDATE-g7";
+  const marker = "MARKER-QDATE-g7"
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     BLOCKED_DATES: `2026-12-24,2026-12-24..${marker},2026-12-27`,
-  });
-  assertEquals(code, 1);
+  })
+  assertEquals(code, 1)
   assertStringIncludes(
     stderr,
     "BLOCKED_DATES: entry 2: invalid, expected YYYY-MM-DD or DD.MM.YYYY",
-  );
-  assertRawValueNotLeaked(stderr, marker);
-});
+  )
+  assertRawValueNotLeaked(stderr, marker)
+})
 
 // mig#59: TRUSTED_PROXY_HEADER names the one header the rate limiter
 // trusts. Unset or empty trusts none; anything else stops startup rather
 // than silently trusting nothing (or everything).
 Deno.test("config: TRUSTED_PROXY_HEADER unset trusts no header", async () => {
-  const value = await runConfigField(VALID_ENV, "trustedProxyHeader ?? null");
-  assertEquals(value, null);
-});
+  const value = await runConfigField(VALID_ENV, "trustedProxyHeader ?? null")
+  assertEquals(value, null)
+})
 
 Deno.test("config: TRUSTED_PROXY_HEADER empty trusts no header", async () => {
   const value = await runConfigField(
     { ...VALID_ENV, TRUSTED_PROXY_HEADER: " " },
     "trustedProxyHeader ?? null",
-  );
-  assertEquals(value, null);
-});
+  )
+  assertEquals(value, null)
+})
 
 for (const header of ["cf-connecting-ip", "x-forwarded-for", "x-real-ip"]) {
   Deno.test(`config: TRUSTED_PROXY_HEADER=${header} is accepted`, async () => {
     const value = await runConfigField(
       { ...VALID_ENV, TRUSTED_PROXY_HEADER: header },
       "trustedProxyHeader",
-    );
-    assertEquals(value, header);
-  });
+    )
+    assertEquals(value, header)
+  })
 }
 
 Deno.test("config: TRUSTED_PROXY_HEADER is case-insensitive and trimmed", async () => {
   const value = await runConfigField(
     { ...VALID_ENV, TRUSTED_PROXY_HEADER: " CF-Connecting-IP " },
     "trustedProxyHeader",
-  );
-  assertEquals(value, "cf-connecting-ip");
-});
+  )
+  assertEquals(value, "cf-connecting-ip")
+})
 
 for (
   const raw of [
@@ -699,14 +699,14 @@ for (
     const { code, stderr } = await runConfig({
       ...VALID_ENV,
       TRUSTED_PROXY_HEADER: raw,
-    });
-    assertEquals(code, 1);
+    })
+    assertEquals(code, 1)
     assertStringIncludes(
       stderr,
       "  TRUSTED_PROXY_HEADER: must be cf-connecting-ip, x-forwarded-for, x-real-ip or empty",
-    );
-    assertRawValueNotLeaked(stderr, raw);
-  });
+    )
+    assertRawValueNotLeaked(stderr, raw)
+  })
 }
 
 // The error output is built from ConfigError.issues, which carry no value.
@@ -714,20 +714,20 @@ for (
 // matters is a valid password and a malformed secret and sender sitting in
 // the same environment as another failing variable.
 Deno.test("config: malformed CANCEL_SECRET and SMTP_FROM, and a set SMTP_PASSWORD, never reach stderr", async () => {
-  const secret = "SECRET-MARKER-ü-q9";
-  const from = "FROM-MARKER-x7\r\nBcc: a@example.com";
-  const password = "PASSWORD-MARKER-k3";
+  const secret = "SECRET-MARKER-ü-q9"
+  const from = "FROM-MARKER-x7\r\nBcc: a@example.com"
+  const password = "PASSWORD-MARKER-k3"
   const { code, stderr } = await runConfig({
     ...VALID_ENV,
     CANCEL_SECRET: secret,
     SMTP_FROM: from,
     SMTP_PASSWORD: password,
     THEME: "THEME-MARKER-z1",
-  });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "  CANCEL_SECRET: must be at least 32");
-  assertStringIncludes(stderr, "  SMTP_FROM: must be an address");
-  assertStringIncludes(stderr, "THEME");
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "  CANCEL_SECRET: must be at least 32")
+  assertStringIncludes(stderr, "  SMTP_FROM: must be an address")
+  assertStringIncludes(stderr, "THEME")
   for (
     const marker of [
       "SECRET-MARKER",
@@ -736,45 +736,45 @@ Deno.test("config: malformed CANCEL_SECRET and SMTP_FROM, and a set SMTP_PASSWOR
       "THEME-MARKER",
     ]
   ) {
-    assertRawValueNotLeaked(stderr, marker);
+    assertRawValueNotLeaked(stderr, marker)
   }
-});
+})
 
 Deno.test("config: a blank SMTP_PASSWORD is reported as missing", async () => {
-  const { code, stderr } = await runConfig({ ...VALID_ENV, SMTP_PASSWORD: "" });
-  assertEquals(code, 1);
-  assertStringIncludes(stderr, "  SMTP_PASSWORD: is missing");
-});
+  const { code, stderr } = await runConfig({ ...VALID_ENV, SMTP_PASSWORD: "" })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "  SMTP_PASSWORD: is missing")
+})
 
 Deno.test("config: a blank optional variable takes its default", async () => {
-  const value = await runConfigField({ ...VALID_ENV, PORT: "" }, "port");
-  assertEquals(value, 8080);
-});
+  const value = await runConfigField({ ...VALID_ENV, PORT: "" }, "port")
+  assertEquals(value, 8080)
+})
 
 Deno.test("config: MIN_NOTICE_HOURS= (blank) means the default 6, not 0", async () => {
   const value = await runConfigField(
     { ...VALID_ENV, MIN_NOTICE_HOURS: "" },
     "minNoticeHours",
-  );
-  assertEquals(value, 6);
-});
+  )
+  assertEquals(value, 6)
+})
 
 Deno.test("config: whitespace-only counts as blank, for a number and for a string", async () => {
-  const env = { ...VALID_ENV, MIN_NOTICE_HOURS: " ", MIG_VERSION: " " };
-  assertEquals(await runConfigField(env, "minNoticeHours"), 6);
-  assertEquals(await runConfigField(env, "version"), "dev");
-});
+  const env = { ...VALID_ENV, MIN_NOTICE_HOURS: " ", MIG_VERSION: " " }
+  assertEquals(await runConfigField(env, "minNoticeHours"), 6)
+  assertEquals(await runConfigField(env, "version"), "dev")
+})
 
 // Trimming would break SMTP logins whose password has spaces at either
 // end, and every cancel link, since the token hash includes the secret.
 Deno.test("config: SMTP_PASSWORD and CANCEL_SECRET keep spaces at either end", async () => {
-  const secret = " test-cancel-secret-not-real-00000 ";
-  const env = { ...VALID_ENV, SMTP_PASSWORD: " abc ", CANCEL_SECRET: secret };
-  assertEquals(await runConfigField(env, "smtp.pass"), " abc ");
-  assertEquals(await runConfigField(env, "cancelSecret"), secret);
-});
+  const secret = " test-cancel-secret-not-real-00000 "
+  const env = { ...VALID_ENV, SMTP_PASSWORD: " abc ", CANCEL_SECRET: secret }
+  assertEquals(await runConfigField(env, "smtp.pass"), " abc ")
+  assertEquals(await runConfigField(env, "cancelSecret"), secret)
+})
 
 Deno.test("config: an invalid THEME lists the accepted values", async () => {
-  const { stderr } = await runConfig({ ...VALID_ENV, THEME: "blue" });
-  assertStringIncludes(stderr, '  THEME: must be "auto", "dark" or "light"');
-});
+  const { stderr } = await runConfig({ ...VALID_ENV, THEME: "blue" })
+  assertStringIncludes(stderr, '  THEME: must be "auto", "dark" or "light"')
+})

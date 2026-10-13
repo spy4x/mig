@@ -26,126 +26,126 @@
 // directory, where Playwright is not installed; the small interfaces
 // below stand in for Playwright's own types.
 
-import { freePort, startSmtpSink, waitForHealth } from "./local-app.ts";
+import { freePort, startSmtpSink, waitForHealth } from "./local-app.ts"
 
-const PLAYWRIGHT = "npm:playwright@1.63.0";
+const PLAYWRIGHT = "npm:playwright@1.63.0"
 
-const ROOT = new URL("../", import.meta.url);
-const SHOTS = new URL("docs/screenshots/", ROOT);
-const SOCIAL = new URL("docs/social-preview.png", ROOT);
-const PUBLIC_URL = "http://meet.example.com";
-const VIEWPORT = { width: 1280, height: 800 };
+const ROOT = new URL("../", import.meta.url)
+const SHOTS = new URL("docs/screenshots/", ROOT)
+const SOCIAL = new URL("docs/social-preview.png", ROOT)
+const PUBLIC_URL = "http://meet.example.com"
+const VIEWPORT = { width: 1280, height: 800 }
 const GUEST = {
   name: "John Doe",
   email: "john@example.com",
   notes: "A quick intro call about the new website.",
-};
+}
 /** PNGs above this size get quantised to 256 colours, if ImageMagick is installed. */
-const PNG_BUDGET = 400 * 1024;
+const PNG_BUDGET = 400 * 1024
 /** Where the demo's drawn pointer rests before its first move. */
-const POINTER_START = { x: 900, y: 620 };
+const POINTER_START = { x: 900, y: 620 }
 /** Milliseconds between keystrokes in the demo: a calm human pace. */
-const TYPING_DELAY = 70;
+const TYPING_DELAY = 70
 
 // ─── Minimal Playwright types (see the header for why) ──────────────
 
 interface Locator {
-  click(): Promise<void>;
-  fill(value: string): Promise<void>;
-  pressSequentially(value: string, opts?: { delay?: number }): Promise<void>;
-  first(): Locator;
+  click(): Promise<void>
+  fill(value: string): Promise<void>
+  pressSequentially(value: string, opts?: { delay?: number }): Promise<void>
+  first(): Locator
   boundingBox(): Promise<
     { x: number; y: number; width: number; height: number } | null
-  >;
-  nth(index: number): Locator;
-  count(): Promise<number>;
-  getAttribute(name: string): Promise<string | null>;
-  waitFor(opts?: { state?: string; timeout?: number }): Promise<void>;
-  filter(opts: { hasText?: string | RegExp }): Locator;
-  locator(selector: string): Locator;
+  >
+  nth(index: number): Locator
+  count(): Promise<number>
+  getAttribute(name: string): Promise<string | null>
+  waitFor(opts?: { state?: string; timeout?: number }): Promise<void>
+  filter(opts: { hasText?: string | RegExp }): Locator
+  locator(selector: string): Locator
 }
 
 interface Page {
-  goto(url: string, opts?: { waitUntil?: string }): Promise<unknown>;
-  setContent(html: string, opts?: { waitUntil?: string }): Promise<void>;
-  locator(selector: string): Locator;
-  frameLocator(selector: string): { locator(selector: string): Locator };
+  goto(url: string, opts?: { waitUntil?: string }): Promise<unknown>
+  setContent(html: string, opts?: { waitUntil?: string }): Promise<void>
+  locator(selector: string): Locator
+  frameLocator(selector: string): { locator(selector: string): Locator }
   screenshot(
     opts: {
-      path: string;
-      animations?: string;
-      caret?: string;
-      clip?: { x: number; y: number; width: number; height: number };
+      path: string
+      animations?: string
+      caret?: string
+      clip?: { x: number; y: number; width: number; height: number }
     },
-  ): Promise<unknown>;
-  waitForURL(url: RegExp, opts?: { timeout?: number }): Promise<void>;
-  waitForTimeout(ms: number): Promise<void>;
-  waitForFunction(fn: string): Promise<unknown>;
-  evaluate(fn: string): Promise<unknown>;
-  url(): string;
+  ): Promise<unknown>
+  waitForURL(url: RegExp, opts?: { timeout?: number }): Promise<void>
+  waitForTimeout(ms: number): Promise<void>
+  waitForFunction(fn: string): Promise<unknown>
+  evaluate(fn: string): Promise<unknown>
+  url(): string
   mouse: {
-    move(x: number, y: number, opts?: { steps?: number }): Promise<void>;
-    down(): Promise<void>;
-    up(): Promise<void>;
-  };
-  keyboard: { type(text: string, opts?: { delay?: number }): Promise<void> };
-  video(): { path(): Promise<string> } | null;
+    move(x: number, y: number, opts?: { steps?: number }): Promise<void>
+    down(): Promise<void>
+    up(): Promise<void>
+  }
+  keyboard: { type(text: string, opts?: { delay?: number }): Promise<void> }
+  video(): { path(): Promise<string> } | null
 }
 
 interface ContextOptions {
-  viewport: { width: number; height: number };
-  deviceScaleFactor: number;
-  timezoneId: string;
-  locale: string;
-  colorScheme: "light" | "dark";
-  recordVideo?: { dir: string; size: { width: number; height: number } };
+  viewport: { width: number; height: number }
+  deviceScaleFactor: number
+  timezoneId: string
+  locale: string
+  colorScheme: "light" | "dark"
+  recordVideo?: { dir: string; size: { width: number; height: number } }
 }
 
 interface BrowserContext {
-  newPage(): Promise<Page>;
-  addInitScript(script: string): Promise<void>;
-  close(): Promise<void>;
+  newPage(): Promise<Page>
+  addInitScript(script: string): Promise<void>
+  close(): Promise<void>
 }
 
 interface Browser {
-  newContext(opts: ContextOptions): Promise<BrowserContext>;
-  close(): Promise<void>;
+  newContext(opts: ContextOptions): Promise<BrowserContext>
+  close(): Promise<void>
 }
 
 interface Playwright {
-  chromium: { launch(opts: { args: string[] }): Promise<Browser> };
+  chromium: { launch(opts: { args: string[] }): Promise<Browser> }
 }
 
 /** The text/html part of a nodemailer message, decoded. */
 function htmlPart(raw: string): string {
-  const start = raw.search(/Content-Type: text\/html/i);
-  if (start === -1) throw new Error("the captured email has no text/html part");
-  const part = raw.slice(start);
-  const headerEnd = part.indexOf(`\r\n\r\n`);
-  const headers = part.slice(0, headerEnd);
-  const body = part.slice(headerEnd + 4).split(/\r\n--/)[0];
+  const start = raw.search(/Content-Type: text\/html/i)
+  if (start === -1) throw new Error("the captured email has no text/html part")
+  const part = raw.slice(start)
+  const headerEnd = part.indexOf(`\r\n\r\n`)
+  const headers = part.slice(0, headerEnd)
+  const body = part.slice(headerEnd + 4).split(/\r\n--/)[0]
   const encoding = headers.match(/Content-Transfer-Encoding:\s*(\S+)/i)?.[1]
-    .toLowerCase();
+    .toLowerCase()
   const bytes = encoding === "base64"
     ? Uint8Array.from(atob(body.replace(/\s+/g, "")), (c) => c.charCodeAt(0))
     : encoding === "quoted-printable"
     ? decodeQuotedPrintable(body)
-    : new TextEncoder().encode(body);
-  return new TextDecoder().decode(bytes);
+    : new TextEncoder().encode(body)
+  return new TextDecoder().decode(bytes)
 }
 
 function decodeQuotedPrintable(body: string): Uint8Array {
-  const soft = body.replace(/=\r\n/g, "");
-  const out: number[] = [];
+  const soft = body.replace(/=\r\n/g, "")
+  const out: number[] = []
   for (let i = 0; i < soft.length; i++) {
     if (soft[i] === "=" && /^[0-9A-F]{2}$/i.test(soft.slice(i + 1, i + 3))) {
-      out.push(parseInt(soft.slice(i + 1, i + 3), 16));
-      i += 2;
+      out.push(parseInt(soft.slice(i + 1, i + 3), 16))
+      i += 2
     } else {
-      out.push(...new TextEncoder().encode(soft[i]));
+      out.push(...new TextEncoder().encode(soft[i]))
     }
   }
-  return new Uint8Array(out);
+  return new Uint8Array(out)
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -156,13 +156,13 @@ async function latestVersion(): Promise<string> {
       args: ["describe", "--tags", "--abbrev=0"],
       cwd: ROOT,
       stderr: "null",
-    }).output();
-    const tag = new TextDecoder().decode(out.stdout).trim();
-    if (out.success && /^v\d/.test(tag)) return tag.slice(1);
+    }).output()
+    const tag = new TextDecoder().decode(out.stdout).trim()
+    if (out.success && /^v\d/.test(tag)) return tag.slice(1)
   } catch {
     // git missing: fall through to the default below.
   }
-  return "0.5.0";
+  return "0.5.0"
 }
 
 async function hasCommand(name: string): Promise<boolean> {
@@ -172,10 +172,10 @@ async function hasCommand(name: string): Promise<boolean> {
       stdout: "null",
       stderr: "null",
     })
-      .output();
-    return out.success;
+      .output()
+    return out.success
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -184,11 +184,11 @@ async function run(cmd: string, args: string[]): Promise<void> {
     args,
     stdout: "null",
     stderr: "piped",
-  }).output();
+  }).output()
   if (!out.success) {
     throw new Error(
       `${cmd} failed: ${new TextDecoder().decode(out.stderr).slice(-2000)}`,
-    );
+    )
   }
 }
 
@@ -203,11 +203,11 @@ const MAIL_FRAME = {
   ink: "#e2e8f0",
   muted: "#94a3b8",
   accent: "#f97316",
-};
+}
 
 /** One toolbar icon: a 20px stroked SVG path, the way mail clients draw them. */
 function toolIcon(d: string): string {
-  return `<span class="tool"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg></span>`;
+  return `<span class="tool"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg></span>`
 }
 
 /** A dark mail-client frame around the real email HTML: a toolbar, the
@@ -219,11 +219,11 @@ function emailPage(
 ): string {
   const esc = (s: string) =>
     s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-      .replaceAll(`"`, "&quot;");
-  const from = mail.from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
-  const fromName = from?.[1] || mail.from;
-  const fromAddress = from?.[2] ?? "";
-  const c = MAIL_FRAME;
+      .replaceAll(`"`, "&quot;")
+  const from = mail.from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/)
+  const fromName = from?.[1] || mail.from
+  const fromAddress = from?.[2] ?? ""
+  const c = MAIL_FRAME
   const icons = {
     back: "M15 18l-6-6 6-6",
     archive: "M3 7h18v4H3zM5 11v8h14v-8M10 15h4",
@@ -232,7 +232,7 @@ function emailPage(
     reply: "M9 14l-5-5 5-5M4 9h10a6 6 0 0 1 6 6v3",
     forward: "M15 14l5-5-5-5M20 9H10a6 6 0 0 0-6 6v3",
     more: "M5 12h.01M12 12h.01M19 12h.01",
-  };
+  }
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><title>Email</title>
 <style>
@@ -284,12 +284,12 @@ function emailPage(
     document.body.dataset.ready = "1"
   })
 </script>
-</body></html>`;
+</body></html>`
 }
 
 function header(raw: string, name: string): string {
-  const m = raw.match(new RegExp(`^${name}: (.*(?:\\r\\n[ \\t].*)*)`, "im"));
-  return (m?.[1] ?? "").replace(/\r\n[ \t]+/g, " ").trim();
+  const m = raw.match(new RegExp(`^${name}: (.*(?:\\r\\n[ \\t].*)*)`, "im"))
+  return (m?.[1] ?? "").replace(/\r\n[ \t]+/g, " ").trim()
 }
 
 /** Screenshot with no hover, focus ring, caret or running animation.
@@ -305,23 +305,23 @@ async function shot(
 ): Promise<void> {
   const zone = await page.evaluate(
     "Intl.DateTimeFormat().resolvedOptions().timeZone",
-  );
+  )
   if (zone !== "Europe/Berlin") {
     throw new Error(
       `${file.pathname}: the browser runs in ${zone}, not Europe/Berlin`,
-    );
+    )
   }
-  await page.evaluate("document.activeElement?.blur?.()");
-  await page.mouse.move(2, VIEWPORT.height - 2);
-  await page.waitForTimeout(300);
+  await page.evaluate("document.activeElement?.blur?.()")
+  await page.mouse.move(2, VIEWPORT.height - 2)
+  await page.waitForTimeout(300)
   await page.screenshot({
     path: file.pathname,
     animations: "disabled",
     caret: "hide",
     clip,
-  });
+  })
   if (file.href.startsWith(ROOT.href)) {
-    console.log(`wrote ${file.href.slice(ROOT.href.length)}`);
+    console.log(`wrote ${file.href.slice(ROOT.href.length)}`)
   }
 }
 
@@ -384,10 +384,10 @@ function pointerScript(start: { x: number; y: number }): string {
     }
   }, true)
   addEventListener("mouseup", () => { el.firstChild.style.transform = "" }, true)
-})()`;
+})()`
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Moves the real mouse (and so the drawn pointer) to `to` along a
  *  gently curved, ease-in-out path, one small step about every 12 ms,
@@ -398,29 +398,29 @@ async function moveLike(
   from: { x: number; y: number },
   to: { x: number; y: number },
 ): Promise<void> {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const dist = Math.hypot(dx, dy);
-  const duration = Math.min(700, Math.max(400, dist * 0.8));
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const dist = Math.hypot(dx, dy)
+  const duration = Math.min(700, Math.max(400, dist * 0.8))
   // A slight arc, perpendicular to the straight line, reads as a hand.
-  const bow = Math.min(40, dist * 0.08);
-  const nx = dist ? -dy / dist : 0;
-  const ny = dist ? dx / dist : 0;
-  const ease = (t: number) => t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
-  const t0 = Date.now();
+  const bow = Math.min(40, dist * 0.08)
+  const nx = dist ? -dy / dist : 0
+  const ny = dist ? dx / dist : 0
+  const ease = (t: number) => t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2
+  const t0 = Date.now()
   while (true) {
-    const t = Math.min(1, (Date.now() - t0) / duration);
-    const e = ease(t);
-    const arc = Math.sin(Math.PI * t) * bow;
+    const t = Math.min(1, (Date.now() - t0) / duration)
+    const e = ease(t)
+    const arc = Math.sin(Math.PI * t) * bow
     await page.mouse.move(
       from.x + dx * e + nx * arc,
       from.y + dy * e + ny * arc,
-    );
-    if (t === 1) break;
-    await sleep(12);
+    )
+    if (t === 1) break
+    await sleep(12)
   }
-  from.x = to.x;
-  from.y = to.y;
+  from.x = to.x
+  from.y = to.y
 }
 
 /** Scrolls `target` into the middle of the viewport if it is near an
@@ -431,27 +431,27 @@ async function clickLike(
   pointer: { x: number; y: number },
   target: Locator,
 ): Promise<void> {
-  await target.waitFor();
-  let box = await target.boundingBox();
-  if (!box) throw new Error("the demo's click target has no box");
+  await target.waitFor()
+  let box = await target.boundingBox()
+  if (!box) throw new Error("the demo's click target has no box")
   if (box.y < 96 || box.y + box.height > VIEWPORT.height - 48) {
-    const delta = Math.round(box.y + box.height / 2 - VIEWPORT.height / 2);
-    await page.evaluate(`scrollBy({ top: ${delta}, behavior: "smooth" })`);
-    await page.waitForTimeout(800);
-    box = await target.boundingBox();
-    if (!box) throw new Error("the demo's click target has no box");
+    const delta = Math.round(box.y + box.height / 2 - VIEWPORT.height / 2)
+    await page.evaluate(`scrollBy({ top: ${delta}, behavior: "smooth" })`)
+    await page.waitForTimeout(800)
+    box = await target.boundingBox()
+    if (!box) throw new Error("the demo's click target has no box")
   }
   await moveLike(page, pointer, {
     x: Math.round(box.x + box.width / 2),
     y: Math.round(box.y + box.height / 2),
-  });
-  await page.waitForTimeout(150);
-  await page.mouse.down();
+  })
+  await page.waitForTimeout(150)
+  await page.mouse.down()
   // Held long enough for the click mark to reach full size before the
   // release, which is what starts a navigation and clears the mark.
-  await page.waitForTimeout(200);
-  await page.mouse.up();
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(200)
+  await page.mouse.up()
+  await page.waitForTimeout(200)
 }
 
 /** ffmpeg arguments for the README GIF: drop the first `trimStart`
@@ -478,37 +478,37 @@ function gifArgs(
     "-loop",
     "0",
     gif,
-  ];
+  ]
 }
 
 async function fitPng(path: string, magick: boolean): Promise<void> {
-  if ((await Deno.stat(path)).size <= PNG_BUDGET || !magick) return;
-  await run("magick", [path, "-colors", "256", `PNG8:${path}`]);
+  if ((await Deno.stat(path)).size <= PNG_BUDGET || !magick) return
+  await run("magick", [path, "-colors", "256", `PNG8:${path}`])
 }
 
 // ─── Main ───────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const serverEntry = new URL("_fresh/server.js", ROOT);
+  const serverEntry = new URL("_fresh/server.js", ROOT)
   try {
-    await Deno.stat(serverEntry);
+    await Deno.stat(serverEntry)
   } catch {
     throw new Error(
       `_fresh/server.js is missing: run \`deno task build\` first`,
-    );
+    )
   }
 
-  const { chromium } = (await import(PLAYWRIGHT)) as Playwright;
-  const tmp = await Deno.makeTempDir({ prefix: "mig-screenshots-" });
-  const smtp = startSmtpSink();
-  const port = freePort();
-  const local = `http://127.0.0.1:${port}`;
+  const { chromium } = (await import(PLAYWRIGHT)) as Playwright
+  const tmp = await Deno.makeTempDir({ prefix: "mig-screenshots-" })
+  const smtp = startSmtpSink()
+  const port = freePort()
+  const local = `http://127.0.0.1:${port}`
 
   const cancelSecret = btoa(
     String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))),
-  );
-  let server: Deno.ChildProcess | null = null;
-  let browser: Browser | null = null;
+  )
+  let server: Deno.ChildProcess | null = null
+  let browser: Browser | null = null
   try {
     server = new Deno.Command(Deno.execPath(), {
       args: [
@@ -548,10 +548,10 @@ async function main(): Promise<void> {
       },
       stdout: "null",
       stderr: "null",
-    }).spawn();
-    await waitForHealth(local, server);
+    }).spawn()
+    await waitForHealth(local, server)
 
-    await Deno.mkdir(SHOTS, { recursive: true });
+    await Deno.mkdir(SHOTS, { recursive: true })
     browser = await chromium.launch({
       args: [
         `--host-resolver-rules=MAP meet.example.com 127.0.0.1:${port}, MAP * ~NOTFOUND`,
@@ -560,7 +560,7 @@ async function main(): Promise<void> {
         // because it resolves to a loopback address.
         "--disable-features=HttpsUpgrades,LocalNetworkAccessChecks",
       ],
-    });
+    })
     const contextFor = async (colorScheme: "light" | "dark", extra = {}) => {
       const ctx = await browser!.newContext({
         viewport: VIEWPORT,
@@ -569,72 +569,72 @@ async function main(): Promise<void> {
         locale: "en-US",
         colorScheme,
         ...extra,
-      });
-      return ctx;
-    };
+      })
+      return ctx
+    }
 
     // The first bookable date with a full day of slots, read from the picker.
-    const probe = await contextFor("light");
-    const probePage = await probe.newPage();
-    await probePage.goto(`${PUBLIC_URL}/`, { waitUntil: "networkidle" });
+    const probe = await contextFor("light")
+    const probePage = await probe.newPage()
+    await probePage.goto(`${PUBLIC_URL}/`, { waitUntil: "networkidle" })
     const today = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Europe/Berlin",
-    }).format(new Date());
+    }).format(new Date())
     const days = probePage.locator(
       `[data-calendar-date][aria-label$=" — 16 available"]`,
-    );
-    const dates: string[] = [];
+    )
+    const dates: string[] = []
     for (let i = 0; i < (await days.count()); i++) {
       dates.push(
         (await days.nth(i).getAttribute("data-calendar-date")) ?? "",
-      );
+      )
     }
     // A later weekday, not today, so no slot has passed while the script runs.
-    const date = dates.find((d) => d > today);
+    const date = dates.find((d) => d > today)
     if (!date) {
-      throw new Error("the picker shows no fully bookable weekday after today");
+      throw new Error("the picker shows no fully bookable weekday after today")
     }
-    await probe.close();
+    await probe.close()
 
     const slotsVisible = (page: Page) =>
       page.locator(`section[aria-labelledby="step-time"] :is(button, a)`)
-        .first().waitFor();
+        .first().waitFor()
 
     // The social preview's hero: the dark booking page with the picked
     // date's slots. It lands in the throwaway directory, not the README.
-    const heroFile = new URL("hero.png", `file://${tmp}/`);
-    const heroCtx = await contextFor("dark");
-    const heroPage = await heroCtx.newPage();
+    const heroFile = new URL("hero.png", `file://${tmp}/`)
+    const heroCtx = await contextFor("dark")
+    const heroPage = await heroCtx.newPage()
     await heroPage.goto(`${PUBLIC_URL}/?date=${date}`, {
       waitUntil: "networkidle",
-    });
-    await slotsVisible(heroPage);
-    await shot(heroPage, heroFile);
-    await heroCtx.close();
+    })
+    await slotsVisible(heroPage)
+    await shot(heroPage, heroFile)
+    await heroCtx.close()
 
     // One real booking through the form, so the SMTP sink gets the email.
-    const bookCtx = await contextFor("light");
-    const bookPage = await bookCtx.newPage();
+    const bookCtx = await contextFor("light")
+    const bookPage = await bookCtx.newPage()
     await bookPage.goto(`${PUBLIC_URL}/?date=${date}&slot=11:00`, {
       waitUntil: "networkidle",
-    });
-    await bookPage.locator(`input[name="name"]`).fill(GUEST.name);
-    await bookPage.locator(`input[name="email"]`).fill(GUEST.email);
-    await bookPage.locator(`textarea[name="notes"]`).fill(GUEST.notes);
+    })
+    await bookPage.locator(`input[name="name"]`).fill(GUEST.name)
+    await bookPage.locator(`input[name="email"]`).fill(GUEST.email)
+    await bookPage.locator(`textarea[name="notes"]`).fill(GUEST.notes)
     await bookPage.locator(
       `form[aria-label="Booking details"] button[type="submit"]`,
-    ).click();
-    await bookPage.waitForURL(/\/confirmed\?/, { timeout: 30_000 });
-    await bookCtx.close();
+    ).click()
+    await bookPage.waitForURL(/\/confirmed\?/, { timeout: 30_000 })
+    await bookCtx.close()
 
     // The guest's confirmation email, exactly as lib/email.ts produced it,
     // in a dark mail-client frame to match the email's dark body.
-    const guestMail = smtp.mails.find((m) => m.to === GUEST.email);
+    const guestMail = smtp.mails.find((m) => m.to === GUEST.email)
     if (!guestMail) {
-      throw new Error("the SMTP sink received no email for the guest");
+      throw new Error("the SMTP sink received no email for the guest")
     }
-    const mailCtx = await contextFor("dark");
-    const mailPage = await mailCtx.newPage();
+    const mailCtx = await contextFor("dark")
+    const mailPage = await mailCtx.newPage()
     await mailPage.setContent(
       emailPage({
         from: header(guestMail.raw, "From"),
@@ -643,109 +643,109 @@ async function main(): Promise<void> {
         html: htmlPart(guestMail.raw),
       }),
       { waitUntil: "load" },
-    );
-    await mailPage.waitForFunction(`document.body.dataset.ready === "1"`);
+    )
+    await mailPage.waitForFunction(`document.body.dataset.ready === "1"`)
     // The email is shorter than the viewport: crop 40px below the card.
     const cardBottom = Number(
       await mailPage.evaluate(
         `document.querySelector(".card").getBoundingClientRect().bottom`,
       ),
-    );
+    )
     await shot(mailPage, new URL("email-confirmation.png", SHOTS), {
       x: 0,
       y: 0,
       width: VIEWPORT.width,
       height: Math.min(VIEWPORT.height, Math.ceil(cardBottom) + 40),
-    });
-    await mailCtx.close();
+    })
+    await mailCtx.close()
 
     // The main flow as a short clip, dark theme: date → time → confirm →
     // confirmed. A drawn pointer (see pointerScript) moves along eased
     // paths and shows each click, so a viewer can follow what happens.
-    const videoDir = `${tmp}/video`;
+    const videoDir = `${tmp}/video`
     const videoCtx = await contextFor("dark", {
       deviceScaleFactor: 1,
       recordVideo: { dir: videoDir, size: VIEWPORT },
-    });
-    await videoCtx.addInitScript(pointerScript(POINTER_START));
-    const videoPage = await videoCtx.newPage();
+    })
+    await videoCtx.addInitScript(pointerScript(POINTER_START))
+    const videoPage = await videoCtx.newPage()
     // The recording starts with the page; everything before the first
     // painted booking page is cut off by `trimStart` below.
-    const recordStart = Date.now();
-    await videoPage.goto(`${PUBLIC_URL}/`, { waitUntil: "networkidle" });
-    await videoPage.mouse.move(POINTER_START.x, POINTER_START.y);
-    await videoPage.waitForTimeout(300);
-    const trimStart = (Date.now() - recordStart) / 1000;
-    const pointer = { ...POINTER_START };
-    await videoPage.waitForTimeout(900);
+    const recordStart = Date.now()
+    await videoPage.goto(`${PUBLIC_URL}/`, { waitUntil: "networkidle" })
+    await videoPage.mouse.move(POINTER_START.x, POINTER_START.y)
+    await videoPage.waitForTimeout(300)
+    const trimStart = (Date.now() - recordStart) / 1000
+    const pointer = { ...POINTER_START }
+    await videoPage.waitForTimeout(900)
     await clickLike(
       videoPage,
       pointer,
       videoPage.locator(`[data-calendar-date="${date}"]`),
-    );
-    await slotsVisible(videoPage);
-    await videoPage.waitForTimeout(900);
+    )
+    await slotsVisible(videoPage)
+    await videoPage.waitForTimeout(900)
     await clickLike(
       videoPage,
       pointer,
       videoPage.locator(`section[aria-labelledby="step-time"] :is(button, a)`)
         .filter({ hasText: /^\s*15:30\s*$/ }).first(),
-    );
-    await videoPage.locator(`input[name="name"]`).waitFor();
-    await videoPage.waitForTimeout(800);
+    )
+    await videoPage.locator(`input[name="name"]`).waitFor()
+    await videoPage.waitForTimeout(800)
     await clickLike(
       videoPage,
       pointer,
       videoPage.locator(`input[name="name"]`),
-    );
-    await videoPage.keyboard.type(GUEST.name, { delay: TYPING_DELAY });
-    await videoPage.waitForTimeout(300);
+    )
+    await videoPage.keyboard.type(GUEST.name, { delay: TYPING_DELAY })
+    await videoPage.waitForTimeout(300)
     await clickLike(
       videoPage,
       pointer,
       videoPage.locator(`input[name="email"]`),
-    );
-    await videoPage.keyboard.type(GUEST.email, { delay: TYPING_DELAY });
-    await videoPage.waitForTimeout(700);
+    )
+    await videoPage.keyboard.type(GUEST.email, { delay: TYPING_DELAY })
+    await videoPage.waitForTimeout(700)
     await clickLike(
       videoPage,
       pointer,
       videoPage.locator(
         `form[aria-label="Booking details"] button[type="submit"]`,
       ),
-    );
-    await videoPage.waitForURL(/\/confirmed\?/, { timeout: 30_000 });
-    await videoPage.waitForTimeout(600);
-    await moveLike(videoPage, pointer, { x: 1100, y: 700 });
-    await videoPage.waitForTimeout(2400);
-    const video = videoPage.video();
-    await videoCtx.close();
-    const webm = await video?.path();
-    if (!webm) throw new Error("Playwright recorded no video");
+    )
+    await videoPage.waitForURL(/\/confirmed\?/, { timeout: 30_000 })
+    await videoPage.waitForTimeout(600)
+    await moveLike(videoPage, pointer, { x: 1100, y: 700 })
+    await videoPage.waitForTimeout(2400)
+    const video = videoPage.video()
+    await videoCtx.close()
+    const webm = await video?.path()
+    if (!webm) throw new Error("Playwright recorded no video")
     if (await hasCommand("ffmpeg")) {
-      const gif = new URL("booking-flow.gif", SHOTS).pathname;
-      await run("ffmpeg", gifArgs(webm, trimStart, gif));
-      console.log("wrote docs/screenshots/booking-flow.gif");
+      const gif = new URL("booking-flow.gif", SHOTS).pathname
+      await run("ffmpeg", gifArgs(webm, trimStart, gif))
+      console.log("wrote docs/screenshots/booking-flow.gif")
     } else {
-      await Deno.copyFile(webm, new URL("booking-flow.webm", SHOTS));
+      await Deno.copyFile(webm, new URL("booking-flow.webm", SHOTS))
       console.log(
         "ffmpeg not found: wrote docs/screenshots/booking-flow.webm instead of a GIF",
-      );
+      )
     }
 
     // The social preview: the dark product on a dark background, name and one line.
-    const hero = await Deno.readFile(heroFile);
+    const hero = await Deno.readFile(heroFile)
     const heroSrc = `data:image/png;base64,${
       btoa(Array.from(hero, (b) => String.fromCharCode(b)).join(``))
-    }`;
+    }`
     const socialCtx = await browser.newContext({
       viewport: { width: 1280, height: 640 },
       deviceScaleFactor: 1,
       timezoneId: "Europe/Berlin",
       locale: "en-US",
       colorScheme: "dark",
-    });
-    const socialPage = await socialCtx.newPage();
+    })
+    const socialPage = await socialCtx.newPage()
     await socialPage.setContent(
       `<!doctype html><html><head><meta charset="utf-8"><style>
         body { margin: 0; width: 1280px; height: 640px; overflow: hidden; background: #020617;
@@ -766,38 +766,38 @@ async function main(): Promise<void> {
         <img src="${heroSrc}" alt="">
       </body></html>`,
       { waitUntil: "load" },
-    );
+    )
     await socialPage.screenshot({
       path: SOCIAL.pathname,
       animations: "disabled",
       caret: "hide",
-    });
-    await socialCtx.close();
-    console.log("wrote docs/social-preview.png");
+    })
+    await socialCtx.close()
+    console.log("wrote docs/social-preview.png")
 
-    const magick = await hasCommand("magick");
+    const magick = await hasCommand("magick")
     if (!magick) {
-      console.log("ImageMagick not found: PNGs are left uncompressed");
+      console.log("ImageMagick not found: PNGs are left uncompressed")
     }
     for await (const entry of Deno.readDir(SHOTS)) {
       if (entry.name.endsWith(".png")) {
-        await fitPng(new URL(entry.name, SHOTS).pathname, magick);
+        await fitPng(new URL(entry.name, SHOTS).pathname, magick)
       }
     }
-    await fitPng(SOCIAL.pathname, magick);
+    await fitPng(SOCIAL.pathname, magick)
   } finally {
-    await browser?.close().catch(() => {});
+    await browser?.close().catch(() => {})
     if (server) {
       try {
-        server.kill("SIGTERM");
+        server.kill("SIGTERM")
       } catch {
         // Already exited.
       }
-      await server.status;
+      await server.status
     }
-    smtp.close();
-    await Deno.remove(tmp, { recursive: true });
+    smtp.close()
+    await Deno.remove(tmp, { recursive: true })
   }
 }
 
-await main();
+await main()

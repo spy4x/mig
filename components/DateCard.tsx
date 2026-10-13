@@ -9,27 +9,27 @@
   the booking flow reads as "show the calendar again".
 */
 
-import { IconArrowRight, IconCalendar } from "@spy4x/preact-icons";
-import { pickerHref } from "../lib/picker-links.ts";
+import { IconArrowRight, IconCalendar } from "@spy4x/preact-icons"
+import { pickerHref } from "../lib/picker-links.ts"
 
 interface DateCardProps {
-  date: string; // YYYY-MM-DD (host-local)
-  dateLabel: string; // pre-formatted "Friday, 28 August 2026"
+  date: string // YYYY-MM-DD (host-local)
+  dateLabel: string // pre-formatted "Friday, 28 August 2026"
   /** Called when the Change link is clicked. When provided, Change is
    *  a <button> with onClick (no navigation, no SSR roundtrip). When
    *  omitted, Change is an <a href> for the no-JS / /embed fallback,
    *  built from `basePath`. */
-  onClear?: () => void;
+  onClear?: () => void
   /** "" for the standalone page (Change → "/"), "/embed" for the
    *  iframe variant (Change → "/embed"). Defaults to "". */
-  basePath?: string;
+  basePath?: string
   /** The visitor's IANA zone, once known (mig#15) — threaded onto the
    *  Change link so /embed's tz query param survives. */
-  tz?: string | null;
+  tz?: string | null
   /** /embed's forced theme, once known (mig#44) — threaded onto the
    *  Change link so /embed's theme query param survives. `null` for
    *  "auto" (the default), which adds nothing to the link. */
-  theme?: string | null;
+  theme?: string | null
 }
 
 export function DateCard(
@@ -41,7 +41,7 @@ export function DateCard(
   // had `focus-visible:underline` but never received focus, so the
   // visible focus indicator disappeared.
   const changeClass =
-    "shrink-0 inline-flex items-center gap-1 text-xs font-medium text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline";
+    "shrink-0 inline-flex items-center gap-1 text-xs font-medium text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline"
 
   return (
     <div class="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
@@ -84,5 +84,5 @@ export function DateCard(
           </a>
         )}
     </div>
-  );
+  )
 }

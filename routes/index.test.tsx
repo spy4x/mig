@@ -7,30 +7,30 @@
 // flash for the common case where BookingFlow's hydration replaces
 // it with the visitor's own labelled clock.
 
-import { assert, assertEquals, assertFalse } from "@std/assert";
-import { renderToString } from "preact-render-to-string";
-import type { Context } from "fresh";
-import type { State } from "../lib/utils.ts";
-import type { Config } from "../lib/types.ts";
-import { BookingsStore } from "../lib/bookings.ts";
-import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
-import { parseWeeklyAvailability } from "../lib/availability.ts";
-import { futureWeekday } from "../lib/test-dates.ts";
-import Index from "./index.tsx";
-import { tempDataFile } from "../lib/test-temp.ts";
+import { assert, assertEquals, assertFalse } from "@std/assert"
+import { renderToString } from "preact-render-to-string"
+import type { Context } from "fresh"
+import type { State } from "../lib/utils.ts"
+import type { Config } from "../lib/types.ts"
+import { BookingsStore } from "../lib/bookings.ts"
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory"
+import { parseWeeklyAvailability } from "../lib/availability.ts"
+import { futureWeekday } from "../lib/test-dates.ts"
+import Index from "./index.tsx"
+import { tempDataFile } from "../lib/test-temp.ts"
 
-const HOST_TZ = "Asia/Ho_Chi_Minh";
+const HOST_TZ = "Asia/Ho_Chi_Minh"
 // A fixed Tuesday within MON-FRI 09:00-17:00, for tests that pin exact
 // labels and offsets ("Tuesday, 6 October 2026", "UTC-4"). It is in the
 // past, so its slots are no longer bookable: a test that needs a
 // bookable slot uses bookableDate() instead.
-const TEST_DATE = "2026-10-06";
+const TEST_DATE = "2026-10-06"
 
 /** A weekday two or more days ahead in the host's zone: past the
  *  minimum notice and inside the booking horizon whenever the suite
  *  runs, so its 09:00 slot is always offered. */
 function bookableDate(): string {
-  return futureWeekday(2, HOST_TZ);
+  return futureWeekday(2, HOST_TZ)
 }
 
 // mig#48 review: scoped to TimeSlots.tsx's own header element
@@ -42,8 +42,8 @@ function bookableDate(): string {
 function gridHeaderZoneLabel(html: string): string | null {
   const m = html.match(
     /<p class="text-xs text-ink-subtle mt-0\.5">([^<]*)<\/p>/,
-  );
-  return m ? m[1] : null;
+  )
+  return m ? m[1] : null
 }
 
 function fakeConfig(): Config {
@@ -73,19 +73,19 @@ function fakeConfig(): Config {
     hideBranding: false,
     githubUrl: "https://github.com/spy4x/mig",
     version: "test",
-  };
+  }
 }
 
 async function renderIndex(
   url: string,
   cfgOverrides: Partial<Config> = {},
 ): Promise<string> {
-  const cfg = { ...fakeConfig(), ...cfgOverrides };
-  await using file = await tempDataFile();
-  const path = file.path;
-  const bookings = new BookingsStore({ filePath: path });
-  await bookings.init();
-  const req = new Request(url);
+  const cfg = { ...fakeConfig(), ...cfgOverrides }
+  await using file = await tempDataFile()
+  const path = file.path
+  const bookings = new BookingsStore({ filePath: path })
+  await bookings.init()
+  const req = new Request(url)
   const ctx = {
     req,
     url: new URL(url),
@@ -101,25 +101,25 @@ async function renderIndex(
     Component: () => null,
     error: null,
     route: null,
-  } as unknown as Context<State>;
+  } as unknown as Context<State>
   // deno-lint-ignore no-explicit-any
-  return renderToString((Index as any)(ctx));
+  return renderToString((Index as any)(ctx))
 }
 
 Deno.test("mig#48: standalone / shows the host's zone once above the grid, and each slot's own labelled clock in its accessible name", async () => {
-  const html = await renderIndex(`http://localhost/?date=${bookableDate()}`);
+  const html = await renderIndex(`http://localhost/?date=${bookableDate()}`)
   // The zone renders once, in the grid header element itself.
   assertEquals(
     gridHeaderZoneLabel(html),
     "Ho Chi Minh, UTC+7",
     "expected the grid header element to show the host's zone",
-  );
+  )
   // The slot's own accessible name still carries the full labelled
   // clock (mig#15's rule), even though the visible text is now bare.
   assert(
     html.includes('aria-label="09:00, Ho Chi Minh, UTC+7"'),
     "expected the 09:00 slot's accessible name to carry the full clock",
-  );
+  )
   // The visible slot text itself is bare HH:MM now that the zone
   // lives in the header — a regression back to repeating the zone on
   // every slot wouldn't be caught by the header assertion above (the
@@ -129,20 +129,20 @@ Deno.test("mig#48: standalone / shows the host's zone once above the grid, and e
   assert(
     />09:00</.test(html),
     "expected the slot's visible text to be bare HH:MM",
-  );
-});
+  )
+})
 
 Deno.test("mig#15: standalone / carries a <noscript> host-timezone fallback note", async () => {
-  const html = await renderIndex("http://localhost/");
+  const html = await renderIndex("http://localhost/")
   assert(
     html.includes("<noscript>"),
     "expected a <noscript> block for the no-JS fallback",
-  );
+  )
   assert(
     html.includes("Times are shown in the host&#39;s timezone."),
     "expected the host-timezone fallback note inside it",
-  );
-});
+  )
+})
 
 // mig#18 round 4 review: every other clock on this page converts into
 // the visitor's zone once known, but the standalone time card's own
@@ -167,19 +167,19 @@ Deno.test("mig#18: the standalone time card shows the slot's date and clock in t
   const html = await renderIndex(
     "http://localhost/?date=2026-09-28&slot=09:00&tz=America/New_York",
     { bookingHorizonDays: 3650 },
-  );
+  )
   // Scoped to the time card's own text — TimeCard.tsx renders
   // `{shownSlot} <span>· {dateLabel}</span>`. A whole-page
   // `html.includes(...)` would also pass if some other element on the
   // page happened to carry the right substring, so this extracts the
   // card's own two pieces instead (same technique as
   // routes/embed/embed.test.tsx's confirm-label test).
-  const match = html.match(/(\d{2}:\d{2}, [^<·]+?)\s*<span[^>]*>·\s*([^<]+)</);
-  assert(match, "expected the time card's clock + date markup");
-  const [, clock, dateText] = match!;
-  assertEquals(clock.trim(), "22:00, New York, UTC-4");
-  assertEquals(dateText.trim(), "Sunday, 27 September 2026");
-});
+  const match = html.match(/(\d{2}:\d{2}, [^<·]+?)\s*<span[^>]*>·\s*([^<]+)</)
+  assert(match, "expected the time card's clock + date markup")
+  const [, clock, dateText] = match!
+  assertEquals(clock.trim(), "22:00, New York, UTC-4")
+  assertEquals(dateText.trim(), "Sunday, 27 September 2026")
+})
 
 // mig#18 review follow-up: a reviewer removed `tz` from every link
 // BookingFlow's children render (and from pushUrl) and every existing
@@ -196,17 +196,17 @@ Deno.test("mig#18: standalone / keeps tz on every slot link", async () => {
   // without links, so the loop below would never run — this test
   // computes a bookable weekday relative to whenever the suite
   // actually runs, through lib/test-dates.ts.
-  const date = futureWeekday(3, HOST_TZ);
+  const date = futureWeekday(3, HOST_TZ)
   const html = await renderIndex(
     `http://localhost/?date=${date}&tz=America/New_York`,
-  );
+  )
   // A single `html.match` (no `g` flag) only ever checks the *first*
   // slot link — a mutation that dropped `tz` from every link except
   // the first would have stayed green. `matchAll` with `g` collects
   // every slot link's `href` so all of them are checked, not just one.
   const slotLinks = [...html.matchAll(/href="([^"]*slot=[^"]*)"/g)].map((
     m,
-  ) => m[1]);
+  ) => m[1])
   // Guards against the vacuous pass above: an empty page (wrong date,
   // broken availability config, a future regression in this test
   // itself) must fail loudly instead of the `for` loop below silently
@@ -214,14 +214,14 @@ Deno.test("mig#18: standalone / keeps tz on every slot link", async () => {
   assert(
     slotLinks.length > 0,
     `expected at least one slot link in the rendered HTML, got ${slotLinks.length}`,
-  );
+  )
   for (const href of slotLinks) {
     assert(
       href.includes("tz=America%2FNew_York"),
       `expected every slot link to carry tz=, got "${href}"`,
-    );
+    )
   }
-});
+})
 
 Deno.test("mig#18: the host-timezone <noscript> note is hidden when the tz query param sets a different zone", async () => {
   // The note claims "Times are shown in the host's timezone" — false
@@ -230,12 +230,12 @@ Deno.test("mig#18: the host-timezone <noscript> note is hidden when the tz query
   const html = await renderIndex(
     "http://localhost/?tz=America/New_York",
     { bookingHorizonDays: 3650 },
-  );
+  )
   assertFalse(
     html.includes("<noscript>"),
     "the host-timezone note must not render for a visitor with a different tz",
-  );
-});
+  )
+})
 
 Deno.test("mig#48 review: the header comes from the FIRST slot, so only a LATER slot whose offset disagrees shows its own inline", async () => {
   // Europe/Berlin's DST ends on the last Sunday of October at 03:00
@@ -247,14 +247,14 @@ Deno.test("mig#48 review: the header comes from the FIRST slot, so only a LATER 
   // onward lands at 02:00+ Berlin (already UTC+1).
   // The date is computed, not fixed: a past slot is never offered, and
   // this test needs the first slot to render.
-  const date = nextFallBackSunday();
+  const date = nextFallBackSunday()
   const html = await renderIndex(
     `http://localhost/?date=${date}&tz=Europe/Berlin`,
     {
       weeklyAvailability: parseWeeklyAvailability("SUN 06:00-10:00"),
       bookingHorizonDays: 3650,
     },
-  );
+  )
   // The header comes from the FIRST slot shown (06:00 host, 01:00
   // Berlin, UTC+2) — not an arbitrary anchor like noon of the host
   // day, which would land after the transition (UTC+1) even though no
@@ -263,29 +263,29 @@ Deno.test("mig#48 review: the header comes from the FIRST slot, so only a LATER 
     gridHeaderZoneLabel(html),
     "Berlin, UTC+2",
     "expected the grid header to come from the first slot's own offset",
-  );
+  )
   // The 06:00 host slot (01:00 Berlin, UTC+2) agrees with the header
   // it defines, so it shows bare HH:MM only.
   assert(
     html.includes('aria-label="01:00, Berlin, UTC+2"'),
     "expected the first slot's accessible name to carry the header's offset",
-  );
+  )
   assert(
     />01:00</.test(html),
     "expected the first slot to show bare HH:MM (its own offset matches the header)",
-  );
+  )
   // The 09:00 host slot (03:00 Berlin, UTC+1) disagrees with the
   // header, so it shows its own offset inline, alongside its full
   // accessible name.
   assert(
     html.includes('aria-label="03:00, Berlin, UTC+1"'),
     "expected the post-transition slot's accessible name to carry its own offset",
-  );
+  )
   assert(
     />03:00, UTC\+1</.test(html),
     "expected the post-transition slot to show its own offset inline",
-  );
-});
+  )
+})
 
 // ─── mig#57: dates and times that do not exist ───────────────────────
 
@@ -293,17 +293,17 @@ Deno.test("mig#48 review: the header comes from the FIRST slot, so only a LATER 
 // where mig's own copy rolled them over. The page drops both params,
 // as it does any malformed one, and still renders.
 Deno.test("mig#57: standalone / ignores a date or slot param that is not on the calendar", async () => {
-  const badDate = await renderIndex("http://localhost/?date=2026-02-31");
-  assertEquals(gridHeaderZoneLabel(badDate), null);
-  assertFalse(badDate.includes("2026-02-31"));
+  const badDate = await renderIndex("http://localhost/?date=2026-02-31")
+  assertEquals(gridHeaderZoneLabel(badDate), null)
+  assertFalse(badDate.includes("2026-02-31"))
 
   const badSlot = await renderIndex(
     `http://localhost/?date=${bookableDate()}&slot=24:00`,
-  );
-  assert(badSlot.includes("slot=09%3A00"), "expected the day's slots");
-  assertFalse(badSlot.includes("24:00"));
-  assertFalse(badSlot.includes("24%3A00"));
-});
+  )
+  assert(badSlot.includes("slot=09%3A00"), "expected the day's slots")
+  assertFalse(badSlot.includes("24:00"))
+  assertFalse(badSlot.includes("24%3A00"))
+})
 
 // The last Sunday of a month (0 = January), this year's if it is at
 // least two days ahead, else next year's: the day Berlin's clocks change
@@ -311,38 +311,38 @@ Deno.test("mig#57: standalone / ignores a date or slot param that is not on the 
 // or inside the minimum notice renders without a link, or not at all.
 function nextLastSunday(month: number): string {
   const today = new Date(Date.now() + 2 * 86_400_000).toISOString()
-    .slice(0, 10);
+    .slice(0, 10)
   for (let year = new Date().getUTCFullYear();; year++) {
-    const lastDay = new Date(Date.UTC(year, month + 1, 0));
+    const lastDay = new Date(Date.UTC(year, month + 1, 0))
     const sunday = new Date(
       Date.UTC(year, month, lastDay.getUTCDate() - lastDay.getUTCDay()),
-    );
-    const iso = sunday.toISOString().slice(0, 10);
-    if (iso > today) return iso;
+    )
+    const iso = sunday.toISOString().slice(0, 10)
+    if (iso > today) return iso
   }
 }
 
 /** The next day Berlin's clocks jump from 02:00 to 03:00. */
 function nextSpringForwardSunday(): string {
-  return nextLastSunday(2);
+  return nextLastSunday(2)
 }
 
 /** The next day Berlin's clocks fall back from 03:00 to 02:00. */
 function nextFallBackSunday(): string {
-  return nextLastSunday(9);
+  return nextLastSunday(9)
 }
 
 Deno.test("mig#57: standalone / offers no slot inside the spring-forward gap", async () => {
-  const date = nextSpringForwardSunday();
+  const date = nextSpringForwardSunday()
   const html = await renderIndex(`http://localhost/?date=${date}`, {
     hostTz: "Europe/Berlin",
     weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
-  });
+  })
 
-  assert(html.includes("slot=03%3A00"), "expected the 03:00 slot");
-  assertFalse(html.includes("slot=02%3A00"), "02:00 does not exist that day");
-  assertFalse(html.includes("slot=02%3A30"), "02:30 does not exist that day");
-});
+  assert(html.includes("slot=03%3A00"), "expected the 03:00 slot")
+  assertFalse(html.includes("slot=02%3A00"), "02:00 does not exist that day")
+  assertFalse(html.includes("slot=02%3A30"), "02:30 does not exist that day")
+})
 
 // mig#57: Niue ran on UTC-11:19:40 until 1952-10-16. Noon on 1952-10-15
 // resolves, the morning slots do not, and @spy4x/time/tz's zonedDateTime
@@ -351,15 +351,15 @@ Deno.test("mig#57: standalone / offers no slot inside the spring-forward gap", a
 Deno.test("mig#57: standalone / ignores a date before 1980", async () => {
   const niue = await renderIndex("http://localhost/?date=1952-10-15", {
     hostTz: "Pacific/Niue",
-  });
-  const lastBefore = await renderIndex("http://localhost/?date=1979-12-31");
-  const first = await renderIndex("http://localhost/?date=1980-01-01");
+  })
+  const lastBefore = await renderIndex("http://localhost/?date=1979-12-31")
+  const first = await renderIndex("http://localhost/?date=1980-01-01")
 
-  assertEquals(gridHeaderZoneLabel(niue), null);
-  assertFalse(niue.includes("1952-10-15"));
-  assertEquals(gridHeaderZoneLabel(lastBefore), null);
-  assertEquals(gridHeaderZoneLabel(first), "Ho Chi Minh, UTC+7");
-});
+  assertEquals(gridHeaderZoneLabel(niue), null)
+  assertFalse(niue.includes("1952-10-15"))
+  assertEquals(gridHeaderZoneLabel(lastBefore), null)
+  assertEquals(gridHeaderZoneLabel(first), "Ho Chi Minh, UTC+7")
+})
 
 // mig#57: the month grid runs the host zone's math on every day it
 // shows. Dublin kept UTC-0:25:21 until 1916, and Santiago went back to
@@ -369,18 +369,18 @@ Deno.test("mig#57: standalone / ignores a date before 1980", async () => {
 Deno.test("mig#57: standalone / ignores a month before 1980", async () => {
   const dublin = await renderIndex("http://localhost/?month=1900-01", {
     hostTz: "Europe/Dublin",
-  });
+  })
   const santiago = await renderIndex("http://localhost/?month=1916-07", {
     hostTz: "America/Santiago",
-  });
-  const lastBefore = await renderIndex("http://localhost/?month=1979-12");
-  const first = await renderIndex("http://localhost/?month=1980-01");
+  })
+  const lastBefore = await renderIndex("http://localhost/?month=1979-12")
+  const first = await renderIndex("http://localhost/?month=1980-01")
 
-  assertFalse(dublin.includes("January 1900"));
-  assertFalse(santiago.includes("July 1916"));
-  assertFalse(lastBefore.includes("December 1979"));
-  assert(first.includes("January 1980"), "expected January 1980's grid");
-});
+  assertFalse(dublin.includes("January 1900"))
+  assertFalse(santiago.includes("July 1916"))
+  assertFalse(lastBefore.includes("December 1979"))
+  assert(first.includes("January 1980"), "expected January 1980's grid")
+})
 
 // ─── mig#50: daylight-saving days and the grid's date heading ────────
 
@@ -388,15 +388,15 @@ Deno.test("mig#57: standalone / ignores a month before 1980", async () => {
 // the slot's own accessible name (its `aria-label`, or the `sr-only`
 // text of a past slot, which renders as a plain chip).
 function berlinSlotClocks(html: string): string[] {
-  return [...new Set(html.match(/\d\d:\d\d, Berlin, UTC[+-]\d+/g) ?? [])];
+  return [...new Set(html.match(/\d\d:\d\d, Berlin, UTC[+-]\d+/g) ?? [])]
 }
 
 // The slot grid's own date heading (TimeSlots.tsx's `<h3>`).
 function gridHeading(html: string): string | null {
   const m = html.match(
     /<h3 class="text-sm font-medium text-ink-muted">([^<]*)<\/h3>/,
-  );
-  return m ? m[1] : null;
+  )
+  return m ? m[1] : null
 }
 
 Deno.test("mig#50: Berlin host and visitor on 29 March 2026 — the 00:00 and 01:00 slots show different times", async () => {
@@ -409,7 +409,7 @@ Deno.test("mig#50: Berlin host and visitor on 29 March 2026 — the 00:00 and 01
       hostTz: "Europe/Berlin",
       weeklyAvailability: parseWeeklyAvailability("SUN 00:00-04:00"),
     },
-  );
+  )
   assertEquals(berlinSlotClocks(html), [
     "00:00, Berlin, UTC+1",
     "00:30, Berlin, UTC+1",
@@ -417,8 +417,8 @@ Deno.test("mig#50: Berlin host and visitor on 29 March 2026 — the 00:00 and 01
     "01:30, Berlin, UTC+1",
     "03:00, Berlin, UTC+2",
     "03:30, Berlin, UTC+2",
-  ]);
-});
+  ])
+})
 
 Deno.test("mig#50: Berlin host and visitor on 25 October 2026 — every slot shows its own time and offset", async () => {
   // Clocks fall back from 03:00 (UTC+2) to 02:00 (UTC+1) at 01:00 UTC.
@@ -430,7 +430,7 @@ Deno.test("mig#50: Berlin host and visitor on 25 October 2026 — every slot sho
       hostTz: "Europe/Berlin",
       weeklyAvailability: parseWeeklyAvailability("SUN 00:00-04:00"),
     },
-  );
+  )
   assertEquals(berlinSlotClocks(html), [
     "00:00, Berlin, UTC+2",
     "00:30, Berlin, UTC+2",
@@ -440,8 +440,8 @@ Deno.test("mig#50: Berlin host and visitor on 25 October 2026 — every slot sho
     "02:30, Berlin, UTC+2",
     "03:00, Berlin, UTC+1",
     "03:30, Berlin, UTC+1",
-  ]);
-});
+  ])
+})
 
 Deno.test("mig#50: Tokyo host, New York visitor, 1 November 2026 — the heading names the slots' own day", async () => {
   // Tokyo's Sunday 17:00-20:00 is Sunday 03:00-06:00 in New York, but
@@ -454,17 +454,17 @@ Deno.test("mig#50: Tokyo host, New York visitor, 1 November 2026 — the heading
       weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
       slotDurationMin: 60,
     },
-  );
-  assertEquals(gridHeading(html), "Sunday, 1 November 2026");
-  assertFalse(html.includes("Saturday, 31 October 2026"), "DateCard too");
-  assertFalse(html.includes("Sat 31 Oct"), "the mobile summary bar too");
-  assert(html.includes("Sun 1 Nov"), "the summary bar names Sunday");
-  assert(html.includes("03:00, New York, UTC-5"), "expected the 17:00 slot");
+  )
+  assertEquals(gridHeading(html), "Sunday, 1 November 2026")
+  assertFalse(html.includes("Saturday, 31 October 2026"), "DateCard too")
+  assertFalse(html.includes("Sat 31 Oct"), "the mobile summary bar too")
+  assert(html.includes("Sun 1 Nov"), "the summary bar names Sunday")
+  assert(html.includes("03:00, New York, UTC-5"), "expected the 17:00 slot")
   // All three slots are on the heading's day, so no slot's accessible
   // name ends in a date note. ("Sun 1 Nov" itself does appear: the
   // mobile summary bar's short form of the heading.)
-  assertFalse(/UTC-5, \w{3} \d/.test(html), "no slot needs a date note");
-});
+  assertFalse(/UTC-5, \w{3} \d/.test(html), "no slot needs a date note")
+})
 
 Deno.test("mig#50: a day with no slots names the picked calendar day, not the visitor's day at the host's noon", async () => {
   const html = await renderIndex(
@@ -474,13 +474,13 @@ Deno.test("mig#50: a day with no slots names the picked calendar day, not the vi
       weeklyAvailability: parseWeeklyAvailability("SUN 17:00-20:00"),
       blockedDates: new Set(["2026-11-01"]),
     },
-  );
+  )
   assert(
     html.includes("No available times on Sunday, 1 November 2026."),
     "expected the empty-day line to name the picked day",
-  );
-  assertFalse(html.includes("Saturday, 31 October 2026"));
-});
+  )
+  assertFalse(html.includes("Saturday, 31 October 2026"))
+})
 
 Deno.test("mig#50: Ho Chi Minh host, New York visitor — the heading and date card name the clicked day, and only the Monday slots carry a note", async () => {
   // Ho Chi Minh 09:00-17:00 on Tuesday 6 October is 22:00 Monday to
@@ -489,18 +489,18 @@ Deno.test("mig#50: Ho Chi Minh host, New York visitor — the heading and date c
   // slots each carry "Mon 5 Oct".
   const html = await renderIndex(
     `http://localhost/?date=${TEST_DATE}&tz=America/New_York`,
-  );
-  assertEquals(gridHeading(html), "Tuesday, 6 October 2026");
-  assertFalse(html.includes("Monday, 5 October 2026"), "DateCard too");
-  const notes = html.match(/New York, UTC-4, \w{3} \d+ \w{3}/g) ?? [];
-  assertEquals(new Set(notes).size, 1, `one note text: ${[...new Set(notes)]}`);
-  assert(notes[0]?.endsWith("Mon 5 Oct"));
+  )
+  assertEquals(gridHeading(html), "Tuesday, 6 October 2026")
+  assertFalse(html.includes("Monday, 5 October 2026"), "DateCard too")
+  const notes = html.match(/New York, UTC-4, \w{3} \d+ \w{3}/g) ?? []
+  assertEquals(new Set(notes).size, 1, `one note text: ${[...new Set(notes)]}`)
+  assert(notes[0]?.endsWith("Mon 5 Oct"))
   for (const t of ["22:00", "22:30", "23:00", "23:30"]) {
-    assert(html.includes(`${t}, New York, UTC-4, Mon 5 Oct`), t);
+    assert(html.includes(`${t}, New York, UTC-4, Mon 5 Oct`), t)
   }
-  assert(/00:00, New York, UTC-4(?!,)/.test(html), "00:00 Tuesday: no note");
-  assert(/05:30, New York, UTC-4(?!,)/.test(html), "05:30 Tuesday: no note");
-});
+  assert(/00:00, New York, UTC-4(?!,)/.test(html), "00:00 Tuesday: no note")
+  assert(/05:30, New York, UTC-4(?!,)/.test(html), "05:30 Tuesday: no note")
+})
 
 Deno.test("mig#50: when no slot falls on the clicked day in the visitor's zone, the heading names the first slot's day", async () => {
   // Auckland (UTC+13 from late September) 09:00-10:00 on Tuesday 6
@@ -511,9 +511,9 @@ Deno.test("mig#50: when no slot falls on the clicked day in the visitor's zone, 
       hostTz: "Pacific/Auckland",
       weeklyAvailability: parseWeeklyAvailability("TUE 09:00-10:00"),
     },
-  );
-  assertEquals(gridHeading(html), "Monday, 5 October 2026");
-  assertFalse(html.includes("Tuesday, 6 October 2026"), "DateCard too");
-  assert(html.includes("16:00, New York, UTC-4"), "expected the 09:00 slot");
-  assertFalse(/UTC-4, \w{3} \d/.test(html), "no slot needs a date note");
-});
+  )
+  assertEquals(gridHeading(html), "Monday, 5 October 2026")
+  assertFalse(html.includes("Tuesday, 6 October 2026"), "DateCard too")
+  assert(html.includes("16:00, New York, UTC-4"), "expected the 09:00 slot")
+  assertFalse(/UTC-4, \w{3} \d/.test(html), "no slot needs a date note")
+})
