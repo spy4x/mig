@@ -400,10 +400,6 @@ Deno.test("bookingIcs — empty / whitespace notes are dropped", () => {
     b,
     cfg,
     `https://meet.example.com/cancel?id=01HXYZBK8M&t=${raw}`,
-    undefined,
-    undefined,
-    undefined,
-    "owner",
   );
 
   // Whitespace-only notes don't trigger a notes section.
