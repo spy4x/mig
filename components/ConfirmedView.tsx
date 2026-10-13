@@ -18,43 +18,42 @@
                   link already opens in a new tab on both.
 */
 
-import { canonicalTimeZoneOr, isValidTimeZone } from "@spy4x/time/tz";
-import { formatHostClockIn, formatHostDateIn } from "../lib/clock.ts";
+import { canonicalTimeZoneOr, isValidTimeZone } from "@spy4x/time/tz"
+import { formatHostClockIn, formatHostDateIn } from "../lib/clock.ts"
 import {
   IconArrowLeft,
   IconArrowRight,
   IconCheck,
   IconInformationCircle,
   IconMinus,
-} from "@spy4x/preact-icons";
-import type { ConfirmedBooking, ConfirmedData } from "../lib/confirmed-data.ts";
+} from "@spy4x/preact-icons"
+import type { ConfirmedBooking, ConfirmedData } from "../lib/confirmed-data.ts"
 
 export interface ConfirmedViewProps extends ConfirmedData {
-  hostName: string;
-  meetingUrl: string;
-  slotDurationMin: number;
+  hostName: string
+  meetingUrl: string
+  slotDurationMin: number
   /** Where "back to booking" / "book another time" links go. */
-  backHref: string;
+  backHref: string
   /** Set to "_blank" to open the cancel link in a new tab. Omitted on
    *  the standalone page. */
-  cancelTarget?: "_blank";
+  cancelTarget?: "_blank"
   /** <main> classes for the cancelled state. Defaults to the
    *  standalone page's original `px-6 py-16` (matches the not-ok
    *  state) so the standalone page renders as it did before this
    *  component existed. /embed passes a tighter class list to
    *  match its own denser layout. */
-  cancelledMainClass?: string;
+  cancelledMainClass?: string
   /** id for every state's <main>. The standalone page's own <main>
    *  never had one (matching routes/index.tsx would be a separate,
    *  pre-existing gap this issue doesn't cover), so this defaults to
    *  undefined there; /embed passes "main" so its Skip-to-content
    *  link (routes/_app.tsx, #main) has a target on every state of
    *  /embed/confirmed, not just the picker. */
-  mainId?: string;
+  mainId?: string
 }
 
-const DEFAULT_CANCELLED_MAIN_CLASS =
-  "flex-1 grid place-items-center px-6 py-16";
+const DEFAULT_CANCELLED_MAIN_CLASS = "flex-1 grid place-items-center px-6 py-16"
 
 export function ConfirmedView(props: ConfirmedViewProps) {
   const {
@@ -68,17 +67,17 @@ export function ConfirmedView(props: ConfirmedViewProps) {
     cancelTarget,
     cancelledMainClass = DEFAULT_CANCELLED_MAIN_CLASS,
     mainId,
-  } = props;
+  } = props
 
   if (state !== "ok" || !booking) {
     const title = state === "invalid"
       ? "Invalid or expired link"
       : state === "missing"
       ? "Link missing parameters"
-      : "Booking not found";
+      : "Booking not found"
     const body = state === "invalid"
       ? "The link you used has been tampered with or is no longer valid."
-      : "Check the URL and try again, or contact the host.";
+      : "Check the URL and try again, or contact the host."
     return (
       <main id={mainId} class="flex-1 grid place-items-center px-6 py-16">
         <div class="max-w-sm text-center">
@@ -97,10 +96,10 @@ export function ConfirmedView(props: ConfirmedViewProps) {
           </a>
         </div>
       </main>
-    );
+    )
   }
 
-  const b: ConfirmedBooking = booking;
+  const b: ConfirmedBooking = booking
   // Display the booking time in the visitor's TZ when we captured one
   // at submit time. Falls back to host TZ when guestTz is missing or
   // invalid (older bookings, bad data, hidden legacy paths, or a
@@ -113,10 +112,10 @@ export function ConfirmedView(props: ConfirmedViewProps) {
   // them in) — they used to be called with `displayTz` for both,
   // which built the instant in the wrong zone and silently skipped
   // the conversion.
-  const knownGuestTz = !!b.guestTz && isValidTimeZone(b.guestTz);
-  const displayTz = canonicalTimeZoneOr(b.guestTz ?? undefined, b.hostTz);
-  const dateLabel = formatHostDateIn(b.date, b.time, b.hostTz, displayTz);
-  const timeLabel = formatHostClockIn(b.date, b.time, b.hostTz, displayTz);
+  const knownGuestTz = !!b.guestTz && isValidTimeZone(b.guestTz)
+  const displayTz = canonicalTimeZoneOr(b.guestTz ?? undefined, b.hostTz)
+  const dateLabel = formatHostDateIn(b.date, b.time, b.hostTz, displayTz)
+  const timeLabel = formatHostClockIn(b.date, b.time, b.hostTz, displayTz)
 
   if (mode === "cancelled") {
     return (
@@ -152,7 +151,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
           </div>
         </div>
       </main>
-    );
+    )
   }
 
   return (
@@ -216,7 +215,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
         </div>
       </div>
     </main>
-  );
+  )
 }
 
 function Detail(
@@ -227,5 +226,5 @@ function Detail(
       <span class="text-sm text-ink-muted">{label}</span>
       <span class="text-sm text-ink">{value}</span>
     </div>
-  );
+  )
 }

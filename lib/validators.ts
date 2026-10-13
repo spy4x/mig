@@ -13,169 +13,169 @@
 // sorts by key internally), which would have changed which message a
 // visitor sees first when several fields are invalid at once.
 
-import { type } from "arktype";
-import { canonicalTimeZone, isValidTimeZone } from "@spy4x/time/tz";
+import { type } from "arktype"
+import { canonicalTimeZone, isValidTimeZone } from "@spy4x/time/tz"
 import {
   emailAddress,
   hasHeaderControlCharacters,
   hasTextControlCharacters,
-} from "@spy4x/platform/validation/predicates";
-import { isCalendarDateTime } from "./clock.ts";
+} from "@spy4x/platform/validation/predicates"
+import { isCalendarDateTime } from "./clock.ts"
 
 export interface BookingData {
-  name: string;
-  email: string;
-  notes: string;
-  date: string;
-  slot: string;
-  guestTz?: string;
-  website: string;
+  name: string
+  email: string
+  notes: string
+  date: string
+  slot: string
+  guestTz?: string
+  website: string
 }
 
 export interface Issue {
-  path: string[];
-  message: string;
+  path: string[]
+  message: string
 }
 
 export type SafeParseResult =
   | { success: true; data: BookingData }
-  | { success: false; error: { issues: Issue[] } };
+  | { success: false; error: { issues: Issue[] } }
 
 function fail(field: string, message: string): SafeParseResult {
-  return { success: false, error: { issues: [{ path: [field], message }] } };
+  return { success: false, error: { issues: [{ path: [field], message }] } }
 }
 
 function expectString(
   value: unknown,
 ): { ok: true; value: string } | { ok: false; message: string } {
-  if (typeof value === "string") return { ok: true, value };
-  if (value === undefined) return { ok: false, message: "Required" };
-  const received = value === null ? "null" : typeof value;
-  return { ok: false, message: `Expected string, received ${received}` };
+  if (typeof value === "string") return { ok: true, value }
+  if (value === undefined) return { ok: false, message: "Required" }
+  const received = value === null ? "null" : typeof value
+  return { ok: false, message: `Expected string, received ${received}` }
 }
 
 const NameRule = type("string").pipe((s: string, ctx) => {
-  const trimmed = s.trim();
+  const trimmed = s.trim()
   if (trimmed.length < 2) {
-    return ctx.reject({ message: "Please enter your name." });
+    return ctx.reject({ message: "Please enter your name." })
   }
   if (trimmed.length > 100) {
     return ctx.reject({
       message: "String must contain at most 100 character(s)",
-    });
+    })
   }
   if (hasHeaderControlCharacters(trimmed)) {
-    return ctx.reject({ message: "Name contains unsupported characters." });
+    return ctx.reject({ message: "Name contains unsupported characters." })
   }
-  return trimmed;
-});
+  return trimmed
+})
 
 const EmailRule = type("string").pipe((s: string, ctx) => {
-  const trimmed = s.trim().toLowerCase();
-  const checked = emailAddress(trimmed);
+  const trimmed = s.trim().toLowerCase()
+  const checked = emailAddress(trimmed)
   if (checked instanceof type.errors) {
-    return ctx.reject({ message: "Please enter a valid email." });
+    return ctx.reject({ message: "Please enter a valid email." })
   }
-  return trimmed;
-});
+  return trimmed
+})
 
 /** The most characters the booking form's notes may hold. The cancel
  *  reason is cut to the same length (routes/api/cancel.ts). */
-export const NOTES_MAX_LENGTH = 500;
+export const NOTES_MAX_LENGTH = 500
 
 const NotesRule = type("string").pipe((s: string, ctx) => {
   if (s.length > NOTES_MAX_LENGTH) {
-    return ctx.reject({ message: "Notes must be 500 characters or less." });
+    return ctx.reject({ message: "Notes must be 500 characters or less." })
   }
   if (hasTextControlCharacters(s)) {
-    return ctx.reject({ message: "Notes contain unsupported characters." });
+    return ctx.reject({ message: "Notes contain unsupported characters." })
   }
-  return s;
-});
+  return s
+})
 
 const DateRule = type("string").pipe((s: string, ctx) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    return ctx.reject({ message: "Bad date format." });
+    return ctx.reject({ message: "Bad date format." })
   }
   // "2026-02-30" has the right shape but no such day (mig#57).
   if (!isCalendarDateTime(s)) {
-    return ctx.reject({ message: "That date does not exist." });
+    return ctx.reject({ message: "That date does not exist." })
   }
-  return s;
-});
+  return s
+})
 
 const SlotRule = type("string").pipe((s: string, ctx) => {
   if (!/^\d{2}:\d{2}$/.test(s)) {
-    return ctx.reject({ message: "Bad time format." });
+    return ctx.reject({ message: "Bad time format." })
   }
   // "24:00" or "10:60" has the right shape but no such time (mig#57).
   if (!isCalendarDateTime("2000-01-01", s)) {
-    return ctx.reject({ message: "That time does not exist." });
+    return ctx.reject({ message: "That time does not exist." })
   }
-  return s;
-});
+  return s
+})
 
 const GuestTzRule = type("string").pipe((s: string, ctx) => {
-  const trimmed = s.trim();
+  const trimmed = s.trim()
   if (trimmed.length > 100) {
     return ctx.reject({
       message: "String must contain at most 100 character(s)",
-    });
+    })
   }
   if (!isValidTimeZone(trimmed)) {
-    return ctx.reject({ message: "Bad timezone." });
+    return ctx.reject({ message: "Bad timezone." })
   }
-  return canonicalTimeZone(trimmed);
-});
+  return canonicalTimeZone(trimmed)
+})
 
 function runRule(
   rule: (input: string) => unknown,
   input: string,
 ): { ok: true; value: string } | { ok: false; message: string } {
-  const out = rule(input);
-  if (out instanceof type.errors) return { ok: false, message: out.summary };
-  return { ok: true, value: out as string };
+  const out = rule(input)
+  if (out instanceof type.errors) return { ok: false, message: out.summary }
+  return { ok: true, value: out as string }
 }
 
 export const BookingSchema = {
   safeParse(raw: Record<string, unknown>): SafeParseResult {
-    const nameIn = expectString(raw.name);
-    if (!nameIn.ok) return fail("name", nameIn.message);
-    const name = runRule(NameRule, nameIn.value);
-    if (!name.ok) return fail("name", name.message);
+    const nameIn = expectString(raw.name)
+    if (!nameIn.ok) return fail("name", nameIn.message)
+    const name = runRule(NameRule, nameIn.value)
+    if (!name.ok) return fail("name", name.message)
 
-    const emailIn = expectString(raw.email);
-    if (!emailIn.ok) return fail("email", emailIn.message);
-    const email = runRule(EmailRule, emailIn.value);
-    if (!email.ok) return fail("email", email.message);
+    const emailIn = expectString(raw.email)
+    if (!emailIn.ok) return fail("email", emailIn.message)
+    const email = runRule(EmailRule, emailIn.value)
+    if (!email.ok) return fail("email", email.message)
 
-    const notesIn = expectString(raw.notes);
-    if (!notesIn.ok) return fail("notes", notesIn.message);
-    const notes = runRule(NotesRule, notesIn.value);
-    if (!notes.ok) return fail("notes", notes.message);
+    const notesIn = expectString(raw.notes)
+    if (!notesIn.ok) return fail("notes", notesIn.message)
+    const notes = runRule(NotesRule, notesIn.value)
+    if (!notes.ok) return fail("notes", notes.message)
 
-    const dateIn = expectString(raw.date);
-    if (!dateIn.ok) return fail("date", dateIn.message);
-    const date = runRule(DateRule, dateIn.value);
-    if (!date.ok) return fail("date", date.message);
+    const dateIn = expectString(raw.date)
+    if (!dateIn.ok) return fail("date", dateIn.message)
+    const date = runRule(DateRule, dateIn.value)
+    if (!date.ok) return fail("date", date.message)
 
-    const slotIn = expectString(raw.slot);
-    if (!slotIn.ok) return fail("slot", slotIn.message);
-    const slot = runRule(SlotRule, slotIn.value);
-    if (!slot.ok) return fail("slot", slot.message);
+    const slotIn = expectString(raw.slot)
+    if (!slotIn.ok) return fail("slot", slotIn.message)
+    const slot = runRule(SlotRule, slotIn.value)
+    if (!slot.ok) return fail("slot", slot.message)
 
-    let guestTz: string | undefined;
+    let guestTz: string | undefined
     if (raw.guestTz !== undefined) {
-      const guestTzIn = expectString(raw.guestTz);
-      if (!guestTzIn.ok) return fail("guestTz", guestTzIn.message);
-      const parsedGuestTz = runRule(GuestTzRule, guestTzIn.value);
-      if (!parsedGuestTz.ok) return fail("guestTz", parsedGuestTz.message);
-      guestTz = parsedGuestTz.value;
+      const guestTzIn = expectString(raw.guestTz)
+      if (!guestTzIn.ok) return fail("guestTz", guestTzIn.message)
+      const parsedGuestTz = runRule(GuestTzRule, guestTzIn.value)
+      if (!parsedGuestTz.ok) return fail("guestTz", parsedGuestTz.message)
+      guestTz = parsedGuestTz.value
     }
 
     // Honeypot — must always be present, no other check.
-    const websiteIn = expectString(raw.website);
-    if (!websiteIn.ok) return fail("website", websiteIn.message);
+    const websiteIn = expectString(raw.website)
+    if (!websiteIn.ok) return fail("website", websiteIn.message)
 
     return {
       success: true,
@@ -188,6 +188,6 @@ export const BookingSchema = {
         guestTz,
         website: websiteIn.value,
       },
-    };
+    }
   },
-};
+}

@@ -6,19 +6,19 @@
   before any of our JS runs; keep them in sync if the mark changes.
 */
 
-import type { JSX } from "preact";
+import type { JSX } from "preact"
 
 interface IconProps extends Omit<JSX.SVGAttributes<SVGSVGElement>, "size"> {
   /** Edge length of the square viewBox. */
-  size?: number | string;
-  className?: string;
+  size?: number | string
+  className?: string
 }
 
 /** mig wordmark — square "M" on an orange tile, white stroke.
  *  Lives in `static/favicon.svg` as a baked-out copy for the
  *  browser's pre-JS favicon fetch. Keep the two in sync. */
 export function LogoMark(props: IconProps) {
-  const { size = 32, class: cls, className, ...rest } = props;
+  const { size = 32, class: cls, className, ...rest } = props
   return (
     <svg
       width={size}
@@ -39,5 +39,5 @@ export function LogoMark(props: IconProps) {
         stroke-linejoin="round"
       />
     </svg>
-  );
+  )
 }

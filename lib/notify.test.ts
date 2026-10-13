@@ -5,14 +5,14 @@
 // call happens, and set the three NTFY_* env vars only for the
 // duration of each test.
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
-import type { Booking, Config } from "./types.ts";
+import { assertEquals, assertStringIncludes } from "@std/assert"
+import type { Booking, Config } from "./types.ts"
 import {
   notifyBookingCancelled,
   notifyBookingEmailFailed,
   notifyBookingSucceeded,
   setNtfyClientOptionsForTesting,
-} from "./notify.ts";
+} from "./notify.ts"
 
 function makeConfig(): Config {
   return {
@@ -49,7 +49,7 @@ function makeConfig(): Config {
     hideBranding: false,
     githubUrl: "https://github.com/spy4x/mig",
     version: "test",
-  };
+  }
 }
 
 // Ho Chi Minh (host, no DST) / New York (guest, EDT in October — see
@@ -66,156 +66,152 @@ function makeCrossZoneBooking(guestTz?: string): Booking {
     guestEmail: "visitor@example.com",
     cancelTokenHash: "hash",
     status: "active",
-  };
+  }
 }
 
 async function captureNtfyBody(send: () => Promise<void>): Promise<string> {
-  const originalFetch = globalThis.fetch;
-  let body = "";
+  const originalFetch = globalThis.fetch
+  let body = ""
   globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
-    body = String(init?.body ?? "");
-    return Promise.resolve(new Response(null, { status: 200 }));
-  }) as typeof fetch;
-  Deno.env.set("NTFY_URL", "https://ntfy.example.com");
-  Deno.env.set("NTFY_TOPIC", "mig-test");
-  Deno.env.set("NTFY_TOKEN", "test-token");
+    body = String(init?.body ?? "")
+    return Promise.resolve(new Response(null, { status: 200 }))
+  }) as typeof fetch
+  Deno.env.set("NTFY_URL", "https://ntfy.example.com")
+  Deno.env.set("NTFY_TOPIC", "mig-test")
+  Deno.env.set("NTFY_TOKEN", "test-token")
   try {
-    await send();
+    await send()
   } finally {
-    globalThis.fetch = originalFetch;
-    Deno.env.delete("NTFY_URL");
-    Deno.env.delete("NTFY_TOPIC");
-    Deno.env.delete("NTFY_TOKEN");
-    Deno.env.delete("NTFY_MODE");
+    globalThis.fetch = originalFetch
+    Deno.env.delete("NTFY_URL")
+    Deno.env.delete("NTFY_TOPIC")
+    Deno.env.delete("NTFY_TOKEN")
+    Deno.env.delete("NTFY_MODE")
   }
-  return body;
+  return body
 }
 
 Deno.test("mig#15: booking-succeeded NTFY body shows the host's clock and the visitor's alongside it", async () => {
-  const cfg = makeConfig();
-  const booking = makeCrossZoneBooking("America/New_York");
-  const body = await captureNtfyBody(() =>
-    notifyBookingSucceeded(cfg, booking)
-  );
+  const cfg = makeConfig()
+  const booking = makeCrossZoneBooking("America/New_York")
+  const body = await captureNtfyBody(() => notifyBookingSucceeded(cfg, booking))
 
-  assertStringIncludes(body, "Ho Chi Minh, UTC+7");
-  assertStringIncludes(body, "New York, UTC-4");
+  assertStringIncludes(body, "Ho Chi Minh, UTC+7")
+  assertStringIncludes(body, "New York, UTC-4")
   // mig#15 review: the host clock and the visitor's carry their own
   // dates too (main had dropped the date entirely: `${date} ${time}`
   // with no zone at all) — the visitor's date differs from the
   // host's here, so it must show alongside the visitor's clock.
-  assertStringIncludes(body, "Tue 6 Oct 09:00, Ho Chi Minh, UTC+7");
-  assertStringIncludes(body, "visitor: Mon 5 Oct 22:00, New York, UTC-4");
-});
+  assertStringIncludes(body, "Tue 6 Oct 09:00, Ho Chi Minh, UTC+7")
+  assertStringIncludes(body, "visitor: Mon 5 Oct 22:00, New York, UTC-4")
+})
 
 Deno.test("mig#15: cancellation NTFY body shows the host's clock and the visitor's alongside it", async () => {
-  const cfg = makeConfig();
-  const booking = makeCrossZoneBooking("America/New_York");
+  const cfg = makeConfig()
+  const booking = makeCrossZoneBooking("America/New_York")
   const body = await captureNtfyBody(() =>
     notifyBookingCancelled(cfg, booking, "guest", "changed my mind")
-  );
+  )
 
-  assertStringIncludes(body, "Ho Chi Minh, UTC+7");
-  assertStringIncludes(body, "New York, UTC-4");
-});
+  assertStringIncludes(body, "Ho Chi Minh, UTC+7")
+  assertStringIncludes(body, "New York, UTC-4")
+})
 
 Deno.test("mig#15: NTFY never shows a raw ISO timestamp for Booked/At", async () => {
-  const cfg = makeConfig();
-  const booking = makeCrossZoneBooking("America/New_York");
+  const cfg = makeConfig()
+  const booking = makeCrossZoneBooking("America/New_York")
 
   const bookedBody = await captureNtfyBody(() =>
     notifyBookingSucceeded(cfg, booking)
-  );
+  )
   assertEquals(
     /\d{4}-\d{2}-\d{2}T/.test(bookedBody),
     false,
     "Booked: line must not be a raw ISO timestamp",
-  );
-  assertStringIncludes(bookedBody, "Booked: Thu 1 Oct");
+  )
+  assertStringIncludes(bookedBody, "Booked: Thu 1 Oct")
 
   const cancelBody = await captureNtfyBody(() =>
     notifyBookingCancelled(cfg, booking, "guest", "changed my mind")
-  );
+  )
   assertEquals(
     /\d{4}-\d{2}-\d{2}T/.test(cancelBody),
     false,
     "At: line must not be a raw ISO timestamp",
-  );
-});
+  )
+})
 
 Deno.test("mig#15: NTFY body never claims a visitor timezone that was never captured", async () => {
-  const cfg = makeConfig();
-  const booking = makeCrossZoneBooking(undefined);
-  const body = await captureNtfyBody(() =>
-    notifyBookingSucceeded(cfg, booking)
-  );
+  const cfg = makeConfig()
+  const booking = makeCrossZoneBooking(undefined)
+  const body = await captureNtfyBody(() => notifyBookingSucceeded(cfg, booking))
 
-  assertStringIncludes(body, "Ho Chi Minh, UTC+7");
+  assertStringIncludes(body, "Ho Chi Minh, UTC+7")
   assertEquals(
     body.includes("visitor:"),
     false,
     "must not guess a visitor zone that was never captured",
-  );
-});
+  )
+})
 
 Deno.test("email-failed NTFY body says the booking was not created and removed", async () => {
-  const cfg = makeConfig();
-  const booking = makeCrossZoneBooking("America/New_York");
+  const cfg = makeConfig()
+  const booking = makeCrossZoneBooking("America/New_York")
   const body = await captureNtfyBody(() =>
     notifyBookingEmailFailed(cfg, booking, "simulated SMTP failure", {
       rolledBack: true,
     })
-  );
+  )
 
   // The previous wording ("booking confirmation email failed to
   // send") only described the failure, not its outcome — lib/book.ts
   // rolls the booking back on any send failure here, so the push must
   // say that plainly.
-  const lower = body.toLowerCase();
-  assertStringIncludes(lower, "not created");
-  assertStringIncludes(lower, "removed");
-});
+  const lower = body.toLowerCase()
+  assertStringIncludes(lower, "not created")
+  assertStringIncludes(lower, "removed")
+})
 
 Deno.test("email-failed NTFY body does not claim removal when the rollback itself failed", async () => {
-  const cfg = makeConfig();
-  const booking = makeCrossZoneBooking("America/New_York");
+  const cfg = makeConfig()
+  const booking = makeCrossZoneBooking("America/New_York")
   const body = await captureNtfyBody(() =>
     notifyBookingEmailFailed(cfg, booking, "simulated SMTP failure", {
       rolledBack: false,
     })
-  );
+  )
 
   // A rollback that failed to write leaves the booking possibly still
   // on disk (BookingsStore.mutate() assigns in-memory before it
   // awaits persist(), so only the disk copy is in doubt) — the push
   // must not tell the host it was removed or that the slot is free,
   // and must say where to remove it by hand.
-  const lower = body.toLowerCase();
-  assertEquals(lower.includes("removed"), false, body);
-  assertEquals(lower.includes("free"), false, body);
-  assertStringIncludes(lower, "may still be on disk");
-  assertStringIncludes(body, booking.id);
-});
+  const lower = body.toLowerCase()
+  assertEquals(lower.includes("removed"), false, body)
+  assertEquals(lower.includes("free"), false, body)
+  assertStringIncludes(lower, "may still be on disk")
+  assertStringIncludes(body, booking.id)
+})
 
 Deno.test("email-failed NTFY push pins the rollback-failed title, priority, and tag", async () => {
-  const cfg = makeConfig();
-  const booking = makeCrossZoneBooking("America/New_York");
-  const originalFetch = globalThis.fetch;
-  let headers: Headers | undefined;
+  const cfg = makeConfig()
+  const booking = makeCrossZoneBooking("America/New_York")
+  const originalFetch = globalThis.fetch
+  let headers: Headers | undefined
   globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
     headers = init?.headers instanceof Headers
       ? init.headers
-      : new Headers(init?.headers);
-    return Promise.resolve(new Response(null, { status: 200 }));
-  }) as typeof fetch;
-  Deno.env.set("NTFY_URL", "https://ntfy.example.com");
-  Deno.env.set("NTFY_TOPIC", "mig-test");
-  Deno.env.set("NTFY_TOKEN", "test-token");
+      : new Headers(init?.headers)
+    return Promise.resolve(new Response(null, { status: 200 }))
+  }) as typeof fetch
+  Deno.env.set("NTFY_URL", "https://ntfy.example.com")
+  Deno.env.set("NTFY_TOPIC", "mig-test")
+  Deno.env.set("NTFY_TOKEN", "test-token")
 
   try {
     await notifyBookingEmailFailed(cfg, booking, "simulated SMTP failure", {
       rolledBack: false,
-    });
+    })
     // Pinned so a later edit can't silently drop the rollback-failed
     // signal back to the same title/priority/tags the success case
     // uses — a host triaging a stack of pushes by title or priority
@@ -224,23 +220,23 @@ Deno.test("email-failed NTFY push pins the rollback-failed title, priority, and 
     assertEquals(
       headers?.get("Title"),
       "mig: NOT booked, remove by hand - Visitor",
-    );
-    assertEquals(headers?.get("Priority"), "5");
-    assertStringIncludes(headers?.get("Tags") ?? "", "rollback-failed");
+    )
+    assertEquals(headers?.get("Priority"), "5")
+    assertStringIncludes(headers?.get("Tags") ?? "", "rollback-failed")
   } finally {
-    globalThis.fetch = originalFetch;
-    Deno.env.delete("NTFY_URL");
-    Deno.env.delete("NTFY_TOPIC");
-    Deno.env.delete("NTFY_TOKEN");
-    Deno.env.delete("NTFY_MODE");
+    globalThis.fetch = originalFetch
+    Deno.env.delete("NTFY_URL")
+    Deno.env.delete("NTFY_TOPIC")
+    Deno.env.delete("NTFY_TOKEN")
+    Deno.env.delete("NTFY_MODE")
   }
-});
+})
 
 // ─── mig#73: the shared ntfy client ──────────────────────────────────
 
 interface NtfyCall {
-  body: string;
-  headers: Headers;
+  body: string
+  headers: Headers
 }
 
 /** Runs `send` with NTFY_* set to `env`, a fetch stub that answers each
@@ -250,35 +246,35 @@ async function captureNtfyCalls(
   send: () => Promise<void>,
   opts: { statuses?: number[]; env?: Record<string, string> } = {},
 ): Promise<NtfyCall[]> {
-  const originalFetch = globalThis.fetch;
-  const statuses = [...(opts.statuses ?? [])];
-  const calls: NtfyCall[] = [];
+  const originalFetch = globalThis.fetch
+  const statuses = [...(opts.statuses ?? [])]
+  const calls: NtfyCall[] = []
   globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
     calls.push({
       body: String(init?.body ?? ""),
       headers: new Headers(init?.headers),
-    });
+    })
     return Promise.resolve(
       new Response(null, { status: statuses.shift() ?? 200 }),
-    );
-  }) as typeof fetch;
+    )
+  }) as typeof fetch
   const env = opts.env ?? {
     NTFY_URL: "https://ntfy.example.com",
     NTFY_TOPIC: "mig-test",
     NTFY_TOKEN: "test-token",
-  };
-  for (const [key, value] of Object.entries(env)) Deno.env.set(key, value);
-  setNtfyClientOptionsForTesting({ sleep: () => Promise.resolve() });
+  }
+  for (const [key, value] of Object.entries(env)) Deno.env.set(key, value)
+  setNtfyClientOptionsForTesting({ sleep: () => Promise.resolve() })
   try {
-    await send();
+    await send()
   } finally {
-    setNtfyClientOptionsForTesting({});
-    globalThis.fetch = originalFetch;
+    setNtfyClientOptionsForTesting({})
+    globalThis.fetch = originalFetch
     for (const key of ["NTFY_URL", "NTFY_TOPIC", "NTFY_TOKEN", "NTFY_MODE"]) {
-      Deno.env.delete(key);
+      Deno.env.delete(key)
     }
   }
-  return calls;
+  return calls
 }
 
 function cafeBooking(): Booking {
@@ -286,49 +282,49 @@ function cafeBooking(): Booking {
     ...makeCrossZoneBooking("America/New_York"),
     guestName: "Zoë",
     notes: "Café ☕ at 10",
-  };
+  }
 }
 
 Deno.test("a push whose body contains Café arrives intact", async () => {
   const calls = await captureNtfyCalls(() =>
     notifyBookingSucceeded(makeConfig(), cafeBooking())
-  );
-  assertEquals(calls.length, 1);
-  assertStringIncludes(calls[0].body, "Notes:  Café ☕ at 10");
-  assertStringIncludes(calls[0].body, "Guest:  Zoë <visitor@example.com>");
-});
+  )
+  assertEquals(calls.length, 1)
+  assertStringIncludes(calls[0].body, "Notes:  Café ☕ at 10")
+  assertStringIncludes(calls[0].body, "Guest:  Zoë <visitor@example.com>")
+})
 
 Deno.test("a push that ntfy answers with 429 or 5xx is retried", async () => {
   const calls = await captureNtfyCalls(
     () => notifyBookingSucceeded(makeConfig(), cafeBooking()),
     { statuses: [429, 503] },
-  );
-  assertEquals(calls.length, 3);
-});
+  )
+  assertEquals(calls.length, 3)
+})
 
 Deno.test("a push stops after three attempts when ntfy keeps failing", async () => {
   const calls = await captureNtfyCalls(
     () => notifyBookingSucceeded(makeConfig(), cafeBooking()),
     { statuses: [503, 503, 503, 503, 503] },
-  );
-  assertEquals(calls.length, 3);
-});
+  )
+  assertEquals(calls.length, 3)
+})
 
 Deno.test("NTFY_URL and NTFY_TOPIC without NTFY_TOKEN push without an Authorization header", async () => {
   const calls = await captureNtfyCalls(
     () => notifyBookingSucceeded(makeConfig(), cafeBooking()),
     { env: { NTFY_URL: "https://ntfy.example.com", NTFY_TOPIC: "mig-test" } },
-  );
-  assertEquals(calls.length, 1);
-  assertEquals(calls[0].headers.get("Authorization"), null);
-});
+  )
+  assertEquals(calls.length, 1)
+  assertEquals(calls[0].headers.get("Authorization"), null)
+})
 
 Deno.test("NTFY_TOKEN is sent as a bearer token", async () => {
   const calls = await captureNtfyCalls(() =>
     notifyBookingSucceeded(makeConfig(), cafeBooking())
-  );
-  assertEquals(calls[0].headers.get("Authorization"), "Bearer test-token");
-});
+  )
+  assertEquals(calls[0].headers.get("Authorization"), "Bearer test-token")
+})
 
 Deno.test("NTFY_MODE=errors still suppresses a booking push", async () => {
   const calls = await captureNtfyCalls(
@@ -340,14 +336,14 @@ Deno.test("NTFY_MODE=errors still suppresses a booking push", async () => {
         NTFY_MODE: "errors",
       },
     },
-  );
-  assertEquals(calls.length, 0);
-});
+  )
+  assertEquals(calls.length, 0)
+})
 
 Deno.test("a malformed NTFY_URL sends nothing and does not throw", async () => {
   const calls = await captureNtfyCalls(
     () => notifyBookingSucceeded(makeConfig(), cafeBooking()),
     { env: { NTFY_URL: "not a url", NTFY_TOPIC: "mig-test" } },
-  );
-  assertEquals(calls.length, 0);
-});
+  )
+  assertEquals(calls.length, 0)
+})

@@ -48,7 +48,7 @@
  *  thing to measure. Exported so each route spreads the exact same
  *  attribute name onto its wrapper instead of a second, driftable
  *  string literal. */
-export const HEIGHT_ATTR = "data-mig-height";
+export const HEIGHT_ATTR = "data-mig-height"
 
 export function heightReportScript(): string {
   return `(function(){try{
@@ -68,5 +68,5 @@ window.addEventListener("resize",send);
 }
 }
 if(window.document.readyState==="complete"){start();}else{window.addEventListener("load",start);}
-}catch(_e){}})();`;
+}catch(_e){}})();`
 }

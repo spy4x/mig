@@ -15,7 +15,7 @@ import {
   zoneCity,
   zonedDateTime,
   zoneOffsetLabel,
-} from "@spy4x/time/tz";
+} from "@spy4x/time/tz"
 
 // Date-only, e.g. "Wednesday, 2 September 2026". Used on the
 // confirmation page where Date + Time get separate rows.
@@ -37,14 +37,14 @@ export function formatHostDateIn(
   hostTz: string,
   displayTz: string,
 ): string {
-  const instant = zonedDateTime(date, time, hostTz);
+  const instant = zonedDateTime(date, time, hostTz)
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: displayTz,
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(instant);
+  }).format(instant)
 }
 
 // The single "HH:MM, City, UTC±N" clock string every page, email and
@@ -70,7 +70,7 @@ export function formatHostDateIn(
 // canonicalized first, which the doc comment above doesn't actually
 // promise.
 export function formatClockAt(instant: Date, tz: string): string {
-  return `${hhmmInTz(instant, tz)}, ${zoneLabel(tz, instant)}`;
+  return `${hhmmInTz(instant, tz)}, ${zoneLabel(tz, instant)}`
 }
 
 // The zone half of formatClockAt's "HH:MM, City, UTC±N" — "City,
@@ -80,16 +80,16 @@ export function formatClockAt(instant: Date, tz: string): string {
 // next to every slot's time (mig#48). See formatClockAt's doc comment
 // above for the three cases this mirrors.
 export function zoneLabel(tz: string, at: Date): string {
-  if (!tz.includes("/")) return zoneCity(tz);
-  if (isEtcZone(tz)) return zoneOffsetLabel(tz, at);
-  return `${zoneCity(tz)}, ${zoneOffsetLabel(tz, at)}`;
+  if (!tz.includes("/")) return zoneCity(tz)
+  if (isEtcZone(tz)) return zoneOffsetLabel(tz, at)
+  return `${zoneCity(tz)}, ${zoneOffsetLabel(tz, at)}`
 }
 
 // Fields formatSlotDisplay below returns for one slot in a grid.
 export interface SlotDisplay {
-  hhmm: string;
-  ariaZoneLabel: string;
-  offsetNote?: string;
+  hhmm: string
+  ariaZoneLabel: string
+  offsetNote?: string
 }
 
 /**
@@ -113,18 +113,18 @@ export function formatSlotDisplay(
   tz: string,
   headerOffset: string,
 ): SlotDisplay {
-  const ownOffset = zoneOffsetLabel(tz, instant);
+  const ownOffset = zoneOffsetLabel(tz, instant)
   return {
     hhmm: hhmmInTz(instant, tz),
     ariaZoneLabel: zoneLabel(tz, instant),
     offsetNote: ownOffset === headerOffset ? undefined : ownOffset,
-  };
+  }
 }
 
 // Fields formatGridHeader below returns for a slot grid's header.
 export interface GridHeader {
-  label: string;
-  offset: string;
+  label: string
+  offset: string
 }
 
 /**
@@ -152,15 +152,15 @@ export function formatGridHeader(
   instants: Date[],
   tz: string,
 ): GridHeader | null {
-  if (instants.length === 0) return null;
-  const first = instants[0];
-  return { label: zoneLabel(tz, first), offset: zoneOffsetLabel(tz, first) };
+  if (instants.length === 0) return null
+  const first = instants[0]
+  return { label: zoneLabel(tz, first), offset: zoneOffsetLabel(tz, first) }
 }
 
 // Case-insensitive "Etc/" prefix check — see formatClockAt's doc
 // comment for why this can't assume its input is already canonical.
 function isEtcZone(tz: string): boolean {
-  return tz.slice(0, 4).toLowerCase() === "etc/";
+  return tz.slice(0, 4).toLowerCase() === "etc/"
 }
 
 // "Wed 23 Sep" — short weekday + day + month, no year. Used to label
@@ -172,17 +172,17 @@ export function formatShortDateAt(instant: Date, tz: string): string {
     weekday: "short",
     day: "numeric",
     month: "short",
-  });
+  })
   // "Wed, 23 Sep" -> "Wed 23 Sep" — strip the comma after the weekday,
   // same trick as formatInstantShort.
-  return fmt.format(instant).replace(/^([^,]+),/, "$1");
+  return fmt.format(instant).replace(/^([^,]+),/, "$1")
 }
 
 // "Thu 24 Sep 09:00, Ho Chi Minh, UTC+7" — short dated clock, used in
 // subject lines and NTFY pushes where the long form (formatInstantLong
 // + city/offset) would be too long.
 export function formatClockShortAt(instant: Date, tz: string): string {
-  return `${formatShortDateAt(instant, tz)} ${formatClockAt(instant, tz)}`;
+  return `${formatShortDateAt(instant, tz)} ${formatClockAt(instant, tz)}`
 }
 
 // "Friday, 28 August 2026 at 04:00, New York, UTC-4" — long dated
@@ -194,7 +194,7 @@ export function formatClockLongAt(instant: Date, tz: string): string {
         ? `${zoneCity(tz)}, ${zoneOffsetLabel(tz, instant)}`
         : zoneCity(tz)
     )
-  }`;
+  }`
 }
 
 // Owner-facing combined clock (mig#15 review): the host's own dated
@@ -213,20 +213,20 @@ export function formatOwnerClock(
   guestTz: string | undefined,
   long = false,
 ): string {
-  const instant = zonedDateTime(date, time, hostTz);
+  const instant = zonedDateTime(date, time, hostTz)
   const host = long
     ? formatClockLongAt(instant, hostTz)
-    : formatClockShortAt(instant, hostTz);
-  const guestTzCanonical = canonicalValidTimeZoneOrNull(guestTz);
-  if (!guestTzCanonical) return host;
+    : formatClockShortAt(instant, hostTz)
+  const guestTzCanonical = canonicalValidTimeZoneOrNull(guestTz)
+  if (!guestTzCanonical) return host
   const sameDay = isoDateInTz(instant, hostTz) ===
-    isoDateInTz(instant, guestTzCanonical);
+    isoDateInTz(instant, guestTzCanonical)
   const guest = sameDay
     ? formatClockAt(instant, guestTzCanonical)
     : long
     ? formatClockLongAt(instant, guestTzCanonical)
-    : formatClockShortAt(instant, guestTzCanonical);
-  return `${host} (visitor: ${guest})`;
+    : formatClockShortAt(instant, guestTzCanonical)
+  return `${host} (visitor: ${guest})`
 }
 
 // Time-of-day + city + offset for the host-local wall-clock
@@ -250,7 +250,7 @@ export function formatHostClockIn(
   hostTz: string,
   displayTz: string,
 ): string {
-  return formatClockAt(zonedDateTime(date, time, hostTz), displayTz);
+  return formatClockAt(zonedDateTime(date, time, hostTz), displayTz)
 }
 
 // The earliest date mig takes from a link, a form or /api/slots: `/`
@@ -267,7 +267,7 @@ export function formatHostClockIn(
 // on 1972-01-07, when Africa/Monrovia left -0:44:30; 1980 leaves room
 // for the six days a month grid shows before the 1st. Nobody can book
 // a past date, so no visitor needs an earlier one.
-export const EARLIEST_DATE = "1980-01-01";
+export const EARLIEST_DATE = "1980-01-01"
 
 // Whether `date` ("YYYY-MM-DD") and `time` ("HH:MM") name a real
 // calendar date and time of day: "2026-02-30" and "24:00" do not.
@@ -287,10 +287,10 @@ export function isCalendarDateTime(
   tz = "UTC",
 ): boolean {
   try {
-    zonedDateTime(date, time, tz);
-    return true;
+    zonedDateTime(date, time, tz)
+    return true
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -307,6 +307,6 @@ export function hostSlotInstant(
   time: string,
   hostTz: string,
 ): Date | null {
-  const { kind, instant } = resolveWallClock(date, time, hostTz);
-  return kind === WallClockKind.Gap ? null : instant;
+  const { kind, instant } = resolveWallClock(date, time, hostTz)
+  return kind === WallClockKind.Gap ? null : instant
 }

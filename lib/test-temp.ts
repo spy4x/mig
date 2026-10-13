@@ -5,7 +5,7 @@
 
 export interface TempDataFile extends AsyncDisposable {
   /** Absolute path of the file, under the runtime's temp directory. */
-  path: string;
+  path: string
 }
 
 /**
@@ -20,16 +20,16 @@ export async function tempDataFile(): Promise<TempDataFile> {
   const path = await Deno.makeTempFile({
     prefix: "mig-test-",
     suffix: ".json",
-  });
-  await Deno.writeTextFile(path, "[]");
+  })
+  await Deno.writeTextFile(path, "[]")
   return {
     path,
     async [Symbol.asyncDispose]() {
       try {
-        await Deno.remove(path);
+        await Deno.remove(path)
       } catch (err) {
-        if (!(err instanceof Deno.errors.NotFound)) throw err;
+        if (!(err instanceof Deno.errors.NotFound)) throw err
       }
     },
-  };
+  }
 }

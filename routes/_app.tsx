@@ -1,10 +1,10 @@
-import { SEOHead } from "@spy4x/preact-system/seo-head";
-import { define } from "../lib/utils.ts";
+import { SEOHead } from "@spy4x/preact-system/seo-head"
+import { define } from "../lib/utils.ts"
 import {
   forcedThemeFor,
   pageHasNoThemeToggle,
   themeScript,
-} from "../lib/theme.ts";
+} from "../lib/theme.ts"
 
 // Default root layout. Wraps every page in <html>+<body> with theme
 // bootstrap, meta tags, and the mig favicon.
@@ -20,12 +20,12 @@ import {
 // Vite-bundled stylesheet.
 
 export default define.page(function App({ Component, state, url }) {
-  const cfg = state.config;
-  const title = `Book a meeting with ${cfg.hostName} · mig`;
+  const cfg = state.config
+  const title = `Book a meeting with ${cfg.hostName} · mig`
   const description =
-    `${cfg.hostName} — ${cfg.slotDurationMin}-minute video call. Pick a time that works for you.`;
-  const canonical = new URL(url.pathname, cfg.publicUrl).toString();
-  const forcedTheme = forcedThemeFor(url, cfg.theme);
+    `${cfg.hostName} — ${cfg.slotDurationMin}-minute video call. Pick a time that works for you.`
+  const canonical = new URL(url.pathname, cfg.publicUrl).toString()
+  const forcedTheme = forcedThemeFor(url, cfg.theme)
 
   return (
     <html
@@ -118,5 +118,5 @@ html,body{margin:0;background:var(--color-canvas);color:var(--color-ink);font-fa
         <Component />
       </body>
     </html>
-  );
-});
+  )
+})

@@ -1,7 +1,7 @@
-import { defineConfig } from "vite";
-import { fresh } from "@fresh/plugin-vite";
-import tailwindcss from "@tailwindcss/vite";
-import { preactThemeCss, requireComponentCss } from "@spy4x/preact-theme/vite";
+import { defineConfig } from "vite"
+import { fresh } from "@fresh/plugin-vite"
+import tailwindcss from "@tailwindcss/vite"
+import { preactThemeCss, requireComponentCss } from "@spy4x/preact-theme/vite"
 
 export default defineConfig({
   plugins: [
@@ -15,4 +15,4 @@ export default defineConfig({
         environment.name === "client",
     },
   ],
-});
+})

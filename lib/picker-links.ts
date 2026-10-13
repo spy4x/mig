@@ -10,7 +10,7 @@
 /** The path a "no params" link should point at: "/" for the
  *  standalone page, the base path itself (e.g. "/embed") otherwise. */
 export function pickerPath(basePath: string): string {
-  return basePath === "" ? "/" : basePath;
+  return basePath === "" ? "/" : basePath
 }
 
 /** Build an `href` for a picker link, e.g. `pickerHref("/embed", {
@@ -35,7 +35,7 @@ export function pickerHref(
   tz?: string | null,
   theme?: string | null,
 ): string {
-  return `${pickerPath(basePath)}${pickerQuery(params, tz, theme)}`;
+  return `${pickerPath(basePath)}${pickerQuery(params, tz, theme)}`
 }
 
 /** The query part of {@link pickerHref} on its own — `"?date=…&tz=…"`,
@@ -49,11 +49,11 @@ export function pickerQuery(
   tz?: string | null,
   theme?: string | null,
 ): string {
-  const merged: Record<string, string> = { ...params };
-  if (tz) merged.tz = tz;
-  if (theme) merged.theme = theme;
-  if (Object.keys(merged).length === 0) return "";
-  return `?${new URLSearchParams(merged).toString()}`;
+  const merged: Record<string, string> = { ...params }
+  if (tz) merged.tz = tz
+  if (theme) merged.theme = theme
+  if (Object.keys(merged).length === 0) return ""
+  return `?${new URLSearchParams(merged).toString()}`
 }
 
 /** Build the address `BookingFlow.tsx`'s `pushUrl` writes into the
@@ -74,11 +74,11 @@ export function pickerPushAddress(
   basePath = "",
   theme: string | null = null,
 ): string {
-  const params: Record<string, string> = {};
-  if (next.date) params.date = next.date;
-  if (next.slot) params.slot = next.slot;
-  if (next.month) params.month = next.month;
-  return pickerHref(basePath, params, tz, theme);
+  const params: Record<string, string> = {}
+  if (next.date) params.date = next.date
+  if (next.slot) params.slot = next.slot
+  if (next.month) params.month = next.month
+  return pickerHref(basePath, params, tz, theme)
 }
 
 /** Binds one `tz`, `basePath` and `theme` for both halves of the
@@ -92,17 +92,17 @@ export function pickerLinks(
   basePath = "",
   theme: string | null = null,
 ): {
-  tz: string | null;
-  basePath: string;
-  theme: string | null;
+  tz: string | null
+  basePath: string
+  theme: string | null
   pushAddress(
     next: { date: string | null; slot?: string | null; month?: string },
-  ): string;
+  ): string
 } {
   return {
     tz,
     basePath,
     theme,
     pushAddress: (next) => pickerPushAddress(next, tz, basePath, theme),
-  };
+  }
 }

@@ -15,31 +15,31 @@
   fresh-active-links.test.tsx.
 */
 
-import { Calendar } from "@spy4x/preact-system/calendar";
-import { pickerQuery } from "../lib/picker-links.ts";
+import { Calendar } from "@spy4x/preact-system/calendar"
+import { pickerQuery } from "../lib/picker-links.ts"
 
 interface PickerCalendarProps {
   /** YYYY-MM-DD (host-local) — month we anchor on. */
-  monthAnchor: string;
+  monthAnchor: string
   /** YYYY-MM-DD — the first date that can be booked (today + minNotice). */
-  minDate: string;
+  minDate: string
   /** YYYY-MM-DD — the last date that can be booked. */
-  maxDate: string;
+  maxDate: string
   /** Map of YYYY-MM-DD → remaining slots (0 = full). Only present for
    *  dates with at least one available time slot. */
-  slotsByDate: Record<string, number>;
-  selectedDate: string | null;
-  hostTz: string;
-  onSelectDate?: (date: string) => void;
-  onSelectMonth?: (monthAnchor: string) => void;
+  slotsByDate: Record<string, number>
+  selectedDate: string | null
+  hostTz: string
+  onSelectDate?: (date: string) => void
+  onSelectMonth?: (monthAnchor: string) => void
   /** The visitor's IANA zone, once known (mig#15). */
-  tz?: string | null;
+  tz?: string | null
   /** /embed's forced theme, once known (mig#44); `null` for "auto". */
-  theme?: string | null;
+  theme?: string | null
 }
 
 export function PickerCalendar(props: PickerCalendarProps) {
-  const { tz, theme } = props;
+  const { tz, theme } = props
   return (
     <Calendar
       monthAnchor={props.monthAnchor}
@@ -54,5 +54,5 @@ export function PickerCalendar(props: PickerCalendarProps) {
       monthHref={(month) => pickerQuery({ month }, tz, theme)}
       class="border-subtle bg-surface dark:border-subtle dark:bg-surface"
     />
-  );
+  )
 }

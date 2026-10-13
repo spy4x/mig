@@ -32,7 +32,7 @@ export function guestTzCaptureScript(inputId: string): string {
 var tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
 var el=document.getElementById(${JSON.stringify(inputId)});
 if(el&&tz&&!el.value)el.value=tz;
-}catch(_e){}})();`;
+}catch(_e){}})();`
 }
 
 // /embed's timezone-before-first-paint fix (mig#15). guestTzCaptureScript
@@ -72,7 +72,7 @@ var u=new URL(location.href);
 if(u.searchParams.get("tz")===tz)return;
 u.searchParams.set("tz",tz);
 location.replace(u.toString());
-}catch(_e){}})();`;
+}catch(_e){}})();`
 }
 
 // Pure decision logic behind embedTzRedirectScript's `location.replace`
@@ -88,5 +88,5 @@ export function shouldRedirectTz(
   currentParam: string | null,
   detectedZone: string,
 ): boolean {
-  return currentParam !== detectedZone;
+  return currentParam !== detectedZone
 }

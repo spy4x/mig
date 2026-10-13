@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks"
 import {
   createThemeStore,
   type ThemePreference,
   ThemeValue,
-} from "@spy4x/preact-signals/theme";
-import { cn } from "@spy4x/preact-cn";
-import { IconMoon, IconSun, IconThemeAuto } from "@spy4x/preact-icons";
+} from "@spy4x/preact-signals/theme"
+import { cn } from "@spy4x/preact-cn"
+import { IconMoon, IconSun, IconThemeAuto } from "@spy4x/preact-icons"
 import {
   THEME_STORAGE_KEY,
   type ThemeParam,
   themePreference,
-} from "../lib/theme.ts";
+} from "../lib/theme.ts"
 
 /*
   Theme toggle island.
@@ -34,7 +34,7 @@ export function nextPreference(p: ThemePreference): ThemePreference {
     ? ThemeValue.LIGHT
     : p === ThemeValue.LIGHT
     ? ThemeValue.DARK
-    : ThemeValue.SYSTEM;
+    : ThemeValue.SYSTEM
 }
 
 function label(p: ThemePreference): string {
@@ -42,18 +42,18 @@ function label(p: ThemePreference): string {
     ? "Theme: follows system. Click for light."
     : p === ThemeValue.LIGHT
     ? "Theme: light. Click for dark."
-    : "Theme: dark. Click for auto.";
+    : "Theme: dark. Click for auto."
 }
 
 function Icon({ preference }: { preference: ThemePreference }) {
-  if (preference === ThemeValue.LIGHT) return <IconSun class="size-4.5" />;
-  if (preference === ThemeValue.DARK) return <IconMoon class="size-4.5" />;
-  return <IconThemeAuto class="size-4.5" />;
+  if (preference === ThemeValue.LIGHT) return <IconSun class="size-4.5" />
+  if (preference === ThemeValue.DARK) return <IconMoon class="size-4.5" />
+  return <IconThemeAuto class="size-4.5" />
 }
 
 interface ThemeToggleProps {
   /** The owner's `THEME`: the preference when the visitor stored none. */
-  defaultTheme: ThemeParam;
+  defaultTheme: ThemeParam
 }
 
 export default function ThemeToggle({ defaultTheme }: ThemeToggleProps) {
@@ -66,30 +66,30 @@ export default function ThemeToggle({ defaultTheme }: ThemeToggleProps) {
         defaultPreference: themePreference(defaultTheme),
       }),
     [defaultTheme],
-  );
+  )
   const [preference, setPreference] = useState<ThemePreference>(
     ThemeValue.SYSTEM,
-  );
-  const [mounted, setMounted] = useState(false);
+  )
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    const detach = store.attach();
+    const detach = store.attach()
     // The store's signals come from the same @preact/signals copy as
     // this island (deno.json maps the package's own pinned import to
     // mig's); an explicit subscription keeps the island's state in step.
-    const unsubscribe = store.preference.subscribe(setPreference);
-    setMounted(true);
+    const unsubscribe = store.preference.subscribe(setPreference)
+    setMounted(true)
     return () => {
-      unsubscribe();
-      detach();
-    };
-  }, [store]);
+      unsubscribe()
+      detach()
+    }
+  }, [store])
 
   // Until mounted, render a placeholder with the same dimensions so the
   // layout doesn't shift when the real button hydrates.
   const base = cn(
     "relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-ink-muted hover:text-ink hover:bg-surface-sunken transition-colors duration-(--duration-snappy) focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-canvas)",
-  );
+  )
 
   if (!mounted) {
     return (
@@ -101,7 +101,7 @@ export default function ThemeToggle({ defaultTheme }: ThemeToggleProps) {
       >
         <Icon preference={ThemeValue.SYSTEM} />
       </button>
-    );
+    )
   }
 
   return (
@@ -114,5 +114,5 @@ export default function ThemeToggle({ defaultTheme }: ThemeToggleProps) {
     >
       <Icon preference={preference} />
     </button>
-  );
+  )
 }

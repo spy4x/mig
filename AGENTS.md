@@ -27,7 +27,9 @@
 - **Storage:** JSON file (`./data/bookings.json`) + in-process async mutex
 - **Email:** SMTP via `@spy4x/email` (`nodemailer` underneath, pinned by that
   package)
-- **IDs:** ULID (Crockford base32, time-sortable), from `@spy4x/platform/tokens`
+- **IDs:** UUID version 7 (time-sortable), from
+  `@spy4x/platform/universal/uuid`. A booking stored before mig#110 keeps its
+  ULID; ids are looked up as plain strings, so both shapes work.
 
 ## Invariants
 

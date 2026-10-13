@@ -8,33 +8,33 @@
 // `renderToString` never runs Fresh's hook — and check that no link
 // carries Fresh's marking. TimeSlots.test.tsx covers the slot links.
 
-import { assertEquals, assertFalse } from "@std/assert";
-import { App } from "fresh";
-import type { VNode } from "preact";
-import { PickerCalendar } from "./PickerCalendar.tsx";
-import { DateCard } from "./DateCard.tsx";
-import { TimeCard } from "./TimeCard.tsx";
+import { assertEquals, assertFalse } from "@std/assert"
+import { App } from "fresh"
+import type { VNode } from "preact"
+import { PickerCalendar } from "./PickerCalendar.tsx"
+import { DateCard } from "./DateCard.tsx"
+import { TimeCard } from "./TimeCard.tsx"
 
 async function renderThroughFresh(url: string, node: VNode): Promise<string> {
-  const path = new URL(url).pathname;
-  const app = new App().get(path, (ctx) => ctx.render(node));
-  const res = await app.handler()(new Request(url));
-  return await res.text();
+  const path = new URL(url).pathname
+  const app = new App().get(path, (ctx) => ctx.render(node))
+  const res = await app.handler()(new Request(url))
+  return await res.text()
 }
 
 // Every `<a>` opening tag's `aria-current` value, after checking that
 // Fresh left none of its own marking on it.
 function linkCurrents(html: string): string[] {
-  const links = html.match(/<a [^>]*>/g) ?? [];
+  const links = html.match(/<a [^>]*>/g) ?? []
   for (const a of links) {
-    assertFalse(a.includes("data-ancestor"), a);
-    assertFalse(a.includes("data-current"), a);
+    assertFalse(a.includes("data-ancestor"), a)
+    assertFalse(a.includes("data-current"), a)
   }
-  return links.map((a) => a.match(/aria-current="([^"]*)"/)?.[1] ?? "none");
+  return links.map((a) => a.match(/aria-current="([^"]*)"/)?.[1] ?? "none")
 }
 
 for (const base of ["", "/embed"]) {
-  const path = base || "/";
+  const path = base || "/"
 
   Deno.test(`mig#50: on ${path}, only the selected calendar day is current — never another day or a month link`, async () => {
     const html = await renderThroughFresh(
@@ -47,12 +47,12 @@ for (const base of ["", "/embed"]) {
         selectedDate="2026-11-03"
         hostTz="Europe/Berlin"
       />,
-    );
-    const currents = linkCurrents(html);
+    )
+    const currents = linkCurrents(html)
     // Previous month, next month (both in range, so both are links), and
     // the three bookable days.
-    assertEquals(currents.length, 5, html);
-    assertEquals(currents.filter((c) => c === "date").length, 1);
+    assertEquals(currents.length, 5, html)
+    assertEquals(currents.filter((c) => c === "date").length, 1)
     // The calendar's links start with "?", which Fresh leaves alone, so
     // they carry no `aria-current` at all.
     assertEquals(currents.filter((c) => c !== "date"), [
@@ -60,8 +60,8 @@ for (const base of ["", "/embed"]) {
       "none",
       "none",
       "none",
-    ]);
-  });
+    ])
+  })
 
   Deno.test(`mig#50: on ${path}, the date and time cards' Change links are not current`, async () => {
     const html = await renderThroughFresh(
@@ -79,7 +79,7 @@ for (const base of ["", "/embed"]) {
           basePath={base}
         />
       </div>,
-    );
-    assertEquals(linkCurrents(html), ["false", "false"]);
-  });
+    )
+    assertEquals(linkCurrents(html), ["false", "false"])
+  })
 }

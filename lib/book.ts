@@ -8,30 +8,31 @@
 // That's what keeps a host's `frame-ancestors` allow-list scoped to
 // /embed meaningful (issue #11).
 
-import type { Context } from "fresh";
-import type { State } from "./utils.ts";
-import { monotonicUlid, newOpaqueToken } from "@spy4x/platform/tokens";
+import type { Context } from "fresh"
+import type { State } from "./utils.ts"
+import { newOpaqueToken } from "@spy4x/platform/tokens"
+import { uuidV7 } from "@spy4x/platform/universal/uuid"
 import {
   sendBookingCorrectionEmail,
   sendGuestBookingEmail,
   sendOwnerBookingEmail,
-} from "./email.ts";
-import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts";
-import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip";
-import { zonedDateTime } from "@spy4x/time/tz";
-import { EARLIEST_DATE, hostSlotInstant } from "./clock.ts";
-import { BookingSchema } from "./validators.ts";
-import { isHoneypotFilled } from "@spy4x/platform/validation/predicates";
+} from "./email.ts"
+import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts"
+import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip"
+import { zonedDateTime } from "@spy4x/time/tz"
+import { EARLIEST_DATE, hostSlotInstant } from "./clock.ts"
+import { BookingSchema } from "./validators.ts"
+import { isHoneypotFilled } from "@spy4x/platform/validation/predicates"
 import {
   BodyReadTimeoutError,
   parseBoundedFormData,
   PayloadTooLargeError,
-} from "@spy4x/net/bounded-body";
+} from "@spy4x/net/bounded-body"
 
 /** "" → "/", "/embed" → "/embed" — where a failed submission redirects
  *  back to (the picker root). */
 function formPath(basePath: string): string {
-  return basePath === "" ? "/" : basePath;
+  return basePath === "" ? "/" : basePath
 }
 
 // mig#18: a redirect field's raw form value, truncated to a sane
@@ -40,35 +41,35 @@ function formPath(basePath: string): string {
 // against carrying an attacker-sized value into a `Location` header
 // before BookingSchema's own validation ever gets a chance to reject
 // it outright.
-const MAX_REDIRECT_FIELD_LEN = 100;
+const MAX_REDIRECT_FIELD_LEN = 100
 
 function capRedirectField(value: string | undefined): string | undefined {
   return value !== undefined && value.length > MAX_REDIRECT_FIELD_LEN
     ? value.slice(0, MAX_REDIRECT_FIELD_LEN)
-    : value;
+    : value
 }
 
 // The booking form is a handful of short fields plus notes of at most
 // 500 characters. Even 500 four-byte characters, percent-encoded, stay
 // under 6 KB, so 64 KiB leaves room for any real submission while an
 // oversized body is refused before it is buffered.
-export const MAX_BOOKING_BODY_BYTES = 64 * 1024;
+export const MAX_BOOKING_BODY_BYTES = 64 * 1024
 
 // How long a booking body may go without sending a byte before the
 // read gives up with 408, so a slow client cannot hold a request open.
-export const BOOKING_BODY_TIMEOUT_MS = 10_000;
+export const BOOKING_BODY_TIMEOUT_MS = 10_000
 
 /** Knobs for `handleBookingSubmit`; the routes pass none. */
 export interface BookingSubmitOptions {
   /** Stall budget for reading the body, in milliseconds. Tests pass a
    *  short one; the default is `BOOKING_BODY_TIMEOUT_MS`. */
-  bodyTimeoutMs?: number;
+  bodyTimeoutMs?: number
 }
 
 /** The peer's IP address, or `undefined` for a transport without one
  *  (a Unix socket). */
 function socketHostname(addr: Deno.Addr): string | undefined {
-  return "hostname" in addr ? addr.hostname : undefined;
+  return "hostname" in addr ? addr.hostname : undefined
 }
 
 export async function handleBookingSubmit(
@@ -76,7 +77,7 @@ export async function handleBookingSubmit(
   basePath: string,
   options: BookingSubmitOptions = {},
 ): Promise<Response> {
-  const cfg = ctx.state.config;
+  const cfg = ctx.state.config
   // mig#59: only the header TRUSTED_PROXY_HEADER names is read, and the
   // socket address is the fallback. With the setting unset, no header is
   // read, so a client connecting directly cannot pick its own bucket by
@@ -86,22 +87,22 @@ export async function handleBookingSubmit(
     ctx.req,
     socketHostname(ctx.info.remoteAddr),
     cfg.trustedProxyHeader ?? false,
-  );
+  )
 
   function errRedirect(
     message: string,
     state?: { date?: string; slot?: string; tz?: string; theme?: string },
   ): Response {
-    const params = new URLSearchParams({ err: message });
-    if (state?.date) params.set("date", state.date);
-    if (state?.slot) params.set("slot", state.slot);
-    if (state?.tz) params.set("tz", state.tz);
-    if (state?.theme) params.set("theme", state.theme);
+    const params = new URLSearchParams({ err: message })
+    if (state?.date) params.set("date", state.date)
+    if (state?.slot) params.set("slot", state.slot)
+    if (state?.tz) params.set("tz", state.tz)
+    if (state?.theme) params.set("theme", state.theme)
     return Response.redirect(
       new URL(`${formPath(basePath)}?${params.toString()}`, cfg.publicUrl)
         .toString(),
       303,
-    );
+    )
   }
 
   // Read the form before the rate-limit check, so a rate-limited
@@ -111,20 +112,20 @@ export async function handleBookingSubmit(
   // below: a rate-limited request never got far enough to confirm the
   // slot is still free, unlike the failure modes below that already
   // checked it moments earlier.
-  let form: FormData;
+  let form: FormData
   try {
     form = await parseBoundedFormData(ctx.req, {
       maxBytes: MAX_BOOKING_BODY_BYTES,
       timeoutMs: options.bodyTimeoutMs ?? BOOKING_BODY_TIMEOUT_MS,
-    });
+    })
   } catch (e) {
     if (e instanceof PayloadTooLargeError) {
-      return new Response("Request body too large.", { status: 413 });
+      return new Response("Request body too large.", { status: 413 })
     }
     if (e instanceof BodyReadTimeoutError) {
-      return new Response("Request body timed out.", { status: 408 });
+      return new Response("Request body timed out.", { status: 408 })
     }
-    throw e;
+    throw e
   }
   // Raw, unvalidated — used only to carry state back on a failed
   // redirect (mig#15 review). `date` and `tz` always ride along: the
@@ -156,19 +157,19 @@ export async function handleBookingSubmit(
     date: capRedirectField(String(form.get("date") || "") || undefined),
     tz: capRedirectField(String(form.get("guestTz") || "") || undefined),
     theme: capRedirectField(String(form.get("theme") || "") || undefined),
-  };
+  }
   const redirectState = {
     ...redirectDateTz,
     slot: capRedirectField(String(form.get("slot") || "") || undefined),
-  };
+  }
 
   // Rate limit per IP
-  const limit = ctx.state.rateLimiter.check(ip);
+  const limit = ctx.state.rateLimiter.check(ip)
   if (!limit.allowed) {
     return errRedirect(
       `Too many attempts. Try again in ${humanRetry(limit.retryAfterMs)}.`,
       redirectDateTz,
-    );
+    )
   }
   const parsed = BookingSchema.safeParse({
     name: form.get("name"),
@@ -178,14 +179,14 @@ export async function handleBookingSubmit(
     slot: form.get("slot"),
     guestTz: form.get("guestTz") || undefined,
     website: form.get("website") ?? "",
-  });
+  })
   if (!parsed.success) {
     return errRedirect(
       parsed.error.issues[0]?.message ?? "Invalid form data.",
       redirectState,
-    );
+    )
   }
-  const input = parsed.data;
+  const input = parsed.data
 
   // Honeypot — silently accept and pretend to succeed (no booking).
   // Any value counts as filled, whitespace included: a bot that types
@@ -193,13 +194,13 @@ export async function handleBookingSubmit(
   if (isHoneypotFilled(input.website)) {
     // Redirect to confirmed with a fake id; no email sent, no booking created.
     // Bots think they succeeded and go away.
-    const fakeUrl = new URL(`${basePath}/confirmed`, cfg.publicUrl);
-    fakeUrl.searchParams.set("id", "fake");
-    fakeUrl.searchParams.set("token", "fake");
+    const fakeUrl = new URL(`${basePath}/confirmed`, cfg.publicUrl)
+    fakeUrl.searchParams.set("id", "fake")
+    fakeUrl.searchParams.set("token", "fake")
     if (redirectDateTz.theme) {
-      fakeUrl.searchParams.set("theme", redirectDateTz.theme);
+      fakeUrl.searchParams.set("theme", redirectDateTz.theme)
     }
-    return Response.redirect(fakeUrl.toString(), 303);
+    return Response.redirect(fakeUrl.toString(), 303)
   }
 
   // Sanity: slot must be within availability, not booked, not in the past.
@@ -207,7 +208,7 @@ export async function handleBookingSubmit(
   // drops `slot` — it's no longer a valid pick, so keeping it would
   // land the visitor back on the confirm step for a slot they can't
   // book (mig#15 round 2).
-  const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000);
+  const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000)
   // The validator checked the calendar. Before EARLIEST_DATE the host's
   // zone may not resolve the slot to the minute — Phoenix ran on a local
   // mean time until noon on 1883-11-18 — and the zone math below would
@@ -216,41 +217,41 @@ export async function handleBookingSubmit(
     return errRedirect(
       "That date is not available for booking.",
       redirectDateTz,
-    );
+    )
   }
-  const slotInstant = hostSlotInstant(input.date, input.slot, cfg.hostTz);
+  const slotInstant = hostSlotInstant(input.date, input.slot, cfg.hostTz)
   // A spring-forward gap time (mig#57): the host's clock never shows
   // it, so no slot was offered for it either.
   if (!slotInstant) {
     return errRedirect(
       "That time is outside availability hours.",
       redirectDateTz,
-    );
+    )
   }
   if (slotInstant < minStart) {
-    return errRedirect("That time is no longer available.", redirectDateTz);
+    return errRedirect("That time is no longer available.", redirectDateTz)
   }
 
   // Check slot is in availability
   const dayName = (() => {
-    const dt = zonedDateTime(input.date, "12:00", cfg.hostTz);
+    const dt = zonedDateTime(input.date, "12:00", cfg.hostTz)
     return new Intl.DateTimeFormat("en-GB", {
       timeZone: cfg.hostTz,
       weekday: "short",
-    }).format(dt).toUpperCase();
-  })();
+    }).format(dt).toUpperCase()
+  })()
   const ranges =
-    cfg.weeklyAvailability[dayName as keyof typeof cfg.weeklyAvailability];
+    cfg.weeklyAvailability[dayName as keyof typeof cfg.weeklyAvailability]
   const slotMin = parseInt(input.slot.slice(0, 2), 10) * 60 +
-    parseInt(input.slot.slice(3), 10);
+    parseInt(input.slot.slice(3), 10)
   const inAvail = ranges.some((r) =>
     slotMin >= r.startMin && slotMin + cfg.slotDurationMin <= r.endMin
-  );
+  )
   if (!inAvail) {
     return errRedirect(
       "That time is outside availability hours.",
       redirectDateTz,
-    );
+    )
   }
 
   // Blocked date?
@@ -258,7 +259,7 @@ export async function handleBookingSubmit(
     return errRedirect(
       "That date is not available for booking.",
       redirectDateTz,
-    );
+    )
   }
 
   // Transactional booking flow: save first, then send (mig#19). A
@@ -277,8 +278,8 @@ export async function handleBookingSubmit(
   // was ever detected.
   const { raw: tokenRaw, hash: tokenHash } = await newOpaqueToken(
     cfg.cancelSecret,
-  );
-  const bookingId = monotonicUlid();
+  )
+  const bookingId = uuidV7()
   const booking = {
     id: bookingId,
     createdAt: new Date().toISOString(),
@@ -291,7 +292,7 @@ export async function handleBookingSubmit(
     notes: input.notes.trim() || undefined,
     cancelTokenHash: tokenHash,
     status: "active" as const,
-  };
+  }
 
   // Phase 1: persist under the mutex, conflict check inside the same
   // mutation. Whichever concurrent request reaches this first wins
@@ -303,13 +304,13 @@ export async function handleBookingSubmit(
           b.status === "active" &&
           b.date === input.date &&
           b.time === input.slot,
-      );
+      )
       if (conflict) {
-        return { ok: false as const };
+        return { ok: false as const }
       }
-      draft.push(booking);
-      return { ok: true as const };
-    });
+      draft.push(booking)
+      return { ok: true as const }
+    })
     if (!result.ok) {
       // Someone else's request took the slot first. No email was
       // ever sent for this one, so there's nothing to warn the guest
@@ -317,7 +318,7 @@ export async function handleBookingSubmit(
       return errRedirect(
         "That time was just booked by someone else. Please pick another time.",
         redirectDateTz,
-      );
+      )
     }
   } catch (e) {
     // The save itself failed — but BookingsStore.mutate() assigns
@@ -332,12 +333,12 @@ export async function handleBookingSubmit(
     // telling the guest anything. That second mutate() assigns before
     // it writes too, so the removal holds even if this write also
     // fails.
-    console.error("mig: persist FAILED; booking=" + bookingId, e);
+    console.error("mig: persist FAILED; booking=" + bookingId, e)
     try {
       await ctx.state.bookings.mutate((draft) => {
-        const idx = draft.findIndex((b) => b.id === bookingId);
-        if (idx !== -1) draft.splice(idx, 1);
-      });
+        const idx = draft.findIndex((b) => b.id === bookingId)
+        if (idx !== -1) draft.splice(idx, 1)
+      })
     } catch (rollbackErr) {
       // mutate() assigns `this.bookings = draft` *before* it awaits
       // persist(), so the in-memory removal above always lands even
@@ -347,12 +348,12 @@ export async function handleBookingSubmit(
         "mig: rollback FAILED after persist failed; booking=" +
           bookingId + " may still be on disk",
         rollbackErr,
-      );
+      )
     }
     return errRedirect(
       "We couldn't save your booking. Please try again in a moment.",
       redirectDateTz,
-    );
+    )
   }
 
   // Phase 2: the booking is saved — send the emails, owner first
@@ -365,23 +366,23 @@ export async function handleBookingSubmit(
   const cancelUrl = new URL(
     `/cancel?id=${bookingId}&token=${tokenRaw}`,
     cfg.publicUrl,
-  ).toString();
-  const ownerSent = await sendOwnerBookingEmail(cfg, booking, cancelUrl);
-  const ownerEmailSucceeded = ownerSent.ok;
+  ).toString()
+  const ownerSent = await sendOwnerBookingEmail(cfg, booking, cancelUrl)
+  const ownerEmailSucceeded = ownerSent.ok
   const sent = ownerSent.ok
     ? await sendGuestBookingEmail(cfg, booking, cancelUrl)
-    : ownerSent;
+    : ownerSent
   if (!sent.ok) {
-    const msg = sent.error;
-    console.error("mig: email send failed; rolling back booking:", msg);
-    let rolledBack = true;
+    const msg = sent.error
+    console.error("mig: email send failed; rolling back booking:", msg)
+    let rolledBack = true
     try {
       await ctx.state.bookings.mutate((draft) => {
-        const idx = draft.findIndex((b) => b.id === bookingId);
-        if (idx !== -1) draft.splice(idx, 1);
-      });
+        const idx = draft.findIndex((b) => b.id === bookingId)
+        if (idx !== -1) draft.splice(idx, 1)
+      })
     } catch (rollbackErr) {
-      rolledBack = false;
+      rolledBack = false
       // The booking is now stuck on disk — log loudly so the host can
       // clean it up by hand; still redirect the guest with the same
       // message, since they genuinely never got a confirmation. The
@@ -393,7 +394,7 @@ export async function handleBookingSubmit(
           bookingId + " may still be on disk; owner email " +
           (ownerEmailSucceeded ? "was sent" : "was not sent"),
         rollbackErr,
-      );
+      )
     }
     // Optional NTFY push so the host gets a heads-up outside the
     // email channel. Sent after the rollback above, not before: its
@@ -404,7 +405,7 @@ export async function handleBookingSubmit(
     // fails. Awaited, not fire-and-forget: notify() in lib/notify.ts
     // already logs its own failures and bounds its retries to a few
     // seconds, so awaiting it adds latency but no new failure mode.
-    await notifyBookingEmailFailed(cfg, booking, msg, { rolledBack });
+    await notifyBookingEmailFailed(cfg, booking, msg, { rolledBack })
     // mig#19 review round 3: the owner's "New booking" email (and
     // calendar invite) already went out above — correct it, since the
     // NTFY push just above is optional and off unless NTFY_* is
@@ -413,14 +414,14 @@ export async function handleBookingSubmit(
     if (ownerEmailSucceeded) {
       const corrected = await sendBookingCorrectionEmail(cfg, booking, {
         rolledBack,
-      });
+      })
       if (!corrected.ok) {
         console.error(
           "mig: correction email FAILED after rollback; booking=" +
             bookingId +
             "; host still has a stale 'New booking' email and invite",
           corrected.error,
-        );
+        )
       }
     }
     // review follow-up: this message used to say "we couldn't send
@@ -432,18 +433,18 @@ export async function handleBookingSubmit(
     return errRedirect(
       "Something went wrong, so the booking was not created. Please try again in a moment.",
       redirectState,
-    );
+    )
   }
 
   // Booking persisted and email sent — fire the success notification
   // (subject to NTFY_MODE in lib/notify.ts).
-  await notifyBookingSucceeded(cfg, booking);
+  await notifyBookingSucceeded(cfg, booking)
 
-  const successUrl = new URL(`${basePath}/confirmed`, cfg.publicUrl);
-  successUrl.searchParams.set("id", bookingId);
-  successUrl.searchParams.set("token", tokenRaw);
+  const successUrl = new URL(`${basePath}/confirmed`, cfg.publicUrl)
+  successUrl.searchParams.set("id", bookingId)
+  successUrl.searchParams.set("token", tokenRaw)
   if (redirectDateTz.theme) {
-    successUrl.searchParams.set("theme", redirectDateTz.theme);
+    successUrl.searchParams.set("theme", redirectDateTz.theme)
   }
-  return Response.redirect(successUrl.toString(), 303);
+  return Response.redirect(successUrl.toString(), 303)
 }

@@ -10,11 +10,11 @@
 // The build is imported through a variable, not a string literal, so
 // `deno task check` doesn't need `_fresh/` to exist.
 
-const SERVER = "./_fresh/server.js";
+const SERVER = "./_fresh/server.js"
 
-const { default: server } = await import(SERVER);
+const { default: server } = await import(SERVER)
 
 Deno.serve(
   { hostname: "0.0.0.0", port: Number(Deno.env.get("PORT") ?? 8080) },
   server.fetch,
-);
+)

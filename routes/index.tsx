@@ -1,15 +1,15 @@
-import { define } from "../lib/utils.ts";
-import { Header } from "../components/Header.tsx";
-import { Footer } from "../components/Footer.tsx";
-import BookingFlow from "../islands/BookingFlow.tsx";
-import { gridDay } from "../components/TimeSlots.tsx";
-import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts";
+import { define } from "../lib/utils.ts"
+import { Header } from "../components/Header.tsx"
+import { Footer } from "../components/Footer.tsx"
+import BookingFlow from "../islands/BookingFlow.tsx"
+import { gridDay } from "../components/TimeSlots.tsx"
+import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts"
 import {
   canonicalValidTimeZoneOrNull,
   isoDateInTz,
   minToHHMM,
   zonedDateTime,
-} from "@spy4x/time/tz";
+} from "@spy4x/time/tz"
 import {
   EARLIEST_DATE,
   formatGridHeader,
@@ -17,69 +17,69 @@ import {
   formatSlotDisplay,
   hostSlotInstant,
   isCalendarDateTime,
-} from "../lib/clock.ts";
+} from "../lib/clock.ts"
 
 interface IndexData {
-  date: string | null;
-  slot: string | null;
-  dates: Array<{ date: string; slots: number }>;
+  date: string | null
+  slot: string | null
+  dates: Array<{ date: string; slots: number }>
   slots: Array<
     {
-      time: string;
-      available: boolean;
-      displayHHMM?: string;
-      ariaZoneLabel?: string;
-      offsetNote?: string;
-      dateNote?: string;
+      time: string
+      available: boolean
+      displayHHMM?: string
+      ariaZoneLabel?: string
+      offsetNote?: string
+      dateNote?: string
     }
-  >;
-  error: string | null;
-  monthAnchor: string;
+  >
+  error: string | null
+  monthAnchor: string
 }
 
 function parseDateParam(v: string | null, hostTz: string): string | null {
-  if (!v) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  if (!v) return null
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null
   // Before 1980 some zones' offsets had seconds (see EARLIEST_DATE), and
   // "2026-02-31" is not a date at all (mig#57).
-  if (v < EARLIEST_DATE) return null;
-  if (!isCalendarDateTime(v, "12:00", hostTz)) return null;
-  const [y, m, d] = v.split("-").map(Number);
-  if (y < 1900 || y > 2999 || m < 1 || m > 12 || d < 1 || d > 31) return null;
-  return v;
+  if (v < EARLIEST_DATE) return null
+  if (!isCalendarDateTime(v, "12:00", hostTz)) return null
+  const [y, m, d] = v.split("-").map(Number)
+  if (y < 1900 || y > 2999 || m < 1 || m > 12 || d < 1 || d > 31) return null
+  return v
 }
 
 function parseSlotParam(v: string | null): string | null {
-  if (!v) return null;
-  if (!/^\d{2}:\d{2}$/.test(v)) return null;
-  if (!isCalendarDateTime("2000-01-01", v)) return null; // "24:00" (mig#57)
-  const [h, m] = v.split(":").map(Number);
-  if (h < 0 || h > 24 || m < 0 || m > 59) return null;
-  return v;
+  if (!v) return null
+  if (!/^\d{2}:\d{2}$/.test(v)) return null
+  if (!isCalendarDateTime("2000-01-01", v)) return null // "24:00" (mig#57)
+  const [h, m] = v.split(":").map(Number)
+  if (h < 0 || h > 24 || m < 0 || m > 59) return null
+  return v
 }
 
 function parseMonthParam(v: string | null): string | null {
-  if (!v) return null;
-  const m = v.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
-  if (!m) return null;
-  const yyyy = parseInt(m[1], 10);
-  const mm = parseInt(m[2], 10);
-  if (yyyy < 1900 || yyyy > 2999 || mm < 1 || mm > 12) return null;
+  if (!v) return null
+  const m = v.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/)
+  if (!m) return null
+  const yyyy = parseInt(m[1], 10)
+  const mm = parseInt(m[2], 10)
+  if (yyyy < 1900 || yyyy > 2999 || mm < 1 || mm > 12) return null
   // The month grid runs the host zone's math on every day it shows,
   // which throws for Dublin's 1900-01 (see EARLIEST_DATE, mig#57).
-  if (`${m[1]}-${m[2]}-01` < EARLIEST_DATE) return null;
-  return `${m[1]}-${m[2]}-01`;
+  if (`${m[1]}-${m[2]}-01` < EARLIEST_DATE) return null
+  return `${m[1]}-${m[2]}-01`
 }
 
 function minStartInstant(hours: number): Date {
-  return new Date(Date.now() + hours * 3600_000);
+  return new Date(Date.now() + hours * 3600_000)
 }
 
 function dayNameFromDate(
   date: string,
   tz: string,
 ): "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN" {
-  const dt = zonedDateTime(date, "12:00", tz);
+  const dt = zonedDateTime(date, "12:00", tz)
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: tz,
     weekday: "short",
@@ -90,16 +90,16 @@ function dayNameFromDate(
     | "THU"
     | "FRI"
     | "SAT"
-    | "SUN";
+    | "SUN"
 }
 
 export default define.page(function Index(ctx) {
-  const cfg = ctx.state.config;
-  const url = new URL(ctx.req.url);
-  const date = parseDateParam(url.searchParams.get("date"), cfg.hostTz);
-  const slot = parseSlotParam(url.searchParams.get("slot"));
-  const error = url.searchParams.get("err");
-  const monthParam = parseMonthParam(url.searchParams.get("month"));
+  const cfg = ctx.state.config
+  const url = new URL(ctx.req.url)
+  const date = parseDateParam(url.searchParams.get("date"), cfg.hostTz)
+  const slot = parseSlotParam(url.searchParams.get("slot"))
+  const error = url.searchParams.get("err")
+  const monthParam = parseMonthParam(url.searchParams.get("month"))
 
   // Visitor timezone (mig#18) — read and validated the same way
   // routes/embed/index.tsx does, so a visitor who arrives at "/" with
@@ -107,33 +107,33 @@ export default define.page(function Index(ctx) {
   // sees every clock and date in their own zone from the first paint,
   // not the host's. An invalid or missing value falls back to `null`
   // (host zone), never an error page — same contract as /embed.
-  const tz = canonicalValidTimeZoneOrNull(url.searchParams.get("tz"));
-  const displayTz = tz ?? cfg.hostTz;
+  const tz = canonicalValidTimeZoneOrNull(url.searchParams.get("tz"))
+  const displayTz = tz ?? cfg.hostTz
 
-  const minStart = minStartInstant(cfg.minNoticeHours);
-  const today = isoDateInTz(new Date(), cfg.hostTz);
+  const minStart = minStartInstant(cfg.minNoticeHours)
+  const today = isoDateInTz(new Date(), cfg.hostTz)
   const candidates = getCandidateDates(
     today,
     cfg.bookingHorizonDays,
     cfg.hostTz,
-  );
+  )
 
   // monthAnchor: the month to display in the calendar.
   // - If ?month=… is set and within range, use it.
   // - If ?date=… is set, anchor on that date's month.
   // - Otherwise anchor on today's month.
   const monthAnchor = (() => {
-    if (monthParam) return monthParam;
-    if (date) return date.slice(0, 8) + "01";
-    return today.slice(0, 8) + "01";
-  })();
+    if (monthParam) return monthParam
+    if (date) return date.slice(0, 8) + "01"
+    return today.slice(0, 8) + "01"
+  })()
 
   const dates = candidates.map((d) => {
-    const blocked = cfg.blockedDates.has(d);
+    const blocked = cfg.blockedDates.has(d)
     const bookedCount = blocked
       ? 999
       : ctx.state.bookings.forDate(d).filter((b) => b.status === "active")
-        .length;
+        .length
     const slots = blocked ? 0 : countSlotsForDate(
       d,
       cfg.weeklyAvailability,
@@ -141,9 +141,9 @@ export default define.page(function Index(ctx) {
       bookedCount,
       cfg.hostTz,
       minStart,
-    );
-    return { date: d, slots };
-  });
+    )
+    return { date: d, slots }
+  })
 
   // Every slot's instant, host-chronological order (mig#48 review) —
   // this route doesn't reorder slots across a visitor-local midnight
@@ -153,29 +153,29 @@ export default define.page(function Index(ctx) {
   // not an arbitrary anchor like noon of the host day, which can
   // label the header with an offset no visible slot has.
   const daySlots: Array<{ time: string; available: boolean; instant: Date }> =
-    [];
+    []
   if (date && !cfg.blockedDates.has(date)) {
-    const dayBookings = ctx.state.bookings.forDate(date);
-    const dayName = dayNameFromDate(date, cfg.hostTz);
-    const ranges = cfg.weeklyAvailability[dayName];
+    const dayBookings = ctx.state.bookings.forDate(date)
+    const dayName = dayNameFromDate(date, cfg.hostTz)
+    const ranges = cfg.weeklyAvailability[dayName]
     const booked = new Set(
       dayBookings.filter((b) => b.status === "active").map((b) => b.time),
-    );
+    )
     for (const r of ranges) {
       for (
         let m = r.startMin;
         m <= r.endMin - cfg.slotDurationMin;
         m += cfg.slotDurationMin
       ) {
-        const time = minToHHMM(m);
+        const time = minToHHMM(m)
         // null inside a spring-forward gap: no such slot (mig#57).
-        const instant = hostSlotInstant(date, time, cfg.hostTz);
-        if (!instant) continue;
+        const instant = hostSlotInstant(date, time, cfg.hostTz)
+        if (!instant) continue
         daySlots.push({
           time,
           available: !booked.has(time) && instant >= minStart,
           instant,
-        });
+        })
       }
     }
   }
@@ -183,7 +183,7 @@ export default define.page(function Index(ctx) {
   const header = formatGridHeader(
     daySlots.map((s) => s.instant),
     displayTz,
-  );
+  )
 
   // Labelled in the display zone (mig#18: the `tz` query param when
   // known, host zone otherwise). BookingFlow's hydration replaces this
@@ -198,9 +198,9 @@ export default define.page(function Index(ctx) {
   // a `dateNote`, as it does after hydration.
   const gridDate = date
     ? gridDay(daySlots.map((s) => s.instant), date, displayTz).date
-    : null;
+    : null
   const slots: IndexData["slots"] = daySlots.map((s) => {
-    const display = formatSlotDisplay(s.instant, displayTz, header!.offset);
+    const display = formatSlotDisplay(s.instant, displayTz, header!.offset)
     return {
       time: s.time,
       available: s.available,
@@ -210,8 +210,8 @@ export default define.page(function Index(ctx) {
       dateNote: isoDateInTz(s.instant, displayTz) !== gridDate
         ? formatShortDateAt(s.instant, displayTz)
         : undefined,
-    };
-  });
+    }
+  })
 
   // The BookingFlow island computes its own confirm label (host TZ
   // on SSR, visitor TZ after hydration), so the route doesn't need
@@ -272,8 +272,8 @@ export default define.page(function Index(ctx) {
         version={cfg.version}
       />
     </div>
-  );
-});
+  )
+})
 
 /*
   Hero — bigger, more confident type. The host name is the hero
@@ -283,8 +283,8 @@ export default define.page(function Index(ctx) {
 */
 function Hero(
   { hostName, durationMin }: {
-    hostName: string;
-    durationMin: number;
+    hostName: string
+    durationMin: number
   },
 ) {
   return (
@@ -299,5 +299,5 @@ function Hero(
         A {durationMin}-minute call. Pick a time that works for you.
       </p>
     </section>
-  );
+  )
 }

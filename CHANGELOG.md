@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- A new booking's id is a UUID version 7 instead of a ULID. Bookings already in
+  the data file keep their id, and their confirmation and cancel links keep
+  working: nothing stored is rewritten. The `@spy4x` time, platform, email,
+  integrations, net and server libraries move from 1.19.0 to 1.63.0, the first
+  release with the UUID helper (#110).
+
 ## [0.12.1] - 2026-10-14
 
 ### Security

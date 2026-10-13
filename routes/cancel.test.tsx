@@ -5,12 +5,12 @@
 // route's default component directly with hand-built props, the same
 // pattern routes/embed/embed.test.tsx uses.
 
-import { assert, assertFalse } from "@std/assert";
-import { renderToString } from "preact-render-to-string";
-import type { PageProps } from "fresh";
-import type { State } from "../lib/utils.ts";
-import type { Config } from "../lib/types.ts";
-import CancelPage from "./cancel.tsx";
+import { assert, assertFalse } from "@std/assert"
+import { renderToString } from "preact-render-to-string"
+import type { PageProps } from "fresh"
+import type { State } from "../lib/utils.ts"
+import type { Config } from "../lib/types.ts"
+import CancelPage from "./cancel.tsx"
 
 const FAKE_CONFIG: Config = {
   hostName: "Jane Doe",
@@ -46,7 +46,7 @@ const FAKE_CONFIG: Config = {
   hideBranding: false,
   githubUrl: "https://github.com/spy4x/mig",
   version: "test",
-};
+}
 
 // `CancelData` isn't exported from routes/cancel.tsx (it's a route-local
 // type), so `fakePageProps` stays generic — same shape as
@@ -54,7 +54,7 @@ const FAKE_CONFIG: Config = {
 // literal is checked structurally against whichever union member its
 // `state: "ok" as const` picks out.
 function fakePageProps<Data>(data: Data): PageProps<Data, State> {
-  const req = new Request("http://localhost/cancel");
+  const req = new Request("http://localhost/cancel")
   return {
     data,
     state: { config: FAKE_CONFIG } as unknown as State,
@@ -67,7 +67,7 @@ function fakePageProps<Data>(data: Data): PageProps<Data, State> {
     Component: (() => null) as unknown as PageProps<Data, State>["Component"],
     error: null,
     route: null,
-  };
+  }
 }
 
 Deno.test("mig#15: cancel page shows the visitor's converted, labelled clock", () => {
@@ -89,12 +89,12 @@ Deno.test("mig#15: cancel page shows the visitor's converted, labelled clock", (
         guestTz: "America/New_York",
       })}
     />,
-  );
-  assert(html.includes("22:00, New York, UTC-4"));
-  assert(html.includes("Monday, 5 October 2026"));
-  assertFalse(html.includes("09:00, Ho Chi Minh"));
-  assertFalse(html.includes("host&#39;s timezone"));
-});
+  )
+  assert(html.includes("22:00, New York, UTC-4"))
+  assert(html.includes("Monday, 5 October 2026"))
+  assertFalse(html.includes("09:00, Ho Chi Minh"))
+  assertFalse(html.includes("host&#39;s timezone"))
+})
 
 Deno.test("mig#15: cancel page falls back to the labelled host clock when no visitor zone was captured", () => {
   const html = renderToString(
@@ -115,13 +115,13 @@ Deno.test("mig#15: cancel page falls back to the labelled host clock when no vis
         guestTz: null,
       })}
     />,
-  );
-  assert(html.includes("09:00, Ho Chi Minh, UTC+7"));
+  )
+  assert(html.includes("09:00, Ho Chi Minh, UTC+7"))
   assert(
     html.includes("Times are shown in the host&#39;s timezone."),
     "expected the host-timezone fallback note",
-  );
-});
+  )
+})
 
 // ─── mig#15 round 2: "already cancelled" no longer uses the server's own zone ──
 // This used to format `cancelledAt` with `Date.toLocaleString()`, which
@@ -146,14 +146,14 @@ Deno.test("already-cancelled shows the visitor's dated, labelled clock", () => {
         guestTz: "America/New_York",
       })}
     />,
-  );
+  )
   assert(
     html.includes("cancelled on Mon 5 Oct 22:00, New York, UTC-4"),
     "expected the visitor's dated, labelled clock in the message",
-  );
-  assertFalse(html.includes("Ho Chi Minh"));
-  assertFalse(html.includes("host&#39;s timezone"));
-});
+  )
+  assertFalse(html.includes("Ho Chi Minh"))
+  assertFalse(html.includes("host&#39;s timezone"))
+})
 
 Deno.test("already-cancelled falls back to the host's dated, labelled clock plus the note", () => {
   const html = renderToString(
@@ -167,13 +167,13 @@ Deno.test("already-cancelled falls back to the host's dated, labelled clock plus
         guestTz: null,
       })}
     />,
-  );
+  )
   assert(
     html.includes("cancelled on Tue 6 Oct 09:00, Ho Chi Minh, UTC+7"),
     "expected the host's dated, labelled clock in the message",
-  );
+  )
   assert(
     html.includes("Times are shown in the host&#39;s timezone."),
     "expected the host-timezone fallback note",
-  );
-});
+  )
+})

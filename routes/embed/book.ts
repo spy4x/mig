@@ -8,11 +8,11 @@
 // `frame-ancestors: /embed` allow-list would refuse to render
 // (issue #11).
 
-import { define } from "../../lib/utils.ts";
-import { handleBookingSubmit } from "../../lib/book.ts";
+import { define } from "../../lib/utils.ts"
+import { handleBookingSubmit } from "../../lib/book.ts"
 
 export const handler = define.handlers({
   POST(ctx) {
-    return handleBookingSubmit(ctx, "/embed");
+    return handleBookingSubmit(ctx, "/embed")
   },
-});
+})

@@ -7,31 +7,31 @@
 // tab: both are pages a host that only allows framing /embed would
 // refuse to render inside the iframe (issue #11).
 
-import { define } from "../../lib/utils.ts";
-import { loadConfirmedData } from "../../lib/confirmed-data.ts";
-import { ConfirmedView } from "../../components/ConfirmedView.tsx";
-import { pickerHref } from "../../lib/picker-links.ts";
-import { parseThemeParam } from "../../lib/theme.ts";
+import { define } from "../../lib/utils.ts"
+import { loadConfirmedData } from "../../lib/confirmed-data.ts"
+import { ConfirmedView } from "../../components/ConfirmedView.tsx"
+import { pickerHref } from "../../lib/picker-links.ts"
+import { parseThemeParam } from "../../lib/theme.ts"
 import {
   HEIGHT_ATTR,
   heightReportScript,
-} from "../../lib/height-report-script.ts";
-import { bookedReportScript } from "../../lib/booked-report-script.ts";
+} from "../../lib/height-report-script.ts"
+import { bookedReportScript } from "../../lib/booked-report-script.ts"
 
 export const handler = define.handlers({
   async GET(ctx) {
-    return { data: await loadConfirmedData(ctx) };
+    return { data: await loadConfirmedData(ctx) }
   },
-});
+})
 
 export default define.page<typeof handler>(
   function EmbedConfirmed({ data, state, url }) {
-    const cfg = state.config;
+    const cfg = state.config
 
     // Forced theme (mig#44) — same normalization as routes/embed/
     // index.tsx, so "Book another time" carries it back to /embed.
-    const themeParam = parseThemeParam(url.searchParams.get("theme"));
-    const theme = themeParam === "auto" ? null : themeParam;
+    const themeParam = parseThemeParam(url.searchParams.get("theme"))
+    const theme = themeParam === "auto" ? null : themeParam
 
     return (
       // No min-h-dvh — same reasoning as routes/embed/index.tsx
@@ -72,6 +72,6 @@ export default define.page<typeof handler>(
           mainId="main"
         />
       </div>
-    );
+    )
   },
-);
+)

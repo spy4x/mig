@@ -19,19 +19,19 @@ import {
   ntfyConfigFromEnv,
   type NtfyPriority,
   type NtfyRetryOptions,
-} from "@spy4x/integrations/ntfy";
-import type { Config } from "./types.ts";
-import type { Booking } from "./types.ts";
-import { formatClockShortAt, formatOwnerClock } from "./clock.ts";
+} from "@spy4x/integrations/ntfy"
+import type { Config } from "./types.ts"
+import type { Booking } from "./types.ts"
+import { formatClockShortAt, formatOwnerClock } from "./clock.ts"
 
-export type NtfyMode = "all" | "errors" | "booking" | "cancel";
+export type NtfyMode = "all" | "errors" | "booking" | "cancel"
 
 interface NotifyOpts {
-  title: string;
-  message: string;
-  priority?: NtfyPriority;
-  tags?: string[];
-  severity: NotificationSeverity;
+  title: string
+  message: string
+  priority?: NtfyPriority
+  tags?: string[]
+  severity: NotificationSeverity
 }
 
 // The booking and cancel handlers await the push before they answer
@@ -42,10 +42,10 @@ const NTFY_RETRY: NtfyRetryOptions = {
   baseDelayMs: 500,
   maxDelayMs: 2_000,
   totalBudgetMs: 5_000,
-};
-const NTFY_REQUEST_TIMEOUT_MS = 3_000;
+}
+const NTFY_REQUEST_TIMEOUT_MS = 3_000
 
-let clientOptionsForTesting: NtfyClientOptions = {};
+let clientOptionsForTesting: NtfyClientOptions = {}
 
 /** Test-only seam: extra NtfyClient options (a fake `sleep`, say) for
  *  every push until called again with `{}`. Never call this outside a
@@ -53,28 +53,28 @@ let clientOptionsForTesting: NtfyClientOptions = {};
 export function setNtfyClientOptionsForTesting(
   options: NtfyClientOptions,
 ): void {
-  clientOptionsForTesting = options;
+  clientOptionsForTesting = options
 }
 
 function ntfyMode(): NtfyMode {
-  const v = Deno.env.get("NTFY_MODE")?.trim().toLowerCase();
-  if (v === "errors" || v === "booking" || v === "cancel") return v;
-  return "all";
+  const v = Deno.env.get("NTFY_MODE")?.trim().toLowerCase()
+  if (v === "errors" || v === "booking" || v === "cancel") return v
+  return "all"
 }
 
 function isEventEnabled(event: "booking" | "cancel" | "error"): boolean {
-  const mode = ntfyMode();
-  if (mode === "all") return true;
-  if (mode === "errors" && event === "error") return true;
-  if (mode === "booking" && event === "booking") return true;
-  if (mode === "cancel" && event === "cancel") return true;
-  return false;
+  const mode = ntfyMode()
+  if (mode === "all") return true
+  if (mode === "errors" && event === "error") return true
+  if (mode === "booking" && event === "booking") return true
+  if (mode === "cancel" && event === "cancel") return true
+  return false
 }
 
 async function notify(opts: NotifyOpts): Promise<void> {
-  const settings = ntfyConfigFromEnv();
-  if (settings === null) return;
-  let client: NtfyClient;
+  const settings = ntfyConfigFromEnv()
+  if (settings === null) return
+  let client: NtfyClient
   try {
     client = new NtfyClient(settings, {
       retry: NTFY_RETRY,
@@ -83,18 +83,18 @@ async function notify(opts: NotifyOpts): Promise<void> {
       // every severity through.
       gate: NotificationSeverity.Info,
       ...clientOptionsForTesting,
-    });
+    })
   } catch (e) {
     // A malformed NTFY_URL. The message names the shape, never the value.
-    console.error(`mig: ntfy is misconfigured: ${(e as Error).message}`);
-    return;
+    console.error(`mig: ntfy is misconfigured: ${(e as Error).message}`)
+    return
   }
-  const result = await client.push(opts);
+  const result = await client.push(opts)
   if (!result.ok) {
     console.error(
       `mig: ntfy notify failed (${client.endpoint}): ${result.message} ` +
         `after ${result.attempts} attempt(s)`,
-    );
+    )
   }
 }
 
@@ -113,14 +113,14 @@ function ownerWhenLabel(booking: Booking): string {
     booking.time,
     booking.hostTz,
     booking.guestTz,
-  );
+  )
 }
 
 export function notifyBookingSucceeded(
   config: Config,
   booking: Booking,
 ): Promise<void> {
-  if (!isEventEnabled("booking")) return Promise.resolve();
+  if (!isEventEnabled("booking")) return Promise.resolve()
   return notify({
     severity: NotificationSeverity.Info,
     title: `mig: new booking - ${booking.guestName}`,
@@ -136,7 +136,7 @@ export function notifyBookingSucceeded(
     ].join("\n"),
     priority: 3,
     tags: ["mig", "booking"],
-  });
+  })
 }
 
 export function notifyBookingCancelled(
@@ -145,10 +145,10 @@ export function notifyBookingCancelled(
   cancelledBy: "owner" | "guest",
   reason: string | undefined,
 ): Promise<void> {
-  if (!isEventEnabled("cancel")) return Promise.resolve();
+  if (!isEventEnabled("cancel")) return Promise.resolve()
   const cancellerLabel = cancelledBy === "guest"
     ? `${booking.guestName} <${booking.guestEmail}>`
-    : `${config.hostName}`;
+    : `${config.hostName}`
   return notify({
     severity: NotificationSeverity.Info,
     title: `mig: cancelled by ${cancelledBy} - ${booking.guestName}`,
@@ -163,7 +163,7 @@ export function notifyBookingCancelled(
     ].join("\n"),
     priority: 3,
     tags: ["mig", "cancel"],
-  });
+  })
 }
 
 export interface EmailFailedOpts {
@@ -178,7 +178,7 @@ export interface EmailFailedOpts {
    *  in-memory removal still held, but the booking may still be on
    *  disk and would come back after a restart. The push must not
    *  claim it was removed or that the slot is free in that case. */
-  rolledBack: boolean;
+  rolledBack: boolean
 }
 
 // mig#19 review round 3: the previous wording ("booking confirmation
@@ -200,8 +200,8 @@ export function notifyBookingEmailFailed(
   error: string,
   opts: EmailFailedOpts,
 ): Promise<void> {
-  if (!isEventEnabled("error")) return Promise.resolve();
-  const { rolledBack } = opts;
+  if (!isEventEnabled("error")) return Promise.resolve()
+  const { rolledBack } = opts
   const lines = [
     rolledBack
       ? `mig: a booking for ${booking.guestName} was NOT created — the ` +
@@ -218,7 +218,7 @@ export function notifyBookingEmailFailed(
     `When:   ${ownerWhenLabel(booking)}`,
     `Notes:  ${booking.notes?.trim() || "(none)"}`,
     `Booked: ${formatClockShortAt(new Date(booking.createdAt), config.hostTz)}`,
-  ];
+  ]
   return notify({
     severity: NotificationSeverity.Failure,
     title: rolledBack
@@ -229,5 +229,5 @@ export function notifyBookingEmailFailed(
     tags: rolledBack
       ? ["mig", "email-failed", "warning"]
       : ["mig", "email-failed", "rollback-failed", "warning"],
-  });
+  })
 }

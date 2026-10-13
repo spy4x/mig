@@ -1,14 +1,14 @@
 // GET /api/slots — the date check and the slot list, for mig#57.
 
-import { assertEquals } from "@std/assert";
-import type { Context } from "fresh";
-import type { State } from "../../lib/utils.ts";
-import type { Config } from "../../lib/types.ts";
-import { BookingsStore } from "../../lib/bookings.ts";
-import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory";
-import { parseWeeklyAvailability } from "../../lib/availability.ts";
-import { handler } from "./slots.ts";
-import { tempDataFile } from "../../lib/test-temp.ts";
+import { assertEquals } from "@std/assert"
+import type { Context } from "fresh"
+import type { State } from "../../lib/utils.ts"
+import type { Config } from "../../lib/types.ts"
+import { BookingsStore } from "../../lib/bookings.ts"
+import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory"
+import { parseWeeklyAvailability } from "../../lib/availability.ts"
+import { handler } from "./slots.ts"
+import { tempDataFile } from "../../lib/test-temp.ts"
 
 function fakeConfig(): Config {
   return {
@@ -37,17 +37,17 @@ function fakeConfig(): Config {
     hideBranding: false,
     githubUrl: "https://github.com/spy4x/mig",
     version: "test",
-  };
+  }
 }
 
 async function getSlots(
   date: string,
   hostTz = "Europe/Berlin",
 ): Promise<Response> {
-  await using file = await tempDataFile();
-  const path = file.path;
-  const bookings = new BookingsStore({ filePath: path });
-  await bookings.init();
+  await using file = await tempDataFile()
+  const path = file.path
+  const bookings = new BookingsStore({ filePath: path })
+  await bookings.init()
   const ctx = {
     req: new Request(`http://localhost/api/slots?date=${date}`),
     state: {
@@ -55,45 +55,45 @@ async function getSlots(
       bookings,
       rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
     },
-  } as unknown as Context<State>;
-  return await handler.GET!(ctx) as Response;
+  } as unknown as Context<State>
+  return await handler.GET!(ctx) as Response
 }
 
 // @spy4x/time/tz's zonedDateTime throws on "2026-02-30" where mig's own
 // copy rolled it over into 2 March, so the route refuses it up front.
 Deno.test("mig#57: /api/slots answers 400 for a date that is not on the calendar", async () => {
-  const res = await getSlots("2026-02-30");
+  const res = await getSlots("2026-02-30")
 
-  assertEquals(res.status, 400);
-  assertEquals(await res.json(), { error: "bad date" });
-});
+  assertEquals(res.status, 400)
+  assertEquals(await res.json(), { error: "bad date" })
+})
 
 // Berlin's clocks jump from 02:00 to 03:00 on 2027-03-28, a Sunday.
 Deno.test("mig#57: /api/slots lists no slot inside the spring-forward gap", async () => {
-  const res = await getSlots("2027-03-28");
-  const body = await res.json() as { slots: { time: string }[] };
+  const res = await getSlots("2027-03-28")
+  const body = await res.json() as { slots: { time: string }[] }
 
   assertEquals(body.slots.map((s) => s.time), [
     "01:00",
     "01:30",
     "03:00",
     "03:30",
-  ]);
-});
+  ])
+})
 
 // mig#57: Phoenix ran on UTC-7:28:18 until noon on 1883-11-18, a
 // Sunday. Noon resolves, the 01:00-04:00 slots do not, and
 // @spy4x/time/tz's zonedDateTime throws for them, so a check of noon
 // alone let this date through to a 500. Every date before 1980 is 400.
 Deno.test("mig#57: /api/slots answers 400 for a date before 1980", async () => {
-  const phoenix = await getSlots("1883-11-18", "America/Phoenix");
-  const lastBefore = await getSlots("1979-12-31");
-  const first = await getSlots("1980-01-01");
+  const phoenix = await getSlots("1883-11-18", "America/Phoenix")
+  const lastBefore = await getSlots("1979-12-31")
+  const first = await getSlots("1980-01-01")
 
-  assertEquals(phoenix.status, 400);
-  assertEquals(await phoenix.json(), { error: "bad date" });
-  assertEquals(lastBefore.status, 400);
-  assertEquals(await lastBefore.json(), { error: "bad date" });
-  assertEquals(first.status, 200);
-  assertEquals(await first.json(), { date: "1980-01-01", slots: [] });
-});
+  assertEquals(phoenix.status, 400)
+  assertEquals(await phoenix.json(), { error: "bad date" })
+  assertEquals(lastBefore.status, 400)
+  assertEquals(await lastBefore.json(), { error: "bad date" })
+  assertEquals(first.status, 200)
+  assertEquals(await first.json(), { date: "1980-01-01", slots: [] })
+})

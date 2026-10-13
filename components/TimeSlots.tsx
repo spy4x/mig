@@ -51,20 +51,20 @@
     evening   17:00–04:59 (wraps midnight)
 */
 
-import { isoDateInTz } from "@spy4x/time/tz";
-import { formatShortDateAt } from "../lib/clock.ts";
-import { pickerHref } from "../lib/picker-links.ts";
+import { isoDateInTz } from "@spy4x/time/tz"
+import { formatShortDateAt } from "../lib/clock.ts"
+import { pickerHref } from "../lib/picker-links.ts"
 
 /** The day a slot grid's heading names, in three forms. */
 export interface GridDay {
   /** YYYY-MM-DD, in the display zone. A slot whose own visitor-local
    *  date differs from this carries a `dateNote`. */
-  date: string;
+  date: string
   /** "Sunday, 1 November 2026" — the grid heading, DateCard, and the
    *  "No available times on …" line. */
-  long: string;
+  long: string
   /** "Sun 1 Nov" — the mobile SummaryBar. */
-  short: string;
+  short: string
 }
 
 /**
@@ -90,11 +90,11 @@ export function gridDay(
   pickedDate: string,
   displayTz: string,
 ): GridDay {
-  const days = slots.map((s) => isoDateInTz(s, displayTz));
+  const days = slots.map((s) => isoDateInTz(s, displayTz))
   const date = days.length === 0 || days.includes(pickedDate)
     ? pickedDate
-    : days[0];
-  const at = new Date(`${date}T12:00:00Z`);
+    : days[0]
+  const at = new Date(`${date}T12:00:00Z`)
   return {
     date,
     long: new Intl.DateTimeFormat("en-GB", {
@@ -105,97 +105,97 @@ export function gridDay(
       year: "numeric",
     }).format(at),
     short: formatShortDateAt(at, "UTC"),
-  };
+  }
 }
 
 interface SlotCell {
-  time: string; // host-local HH:MM, authoritative
-  available: boolean;
+  time: string // host-local HH:MM, authoritative
+  available: boolean
   /** "HH:MM" in the visitor's zone (mig#48). When present, the button
    *  renders this instead of `time`, and the period bucket is
    *  computed from it. Falls back to bare `time` (host TZ) when
    *  absent — the visitor's zone isn't known yet (SSR pass before
    *  hydration, or /embed before its tz redirect lands). */
-  displayHHMM?: string;
+  displayHHMM?: string
   /** This slot's own full "HH:MM, City, UTC±N" (mig#15, mig#48) —
    *  used for the button's accessible name only, never the visible
    *  text, so a screen reader that jumps straight to one button still
    *  hears the complete time. Set together with `displayHHMM`. */
-  ariaZoneLabel?: string;
+  ariaZoneLabel?: string
   /** This slot's own UTC offset ("UTC+1"), set only when it differs
    *  from the grid header's `zoneLabel` — a daylight-saving change
    *  landing on one of the visible slots (mig#48). Rendered inline
    *  next to the time so that slot is never ambiguous. */
-  offsetNote?: string;
+  offsetNote?: string
   /** "Wed 23 Sep" — set only when this slot's visitor-local date
    *  differs from the heading's day, `gridDay(...).date` (mig#15
    *  review, mig#50). Rendered as a small second line on the chip. */
-  dateNote?: string;
+  dateNote?: string
 }
 
 interface TimeSlotsProps {
-  date: string; // YYYY-MM-DD (host-local)
-  dateLabel: string; // pre-formatted "Thursday, 28 August 2026"
-  slots: SlotCell[];
-  selectedSlot?: string | null;
+  date: string // YYYY-MM-DD (host-local)
+  dateLabel: string // pre-formatted "Thursday, 28 August 2026"
+  slots: SlotCell[]
+  selectedSlot?: string | null
   /** Called when an available slot is picked. When provided, slots
    *  render as <button> with onClick. When omitted, slots render as
    *  <a href> for the no-JS / /embed fallback, built from
    *  `basePath`. */
-  onSelectSlot?: (date: string, slot: string) => void;
+  onSelectSlot?: (date: string, slot: string) => void
   /** "" for the standalone page, "/embed" for the iframe variant.
    *  Defaults to "". */
-  basePath?: string;
+  basePath?: string
   /** The visitor's IANA zone, once known (mig#15) — threaded onto
    *  every slot's `<a href>` so /embed's tz query param survives. */
-  tz?: string | null;
+  tz?: string | null
   /** "Berlin, UTC+2" (mig#48) — the display zone shown once, above the
    *  grid, next to `dateLabel`. Every slot's own offset is compared
    *  against this (see `SlotCell.offsetNote`). Omit/`null` while the
    *  display zone isn't known yet. */
-  zoneLabel?: string | null;
+  zoneLabel?: string | null
   /** /embed's forced theme, once known (mig#44) — threaded onto every
    *  slot's `<a href>` so /embed's theme query param survives. `null`
    *  for "auto" (the default), which adds nothing to the link. */
-  theme?: string | null;
+  theme?: string | null
 }
 
-type Period = "morning" | "afternoon" | "evening";
+type Period = "morning" | "afternoon" | "evening"
 
 function periodFor(time: string): Period {
-  const h = parseInt(time.slice(0, 2), 10);
-  if (h < 12) return "morning";
-  if (h < 17) return "afternoon";
-  return "evening";
+  const h = parseInt(time.slice(0, 2), 10)
+  if (h < 12) return "morning"
+  if (h < 17) return "afternoon"
+  return "evening"
 }
 
 const PERIOD_LABEL: Record<Period, string> = {
   morning: "Morning",
   afternoon: "Afternoon",
   evening: "Evening",
-};
+}
 
 interface SlotGroup {
-  key: string;
-  period: Period;
-  slots: SlotCell[];
+  key: string
+  period: Period
+  slots: SlotCell[]
 }
 
 // Contiguous runs of the same period, in array order (mig#15 review —
 // see the file header comment for why this replaces a fixed 3-bucket
 // layout). The island/route passes `slots` already sorted by instant.
 function groupByConsecutivePeriod(slots: SlotCell[]): SlotGroup[] {
-  const groups: SlotGroup[] = [];
+  const groups: SlotGroup[] = []
   for (const s of slots) {
-    const period = periodFor(s.displayHHMM ?? s.time);
-    const last = groups[groups.length - 1];
+    const period = periodFor(s.displayHHMM ?? s.time)
+    const last = groups[groups.length - 1]
     if (last && last.period === period) {
-      last.slots.push(s);
+      last.slots.push(s)
     } else {
-      groups.push({ key: `${groups.length}-${period}`, period, slots: [s] });
+      groups.push({ key: `${groups.length}-${period}`, period, slots: [s] })
     }
   }
-  return groups;
+  return groups
 }
 
 export function TimeSlots(
@@ -218,10 +218,10 @@ export function TimeSlots(
           No available times on {dateLabel}.
         </p>
       </div>
-    );
+    )
   }
 
-  const groups = groupByConsecutivePeriod(slots);
+  const groups = groupByConsecutivePeriod(slots)
 
   return (
     <div class="rounded-2xl border border-line bg-surface overflow-hidden">
@@ -254,32 +254,32 @@ export function TimeSlots(
         ))}
       </div>
     </div>
-  );
+  )
 }
 
 function SlotButton(
   { date, slot, selected, onSelect, basePath, tz, theme }: {
-    date: string;
-    slot: SlotCell;
-    selected: boolean;
-    onSelect?: (date: string, slot: string) => void;
-    basePath: string;
-    tz?: string | null;
-    theme?: string | null;
+    date: string
+    slot: SlotCell
+    selected: boolean
+    onSelect?: (date: string, slot: string) => void
+    basePath: string
+    tz?: string | null
+    theme?: string | null
   },
 ) {
   const base =
-    "inline-flex flex-col min-h-10 min-w-[4.5rem] items-center justify-center gap-0 rounded-lg border px-3 py-1.5 text-sm tnum font-medium transition-all duration-(--duration-snappy) focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-surface)";
+    "inline-flex flex-col min-h-10 min-w-[4.5rem] items-center justify-center gap-0 rounded-lg border px-3 py-1.5 text-sm tnum font-medium transition-all duration-(--duration-snappy) focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-surface)"
   // What the user actually sees. Falls back to host-local when the
   // route or island hasn't computed a visitor-TZ displayHHMM.
-  const shownTime = slot.displayHHMM ?? slot.time;
+  const shownTime = slot.displayHHMM ?? slot.time
   // Visible text (mig#48): bare HH:MM, plus this slot's own offset
   // only when it disagrees with the grid header's — a daylight-saving
   // change landing on this slot. The zone/city stays in the header;
   // repeating it here would be exactly the noise this issue removed.
   const visibleTime = slot.offsetNote
     ? `${shownTime}, ${slot.offsetNote}`
-    : shownTime;
+    : shownTime
   // Full accessible name (mig#15, mig#48, mig#48 review): the slot's
   // own full "HH:MM, City, UTC±N", plus its date note ("Wed 23 Sep")
   // when one is shown — a screen reader that only reads the
@@ -290,7 +290,7 @@ function SlotButton(
     ? `${shownTime}, ${slot.ariaZoneLabel}${
       slot.dateNote ? `, ${slot.dateNote}` : ""
     }`
-    : undefined;
+    : undefined
   const visible = (
     <>
       <span>{visibleTime}</span>
@@ -300,7 +300,7 @@ function SlotButton(
         </span>
       )}
     </>
-  );
+  )
   // Selected/booked chips render as a plain <span> — no interactive
   // role, so `aria-label` isn't reliably exposed by every screen
   // reader (mig#48 review). Visually hidden text inside the element
@@ -315,7 +315,7 @@ function SlotButton(
         <span aria-hidden="true" class="contents">{visible}</span>
       </>
     )
-    : visible;
+    : visible
 
   if (selected) {
     return (
@@ -326,7 +326,7 @@ function SlotButton(
       >
         {spanContent}
       </span>
-    );
+    )
   }
 
   if (!slot.available) {
@@ -338,7 +338,7 @@ function SlotButton(
       >
         {spanContent}
       </span>
-    );
+    )
   }
 
   if (onSelect) {
@@ -351,7 +351,7 @@ function SlotButton(
       >
         {visible}
       </button>
-    );
+    )
   }
 
   // `aria-current="false"` (mig#50): Fresh's server renderer marks
@@ -370,5 +370,5 @@ function SlotButton(
     >
       {visible}
     </a>
-  );
+  )
 }

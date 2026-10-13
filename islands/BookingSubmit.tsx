@@ -1,7 +1,7 @@
-import { useEffect, useState } from "preact/hooks";
-import { captureTimeZone } from "@spy4x/platform/browser/embed";
-import { isAddress } from "@spy4x/email/address";
-import { Button } from "@spy4x/preact-ui/button";
+import { useEffect, useState } from "preact/hooks"
+import { captureTimeZone } from "@spy4x/platform/browser/embed"
+import { isAddress } from "@spy4x/email/address"
+import { Button } from "@spy4x/preact-ui/button"
 
 /*
   Booking submit island.
@@ -30,7 +30,7 @@ interface Props {
   /** Full button label, e.g. "Confirm — Fri, 28 Aug, 14:00".
    *  Already in visitor TZ (the BookingFlow island re-formats it
    *  after hydration). */
-  label: string;
+  label: string
 }
 
 // Mirrors lib/validators.ts:BookingSchema (name min 2, the address
@@ -40,37 +40,37 @@ interface Props {
 // type at load and would put arktype in the island's bundle. The
 // server adds the 254-character limit; server-side arktype is the
 // trust boundary and this is UX only.
-const NAME_MIN = 2;
-const NAME_MAX = 100;
+const NAME_MIN = 2
+const NAME_MAX = 100
 
 export default function BookingSubmit({ label }: Props) {
-  const [busy, setBusy] = useState(false);
-  const [guestTz, setGuestTz] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false)
+  const [guestTz, setGuestTz] = useState("")
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Stays empty when no zone is detected; the server then falls back
     // to the host's timezone.
-    setGuestTz(captureTimeZone() ?? "");
-  }, []);
+    setGuestTz(captureTimeZone() ?? "")
+  }, [])
 
   function validate(form: HTMLFormElement): string | null {
-    const fd = new FormData(form);
-    const name = String(fd.get("name") ?? "").trim();
-    const email = String(fd.get("email") ?? "").trim();
+    const fd = new FormData(form)
+    const name = String(fd.get("name") ?? "").trim()
+    const email = String(fd.get("email") ?? "").trim()
     if (name.length < NAME_MIN) {
-      return "Please enter your name.";
+      return "Please enter your name."
     }
     if (name.length > NAME_MAX) {
-      return "Name is too long.";
+      return "Name is too long."
     }
     if (!email) {
-      return "Please enter your email.";
+      return "Please enter your email."
     }
     if (!isAddress(email)) {
-      return "Please enter a valid email address.";
+      return "Please enter a valid email address."
     }
-    return null;
+    return null
   }
 
   function onClick(e: MouseEvent) {
@@ -78,22 +78,22 @@ export default function BookingSubmit({ label }: Props) {
     // can stop it by calling preventDefault, which is what we do
     // when validation fails. On success we let the native submit
     // proceed so the form posts to /api/book.
-    const btn = e.currentTarget as HTMLButtonElement;
-    const form = btn.form;
-    if (!form) return;
-    const err = validate(form);
+    const btn = e.currentTarget as HTMLButtonElement
+    const form = btn.form
+    if (!form) return
+    const err = validate(form)
     if (err) {
-      e.preventDefault();
-      setError(err);
+      e.preventDefault()
+      setError(err)
       // Move focus to the first invalid field for keyboard users.
       const firstInvalid = form.querySelector<HTMLElement>(
         err.startsWith("Please enter your name") ? "#f-name" : "#f-email",
-      );
-      firstInvalid?.focus();
-      return;
+      )
+      firstInvalid?.focus()
+      return
     }
-    setError(null);
-    setBusy(true);
+    setError(null)
+    setBusy(true)
     // Do NOT preventDefault — the native form submit must proceed.
   }
 
@@ -118,5 +118,5 @@ export default function BookingSubmit({ label }: Props) {
         </p>
       )}
     </>
-  );
+  )
 }

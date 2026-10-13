@@ -84,13 +84,13 @@ fixed height with an inner scrollbar:
 
 ```html
 <script>
-const iframe = document.getElementById("mig-embed");
+const iframe = document.getElementById("mig-embed")
 window.addEventListener("message", (event) => {
-  if (event.origin !== "https://meet.example.com") return;
-  if (event.source !== iframe.contentWindow) return;
-  if (event.data?.type !== "mig:height") return;
-  iframe.style.height = `${event.data.height}px`;
-});
+  if (event.origin !== "https://meet.example.com") return
+  if (event.source !== iframe.contentWindow) return
+  if (event.data?.type !== "mig:height") return
+  iframe.style.height = `${event.data.height}px`
+})
 </script>
 ```
 
@@ -107,7 +107,7 @@ When `/embed/confirmed` shows a new, confirmed booking, it posts one message to
 the parent:
 
 ```js
-event.data; // { type: "mig:booked" }
+event.data // { type: "mig:booked" }
 ```
 
 The message has no other key: no booking id, name, email, time or token, so mig

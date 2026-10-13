@@ -9,15 +9,15 @@ import {
   type IcsEvent,
   IcsEventStatus,
   type IcsOptions,
-} from "@spy4x/time/ics";
-import { canonicalTimeZoneOr, zonedDateTime } from "@spy4x/time/tz";
-import type { Booking, Config } from "./types.ts";
-import { formatClockLongAt, formatOwnerClock } from "./clock.ts";
+} from "@spy4x/time/ics"
+import { canonicalTimeZoneOr, zonedDateTime } from "@spy4x/time/tz"
+import type { Booking, Config } from "./types.ts"
+import { formatClockLongAt, formatOwnerClock } from "./clock.ts"
 
-const PRODID = "-//mig//EN";
+const PRODID = "-//mig//EN"
 
 /** Whose mailbox an invite goes to; see `bookingIcs`. */
-export type InviteRecipient = "owner" | "guest";
+export type InviteRecipient = "owner" | "guest"
 
 /** Build one VCALENDAR/VEVENT invite for `booking`. DTSTART/DTEND are
  *  always UTC, computed from `booking.date`/`booking.time` interpreted
@@ -63,8 +63,8 @@ export function bookingIcs(
     visitorTz,
     now,
     recipient,
-  );
-  return generateIcs(event, options);
+  )
+  return generateIcs(event, options)
 }
 
 /** The event and calendar options `bookingIcs` writes, for a caller
@@ -79,13 +79,13 @@ export function bookingInvite(
   now = new Date(),
   recipient: InviteRecipient = "guest",
 ): { event: IcsEvent; options: IcsOptions } {
-  const start = zonedDateTime(booking.date, booking.time, booking.hostTz);
-  displayTz = canonicalTimeZoneOr(displayTz, booking.hostTz);
+  const start = zonedDateTime(booking.date, booking.time, booking.hostTz)
+  displayTz = canonicalTimeZoneOr(displayTz, booking.hostTz)
   const end = new Date(
     start.getTime() + config.slotDurationMin * 60_000,
-  );
+  )
 
-  const summary = `Meeting with ${config.hostName}`;
+  const summary = `Meeting with ${config.hostName}`
 
   // DESCRIPTION — keep paragraphs on separate lines so most calendar
   // clients render them as actual line breaks. RFC 5545 §3.1 requires
@@ -126,24 +126,24 @@ export function bookingInvite(
       visitorTz,
       true,
     )
-    : formatClockLongAt(start, displayTz);
+    : formatClockLongAt(start, displayTz)
 
   const descLines: string[] = [
     `Meeting with ${config.hostName}`,
     when,
     "",
     config.meetingUrl,
-  ];
-  const forOwner = recipient === "owner";
+  ]
+  const forOwner = recipient === "owner"
   if (forOwner && booking.notes && booking.notes.trim()) {
-    descLines.push("", booking.notes.trim());
+    descLines.push("", booking.notes.trim())
   }
   descLines.push(
     "",
     "Booked via mig",
     `Cancel: ${cancelUrl}`,
-  );
-  const description = descLines.join("\n");
+  )
+  const description = descLines.join("\n")
 
   // `now` is DTSTAMP: the moment this invite was written. A parameter
   // so a test can pin it; `@spy4x/time/ics` never reads the clock itself.
@@ -166,5 +166,5 @@ export function bookingInvite(
       }],
     },
     options: { prodid: PRODID, dtstamp: now },
-  };
+  }
 }

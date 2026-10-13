@@ -2,51 +2,51 @@
 // Sends multipart/alternative (text + HTML) emails, optionally with an
 // ICS attachment. Every send returns a Result instead of throwing.
 
-import { createSmtpSender, type SmtpTransport } from "@spy4x/email/smtp";
+import { createSmtpSender, type SmtpTransport } from "@spy4x/email/smtp"
 import {
   DARK_HTML_SHELL_THEME,
   escapeHtml as esc,
   htmlWrap as shellWrap,
-} from "@spy4x/email/html";
-import { type EmailAttachment, icalAttachment } from "@spy4x/email/message";
-import type { Config } from "./types.ts";
-import type { Booking } from "./types.ts";
-import { err, ok, type Result } from "./types.ts";
-import { bookingInvite } from "./invite.ts";
+} from "@spy4x/email/html"
+import { type EmailAttachment, icalAttachment } from "@spy4x/email/message"
+import type { Config } from "./types.ts"
+import type { Booking } from "./types.ts"
+import { err, ok, type Result } from "./types.ts"
+import { bookingInvite } from "./invite.ts"
 import {
   canonicalTimeZoneOr,
   isValidTimeZone,
   zonedDateTime,
-} from "@spy4x/time/tz";
+} from "@spy4x/time/tz"
 import {
   formatClockLongAt,
   formatClockShortAt,
   formatOwnerClock,
-} from "./clock.ts";
+} from "./clock.ts"
 
 // The one line shown instead of an unlabelled host time whenever a
 // recipient's own zone isn't known (mig#15 review) — no other new
 // copy anywhere, per the spec.
-const HOST_TZ_NOTE = "Times are shown in the host's timezone.";
+const HOST_TZ_NOTE = "Times are shown in the host's timezone."
 
 export interface SendEmailOpts {
-  to: string;
-  subject: string;
-  text: string;
-  html?: string;
-  attachments?: EmailAttachment[];
+  to: string
+  subject: string
+  text: string
+  html?: string
+  attachments?: EmailAttachment[]
 }
 
 export interface RecipientEmails {
-  guest: SendEmailOpts;
-  owner: SendEmailOpts;
+  guest: SendEmailOpts
+  owner: SendEmailOpts
 }
 
 /** What a send reports: nothing on success, the (password-free)
  *  reason on failure. */
-export type SendOutcome = Result<void, string>;
+export type SendOutcome = Result<void, string>
 
-let transportForTesting: SmtpTransport | null = null;
+let transportForTesting: SmtpTransport | null = null
 
 /** Test-only seam: replace the transport `sendEmail` uses instead of
  *  building one from `config.smtp` (which would otherwise open a real
@@ -54,14 +54,14 @@ let transportForTesting: SmtpTransport | null = null;
  *  resolves or rejects, or `null` to go back to the real transport on
  *  the next send. Never call this outside a test. */
 export function setTransportForTesting(t: SmtpTransport | null): void {
-  transportForTesting = t;
+  transportForTesting = t
 }
 
 export async function sendEmail(
   config: Config,
   opts: SendEmailOpts,
 ): Promise<SendOutcome> {
-  const testTransport = transportForTesting;
+  const testTransport = transportForTesting
   try {
     const sender = createSmtpSender(
       {
@@ -76,22 +76,22 @@ export async function sendEmail(
         requireTls: false,
       },
       testTransport === null ? undefined : () => testTransport,
-    );
+    )
     const sent = await sender.send({
       to: opts.to,
       subject: opts.subject,
       text: opts.text,
       html: opts.html,
       attachments: opts.attachments,
-    });
-    return sent.ok ? ok(undefined) : err(sent.error);
+    })
+    return sent.ok ? ok(undefined) : err(sent.error)
   } catch (e) {
     // createSmtpSender throws only on a malformed SMTP_* setting, which
     // lib/config.ts already rejects at startup; the message names the
     // setting, never the password.
     return err(
       `SMTP send failed (${config.smtp.host}): ${(e as Error).message}`,
-    );
+    )
   }
 }
 
@@ -101,13 +101,13 @@ async function buildAndSend(
   config: Config,
   build: () => SendEmailOpts,
 ): Promise<SendOutcome> {
-  let opts: SendEmailOpts;
+  let opts: SendEmailOpts
   try {
-    opts = build();
+    opts = build()
   } catch (e) {
-    return err(`email could not be built: ${(e as Error).message}`);
+    return err(`email could not be built: ${(e as Error).message}`)
   }
-  return await sendEmail(config, opts);
+  return await sendEmail(config, opts)
 }
 
 // mig#19: split into two functions, owner then guest, rather than one
@@ -138,7 +138,7 @@ export function sendOwnerBookingEmail(
   return buildAndSend(
     config,
     () => buildBookingEmails(config, booking, cancelUrl).owner,
-  );
+  )
 }
 
 export function sendGuestBookingEmail(
@@ -149,7 +149,7 @@ export function sendGuestBookingEmail(
   return buildAndSend(
     config,
     () => buildBookingEmails(config, booking, cancelUrl).guest,
-  );
+  )
 }
 
 export interface CorrectionEmailOpts {
@@ -160,7 +160,7 @@ export interface CorrectionEmailOpts {
    *  fix: claiming the booking "was removed and the slot is free
    *  again" when the rollback's own disk write also failed and the
    *  booking may still be on disk. */
-  rolledBack: boolean;
+  rolledBack: boolean
 }
 
 // mig#19 review round 3: sent by lib/book.ts only when the owner's
@@ -180,7 +180,7 @@ export function sendBookingCorrectionEmail(
   booking: Booking,
   opts: CorrectionEmailOpts,
 ): Promise<SendOutcome> {
-  return buildAndSend(config, () => correctionEmail(config, booking, opts));
+  return buildAndSend(config, () => correctionEmail(config, booking, opts))
 }
 
 function correctionEmail(
@@ -188,20 +188,20 @@ function correctionEmail(
   booking: Booking,
   opts: CorrectionEmailOpts,
 ): SendEmailOpts {
-  const { rolledBack } = opts;
+  const { rolledBack } = opts
   const ownerWhenShort = formatOwnerClock(
     booking.date,
     booking.time,
     booking.hostTz,
     booking.guestTz,
-  );
+  )
   const ownerWhenLong = formatOwnerClock(
     booking.date,
     booking.time,
     booking.hostTz,
     booking.guestTz,
     true,
-  );
+  )
   return {
     to: config.hostEmail,
     subject: rolledBack
@@ -215,7 +215,7 @@ function correctionEmail(
     // cancelled booking, but sets no SEQUENCE, so a client may not treat
     // it as replacing the REQUEST. The email body below tells the host to
     // ignore the earlier invite instead.
-  };
+  }
 }
 
 function correctionText(
@@ -246,7 +246,7 @@ function correctionText(
         "and calendar invite you received a moment ago.",
     "",
     "— Sent by mig",
-  ].join("\n");
+  ].join("\n")
 }
 
 function correctionHtml(
@@ -287,24 +287,24 @@ function correctionHtml(
     ago.</p>`
     }
   `,
-  );
+  )
 }
 
 // Anyone can book with an address that is not theirs, so a mail to the
 // guest's address holds nothing the booker typed except that address:
 // no name, no notes, no cancel reason, in the subject, the text, the
 // HTML or the invite (mig#108). The owner's mails keep all three.
-const GUEST_GREETING = "Hello,";
+const GUEST_GREETING = "Hello,"
 
 export function buildBookingEmails(
   config: Config,
   booking: Booking,
   cancelUrl: string,
 ): RecipientEmails {
-  const guestTz = guestTimeZone(booking);
+  const guestTz = guestTimeZone(booking)
   const guestIcs = inviteAttachment(
     bookingInvite(booking, config, cancelUrl, guestTz),
-  );
+  )
   // review follow-up: the owner's invite now carries the visitor's
   // clock too, the same way the owner email body already does — see
   // bookingIcs's doc comment. The guest's own ics above passes no
@@ -319,15 +319,15 @@ export function buildBookingEmails(
       undefined,
       "owner",
     ),
-  );
-  const instant = bookingInstant(booking);
-  const guestWhen = formatClockShortAt(instant, guestTz);
+  )
+  const instant = bookingInstant(booking)
+  const guestWhen = formatClockShortAt(instant, guestTz)
   const ownerWhen = formatOwnerClock(
     booking.date,
     booking.time,
     booking.hostTz,
     booking.guestTz,
-  );
+  )
 
   return {
     guest: {
@@ -344,7 +344,7 @@ export function buildBookingEmails(
       html: ownerHtml(config, booking, cancelUrl),
       attachments: [ownerIcs],
     },
-  };
+  }
 }
 
 // Guest first, then owner; stops at the first failure, as it did when
@@ -355,15 +355,15 @@ export async function sendCancellationEmails(
   cancelledBy: "owner" | "guest",
   reason: string | undefined,
 ): Promise<SendOutcome> {
-  let emails: RecipientEmails;
+  let emails: RecipientEmails
   try {
-    emails = buildCancellationEmails(config, booking, cancelledBy, reason);
+    emails = buildCancellationEmails(config, booking, cancelledBy, reason)
   } catch (e) {
-    return err(`email could not be built: ${(e as Error).message}`);
+    return err(`email could not be built: ${(e as Error).message}`)
   }
-  const guest = await sendEmail(config, emails.guest);
-  if (!guest.ok) return guest;
-  return await sendEmail(config, emails.owner);
+  const guest = await sendEmail(config, emails.guest)
+  if (!guest.ok) return guest
+  return await sendEmail(config, emails.owner)
 }
 
 export function buildCancellationEmails(
@@ -372,18 +372,18 @@ export function buildCancellationEmails(
   cancelledBy: "owner" | "guest",
   reason: string | undefined,
 ): RecipientEmails {
-  const guestTz = guestTimeZone(booking);
-  const knownGuestTz = isKnownTimeZone(booking.guestTz);
-  const instant = bookingInstant(booking);
-  const cancelledAt = new Date();
-  const guestWhen = formatClockShortAt(instant, guestTz);
+  const guestTz = guestTimeZone(booking)
+  const knownGuestTz = isKnownTimeZone(booking.guestTz)
+  const instant = bookingInstant(booking)
+  const cancelledAt = new Date()
+  const guestWhen = formatClockShortAt(instant, guestTz)
   const ownerWhen = formatOwnerClock(
     booking.date,
     booking.time,
     booking.hostTz,
     booking.guestTz,
-  );
-  const reasonText = reason?.trim() || "(no reason given)";
+  )
+  const reasonText = reason?.trim() || "(no reason given)"
 
   // Each recipient gets a "Cancelled by:" line in their own frame of
   // reference: "you" when they themselves cancelled, or the
@@ -392,16 +392,16 @@ export function buildCancellationEmails(
   // wondering which guest it was.
   const guestBody =
     `The meeting scheduled for ${guestWhen} with ${config.hostName} ` +
-    `has been cancelled.`;
+    `has been cancelled.`
   const hostBody =
     `The meeting scheduled for ${ownerWhen} with ${booking.guestName} ` +
-    `has been cancelled.`;
+    `has been cancelled.`
   const guestCancellerLabel = cancelledBy === "guest"
     ? "you"
-    : `${config.hostName}`;
+    : `${config.hostName}`
   const hostCancellerLabel = cancelledBy === "guest"
     ? `${booking.guestName} <${booking.guestEmail}>`
-    : "you";
+    : "you"
 
   return {
     guest: {
@@ -440,7 +440,7 @@ export function buildCancellationEmails(
         cancelledAtLabel: formatClockShortAt(cancelledAt, booking.hostTz),
       }),
     },
-  };
+  }
 }
 
 // ---------- Plain-text + HTML templates ----------
@@ -458,8 +458,8 @@ function guestText(
     `When:  ${
       formatClockLongAt(bookingInstant(booking), guestTimeZone(booking))
     }`,
-  ];
-  if (!isKnownTimeZone(booking.guestTz)) lines.push(HOST_TZ_NOTE);
+  ]
+  if (!isKnownTimeZone(booking.guestTz)) lines.push(HOST_TZ_NOTE)
   lines.push(
     `Where: ${config.meetingUrl}`,
     "",
@@ -469,8 +469,8 @@ function guestText(
     cancelUrl,
     "",
     "— Sent by mig",
-  );
-  return lines.join("\n");
+  )
+  return lines.join("\n")
 }
 
 function guestHtml(
@@ -482,7 +482,7 @@ function guestHtml(
     ? ""
     : `<p style="color:#94a3b8;font-size:13px;margin-top:-8px">${
       esc(HOST_TZ_NOTE)
-    }</p>`;
+    }</p>`
   return htmlWrap(
     config,
     `
@@ -504,7 +504,7 @@ function guestHtml(
       esc(cancelUrl)
     }" style="color:#f97316">Click here</a></p>
   `,
-  );
+  )
 }
 
 function ownerText(
@@ -525,9 +525,9 @@ function ownerText(
         true,
       )
     }`,
-  ];
+  ]
   if (booking.notes?.trim()) {
-    lines.push(`Notes:    ${booking.notes.trim()}`);
+    lines.push(`Notes:    ${booking.notes.trim()}`)
   }
   lines.push(
     `Booked at: ${
@@ -537,8 +537,8 @@ function ownerText(
     `Cancel: ${cancelUrl}`,
     "",
     "— Sent by mig",
-  );
-  return lines.join("\n");
+  )
+  return lines.join("\n")
 }
 
 function ownerHtml(
@@ -551,7 +551,7 @@ function ownerHtml(
           <td style="padding:4px 0;white-space:pre-wrap">${
       esc(booking.notes.trim())
     }</td></tr>`
-    : "";
+    : ""
   return htmlWrap(
     config,
     `
@@ -583,52 +583,52 @@ function ownerHtml(
       esc(cancelUrl)
     }" style="color:#f97316">Cancel this booking</a></p>
   `,
-  );
+  )
 }
 
 function cancellationText(opts: {
-  greeting: string;
-  body: string;
-  cancellerLabel: string;
+  greeting: string
+  body: string
+  cancellerLabel: string
   /** Left out of the guest's mail, which then has no "Reason" line. */
-  reason?: string;
-  cancelledAtLabel: string;
-  tzNote?: string;
+  reason?: string
+  cancelledAtLabel: string
+  tzNote?: string
 }): string {
   const lines = [
     opts.greeting,
     "",
     opts.body,
-  ];
-  if (opts.tzNote) lines.push(opts.tzNote);
-  lines.push("", `Cancelled by: ${opts.cancellerLabel}`);
-  if (opts.reason !== undefined) lines.push(`Reason: ${opts.reason}`);
+  ]
+  if (opts.tzNote) lines.push(opts.tzNote)
+  lines.push("", `Cancelled by: ${opts.cancellerLabel}`)
+  if (opts.reason !== undefined) lines.push(`Reason: ${opts.reason}`)
   lines.push(
     `Cancelled at: ${opts.cancelledAtLabel}`,
     "",
     "— Sent by mig",
-  );
-  return lines.join("\n");
+  )
+  return lines.join("\n")
 }
 
 function cancellationHtml(
   config: Config,
   opts: {
-    greeting: string;
-    body: string;
-    cancellerLabel: string;
-    reason?: string;
-    cancelledAtLabel: string;
-    tzNote?: string;
+    greeting: string
+    body: string
+    cancellerLabel: string
+    reason?: string
+    cancelledAtLabel: string
+    tzNote?: string
   },
 ): string {
   const reasonHtml = opts.reason === undefined
     ? ""
     : `<tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Reason</td>
-          <td style="padding:4px 0">${esc(opts.reason)}</td></tr>`;
+          <td style="padding:4px 0">${esc(opts.reason)}</td></tr>`
   const tzNoteHtml = opts.tzNote
     ? `<p style="color:#94a3b8;font-size:13px">${esc(opts.tzNote)}</p>`
-    : "";
+    : ""
   return htmlWrap(
     config,
     `
@@ -643,19 +643,19 @@ function cancellationHtml(
           <td style="padding:4px 0">${esc(opts.cancelledAtLabel)}</td></tr>
     </table>
   `,
-  );
+  )
 }
 
 function bookingInstant(booking: Booking): Date {
-  return zonedDateTime(booking.date, booking.time, booking.hostTz);
+  return zonedDateTime(booking.date, booking.time, booking.hostTz)
 }
 
 function isKnownTimeZone(tz: string | undefined): boolean {
-  return !!tz && isValidTimeZone(tz);
+  return !!tz && isValidTimeZone(tz)
 }
 
 function guestTimeZone(booking: Booking): string {
-  return canonicalTimeZoneOr(booking.guestTz, booking.hostTz);
+  return canonicalTimeZoneOr(booking.guestTz, booking.hostTz)
 }
 
 /** An invite as a `meeting.ics` attachment; its Content-Type carries
@@ -666,7 +666,7 @@ function inviteAttachment(
   return icalAttachment(invite.event, {
     ics: invite.options,
     filename: "meeting.ics",
-  });
+  })
 }
 
 // Constrained to 480px so the email reads as a letter, not a full
@@ -685,5 +685,5 @@ function htmlWrap(config: Config, body: string): string {
       `<p style="color:#64748b;font-size:14px;margin-top:24px">— Sent by <a href="${
         esc(config.githubUrl)
       }" style="color:#64748b;text-decoration:underline">mig</a></p>`,
-  });
+  })
 }

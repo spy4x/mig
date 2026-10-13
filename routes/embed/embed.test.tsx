@@ -15,17 +15,17 @@
 // for each route; it just skips the query-string parsing in each
 // route's `handler.GET`, which this issue doesn't touch.
 
-import { assert, assertEquals, assertFalse } from "@std/assert";
-import { renderToString } from "preact-render-to-string";
-import type { PageProps } from "fresh";
-import type { State } from "../../lib/utils.ts";
-import type { Config } from "../../lib/types.ts";
-import type { ConfirmedData } from "../../lib/confirmed-data.ts";
-import BookingFlow from "../../islands/BookingFlow.tsx";
-import { HEIGHT_ATTR } from "../../lib/height-report-script.ts";
-import EmbedPage, { type EmbedData } from "./index.tsx";
-import EmbedConfirmedPage from "./confirmed.tsx";
-import ConfirmedPage from "../confirmed.tsx";
+import { assert, assertEquals, assertFalse } from "@std/assert"
+import { renderToString } from "preact-render-to-string"
+import type { PageProps } from "fresh"
+import type { State } from "../../lib/utils.ts"
+import type { Config } from "../../lib/types.ts"
+import type { ConfirmedData } from "../../lib/confirmed-data.ts"
+import BookingFlow from "../../islands/BookingFlow.tsx"
+import { HEIGHT_ATTR } from "../../lib/height-report-script.ts"
+import EmbedPage, { type EmbedData } from "./index.tsx"
+import EmbedConfirmedPage from "./confirmed.tsx"
+import ConfirmedPage from "../confirmed.tsx"
 
 // ─── Fixtures ──────────────────────────────────────────────────────
 
@@ -63,13 +63,13 @@ const FAKE_CONFIG: Config = {
   hideBranding: false,
   githubUrl: "https://github.com/spy4x/mig",
   version: "test",
-};
+}
 
 const DATES: EmbedData["dates"] = [
   { date: "2027-01-04", slots: 3 },
   { date: "2027-01-05", slots: 0 },
   { date: "2027-01-06", slots: 5 },
-];
+]
 
 // DATES plus one bookable day in the month before and one in the month
 // after: the calendar draws a month arrow as a link only when that
@@ -78,19 +78,19 @@ const DATES_ACROSS_MONTHS: EmbedData["dates"] = [
   { date: "2026-12-30", slots: 2 },
   ...DATES,
   { date: "2027-02-02", slots: 2 },
-];
+]
 
 const SLOTS: EmbedData["slots"] = [
   { time: "09:00", available: true },
   { time: "09:30", available: false },
-];
+]
 
 // Builds the full PageProps a route's default component receives.
 // Only `data` and `state.config` are read by the components under
 // test here — the rest are unused stand-ins so the call satisfies
 // Fresh's PageProps type.
 function fakePageProps<Data>(data: Data): PageProps<Data, State> {
-  const req = new Request("http://localhost/embed");
+  const req = new Request("http://localhost/embed")
   return {
     data,
     state: { config: FAKE_CONFIG } as unknown as State,
@@ -103,7 +103,7 @@ function fakePageProps<Data>(data: Data): PageProps<Data, State> {
     Component: (() => null) as unknown as PageProps<Data, State>["Component"],
     error: null,
     route: null,
-  };
+  }
 }
 
 function embedData(overrides: Partial<EmbedData>): EmbedData {
@@ -117,7 +117,7 @@ function embedData(overrides: Partial<EmbedData>): EmbedData {
     tz: null,
     theme: null,
     ...overrides,
-  };
+  }
 }
 
 function confirmedData(overrides: Partial<ConfirmedData>): ConfirmedData {
@@ -135,7 +135,7 @@ function confirmedData(overrides: Partial<ConfirmedData>): ConfirmedData {
       cancelToken: "faketoken",
     },
     ...overrides,
-  };
+  }
 }
 
 // ─── HTML introspection ──────────────────────────────────────────────
@@ -143,26 +143,26 @@ function confirmedData(overrides: Partial<ConfirmedData>): ConfirmedData {
 // is simple enough that matching opening tags is exact and readable.
 
 interface Anchor {
-  href: string;
-  target: string | null;
+  href: string
+  target: string | null
 }
 
 function attr(tag: string, name: string): string | null {
-  const m = tag.match(new RegExp(`${name}="([^"]*)"`));
-  return m ? m[1] : null;
+  const m = tag.match(new RegExp(`${name}="([^"]*)"`))
+  return m ? m[1] : null
 }
 
 function anchors(html: string): Anchor[] {
-  const tags = html.match(/<a\b[^>]*>/g) ?? [];
+  const tags = html.match(/<a\b[^>]*>/g) ?? []
   return tags.map((tag) => ({
     href: attr(tag, "href") ?? "",
     target: attr(tag, "target"),
-  }));
+  }))
 }
 
 function formActions(html: string): string[] {
-  const tags = html.match(/<form\b[^>]*>/g) ?? [];
-  return tags.map((tag) => attr(tag, "action") ?? "");
+  const tags = html.match(/<form\b[^>]*>/g) ?? []
+  return tags.map((tag) => attr(tag, "action") ?? "")
 }
 
 /** Every href/action must lead under `base`, except entries in
@@ -176,11 +176,11 @@ function offendingLinks(
   allow: string[] = [],
 ): string[] {
   return links.filter((l) => {
-    if (allow.includes(l)) return false;
-    const resolved = new URL(l, "http://localhost/embed");
+    if (allow.includes(l)) return false
+    const resolved = new URL(l, "http://localhost/embed")
     return !(resolved.origin === "http://localhost" &&
-      resolved.pathname.startsWith(base));
-  });
+      resolved.pathname.startsWith(base))
+  })
 }
 
 // ─── /embed (picker) ─────────────────────────────────────────────────
@@ -188,14 +188,14 @@ function offendingLinks(
 Deno.test("embed picker: date step — every link stays under /embed", () => {
   const html = renderToString(
     <EmbedPage {...fakePageProps(embedData({}))} />,
-  );
+  )
   const links = [
     ...anchors(html).map((a) => a.href),
     ...formActions(html),
-  ];
-  assertEquals(offendingLinks(links, "/embed"), []);
-  assert(links.length > 0, "expected at least one link to check");
-});
+  ]
+  assertEquals(offendingLinks(links, "/embed"), [])
+  assert(links.length > 0, "expected at least one link to check")
+})
 
 Deno.test("embed picker: time step — date-card and slot links stay under /embed", () => {
   const html = renderToString(
@@ -205,17 +205,17 @@ Deno.test("embed picker: time step — date-card and slot links stay under /embe
         slots: SLOTS,
       }))}
     />,
-  );
+  )
   const links = [
     ...anchors(html).map((a) => a.href),
     ...formActions(html),
-  ];
-  assertEquals(offendingLinks(links, "/embed"), []);
+  ]
+  assertEquals(offendingLinks(links, "/embed"), [])
   // The date-card "Change" link and the one available slot link must
   // be present (the booked 09:30 slot renders as a disabled <span>,
   // not a link).
-  assert(links.length >= 2, `expected >=2 links, got ${links.length}`);
-});
+  assert(links.length >= 2, `expected >=2 links, got ${links.length}`)
+})
 
 // mig#48 review: scoped to TimeSlots.tsx's own header element
 // (`<p class="text-xs text-ink-subtle mt-0.5">{zoneLabel}</p>`) — never
@@ -225,8 +225,8 @@ Deno.test("embed picker: time step — date-card and slot links stay under /embe
 function gridHeaderZoneLabel(html: string): string | null {
   const m = html.match(
     /<p class="text-xs text-ink-subtle mt-0\.5">([^<]*)<\/p>/,
-  );
-  return m ? m[1] : null;
+  )
+  return m ? m[1] : null
 }
 
 Deno.test("embed picker: time step — the grid header element shows the zone once", () => {
@@ -250,21 +250,21 @@ Deno.test("embed picker: time step — the grid header element shows the zone on
         ],
       }))}
     />,
-  );
+  )
   // BookingFlow labels the header from the first slot's own instant:
   // Berlin in January is UTC+1, whatever the fixture's slots say.
   assertEquals(
     gridHeaderZoneLabel(html),
     "Berlin, UTC+1",
     "expected the grid header element to show the zone once",
-  );
+  )
   // Bare HH:MM on the slot itself — the zone lives in the header, not
   // repeated inline.
   assert(
     />09:00</.test(html),
     "expected the bookable slot's visible text to be bare HH:MM",
-  );
-});
+  )
+})
 
 Deno.test("embed picker: confirm step — form posts to /embed/book, captures guestTz with an inline script", () => {
   const html = renderToString(
@@ -275,21 +275,21 @@ Deno.test("embed picker: confirm step — form posts to /embed/book, captures gu
         slots: SLOTS,
       }))}
     />,
-  );
+  )
   const links = [
     ...anchors(html).map((a) => a.href),
     ...formActions(html),
-  ];
-  assertEquals(offendingLinks(links, "/embed"), []);
-  assertEquals(formActions(html), ["/embed/book"]);
+  ]
+  assertEquals(offendingLinks(links, "/embed"), [])
+  assertEquals(formActions(html), ["/embed/book"])
   // The progressive-enhancement guestTz capture: a hidden input the
   // inline script below fills in, BookingSubmit not required.
-  assert(html.includes('name="guestTz"'), "expected a hidden guestTz input");
+  assert(html.includes('name="guestTz"'), "expected a hidden guestTz input")
   assert(
     html.includes("Intl.DateTimeFormat"),
     "expected the inline timezone-capture script",
-  );
-});
+  )
+})
 
 Deno.test("embed form never renders BookingSubmit, the standalone island", async () => {
   // Complements the routes/embed/*.tsx import check below: BookingForm
@@ -300,12 +300,12 @@ Deno.test("embed form never renders BookingSubmit, the standalone island", async
   // for embed, BookingSubmit only for the standalone default.
   const source = await Deno.readTextFile(
     new URL("../../components/BookingForm.tsx", import.meta.url),
-  );
+  )
   assert(
     /embed\s*\?\s*<PlainSubmitButton/.test(source),
     "expected the embed branch of the submit-button ternary to render PlainSubmitButton",
-  );
-});
+  )
+})
 
 // ─── mig#15: tz query param survives navigation ──────────────────────
 
@@ -318,19 +318,19 @@ Deno.test("mig#15: every picker link carries tz once the visitor's zone is known
         tz: "America/New_York",
       }))}
     />,
-  );
+  )
   const links = [
     ...anchors(html).map((a) => a.href),
     ...formActions(html),
-  ];
-  assert(links.length > 0, "expected at least one link to check");
+  ]
+  assert(links.length > 0, "expected at least one link to check")
   for (const link of links) {
     assert(
       link.includes("tz=America%2FNew_York") || link === "/embed/book",
       `expected "${link}" to carry tz= (form actions never carry query params)`,
-    );
+    )
   }
-});
+})
 
 Deno.test("mig#15: BookingForm pre-fills the hidden guestTz field from the known tz", () => {
   // Regression guard: without this pre-fill, a visitor whose device
@@ -346,11 +346,11 @@ Deno.test("mig#15: BookingForm pre-fills the hidden guestTz field from the known
         tz: "America/New_York",
       }))}
     />,
-  );
-  const inputTag = html.match(/<input[^>]*name="guestTz"[^>]*>/)?.[0];
-  assert(inputTag, "expected a guestTz hidden input");
-  assertEquals(attr(inputTag!, "value"), "America/New_York");
-});
+  )
+  const inputTag = html.match(/<input[^>]*name="guestTz"[^>]*>/)?.[0]
+  assert(inputTag, "expected a guestTz hidden input")
+  assertEquals(attr(inputTag!, "value"), "America/New_York")
+})
 
 Deno.test("mig#15: calendar date links and month-nav links carry tz (step 1, no date picked)", () => {
   // Regression guard for Calendar.tsx: date cells and the prev/next
@@ -364,22 +364,22 @@ Deno.test("mig#15: calendar date links and month-nav links carry tz (step 1, no 
         dates: DATES_ACROSS_MONTHS,
       }))}
     />,
-  );
+  )
   const dateLinks = anchors(html).map((a) => a.href).filter((h) =>
     /[?&]date=/.test(h)
-  );
+  )
   const monthLinks = anchors(html).map((a) => a.href).filter((h) =>
     /[?&]month=/.test(h)
-  );
-  assert(dateLinks.length > 0, "expected at least one calendar date link");
-  assert(monthLinks.length > 0, "expected at least one month-nav link");
+  )
+  assert(dateLinks.length > 0, "expected at least one calendar date link")
+  assert(monthLinks.length > 0, "expected at least one month-nav link")
   for (const link of [...dateLinks, ...monthLinks]) {
     assert(
       link.includes("tz=America%2FNew_York"),
       `expected "${link}" to carry tz=`,
-    );
+    )
   }
-});
+})
 
 Deno.test("mig#15: the time card's Change link carries tz (step 2, slot picked)", () => {
   // Regression guard for TimeCard.tsx: this link is only reachable
@@ -393,19 +393,19 @@ Deno.test("mig#15: the time card's Change link carries tz (step 2, slot picked)"
         tz: "America/New_York",
       }))}
     />,
-  );
+  )
   // TimeCard's own Change link goes back to the date-picked step (its
   // href carries `date=` but never `slot=`); DateCard's Change link
   // (also on screen at this step) carries neither.
   const changeLink = anchors(html).find((a) =>
     a.href.includes("date=") && !a.href.includes("slot=")
-  );
-  assert(changeLink, "expected the TimeCard 'Change' link");
+  )
+  assert(changeLink, "expected the TimeCard 'Change' link")
   assert(
     changeLink!.href.includes("tz=America%2FNew_York"),
     `expected "${changeLink!.href}" to carry tz=`,
-  );
-});
+  )
+})
 
 Deno.test("/embed's own confirm label converts into the visitor's zone, not the host's", () => {
   // Regression guard for routes/embed/index.tsx's confirmLabel: it's
@@ -421,7 +421,7 @@ Deno.test("/embed's own confirm label converts into the visitor's zone, not the 
   // renders the same "22:00, New York, UTC-4" and "5 Oct" substrings
   // on its own, so a whole-page `includes` check stayed green even
   // when confirmLabel itself was reverted to the host zone.
-  const cfg: Config = { ...FAKE_CONFIG, hostTz: "Asia/Ho_Chi_Minh" };
+  const cfg: Config = { ...FAKE_CONFIG, hostTz: "Asia/Ho_Chi_Minh" }
   const props = {
     ...fakePageProps(embedData({
       date: "2026-10-06",
@@ -430,14 +430,14 @@ Deno.test("/embed's own confirm label converts into the visitor's zone, not the 
       tz: "America/New_York",
     })),
     state: { config: cfg } as unknown as State,
-  };
-  const html = renderToString(<EmbedPage {...props} />);
-  const confirmButtonText = html.match(/Confirm — [^<]+/)?.[0];
+  }
+  const html = renderToString(<EmbedPage {...props} />)
+  const confirmButtonText = html.match(/Confirm — [^<]+/)?.[0]
   assertEquals(
     confirmButtonText,
     "Confirm — Mon, 5 Oct, 22:00, New York, UTC-4",
-  );
-});
+  )
+})
 
 Deno.test("the time card shows the slot's own converted date, not the picked host day", () => {
   // Companion to the confirm-label test above, scoped the same way:
@@ -445,7 +445,7 @@ Deno.test("the time card shows the slot's own converted date, not the picked hos
   // rather than checking the whole page. 09:00 Tuesday Ho Chi Minh is
   // 22:00 Monday in New York, so building the date from noon of the
   // host day ("Tuesday, 6 October 2026") would fail here.
-  const cfg: Config = { ...FAKE_CONFIG, hostTz: "Asia/Ho_Chi_Minh" };
+  const cfg: Config = { ...FAKE_CONFIG, hostTz: "Asia/Ho_Chi_Minh" }
   const props = {
     ...fakePageProps(embedData({
       date: "2026-10-06",
@@ -454,11 +454,11 @@ Deno.test("the time card shows the slot's own converted date, not the picked hos
       tz: "America/New_York",
     })),
     state: { config: cfg } as unknown as State,
-  };
-  const html = renderToString(<EmbedPage {...props} />);
-  const timeCardDate = html.match(/· ([^<]+)</)?.[1];
-  assertEquals(timeCardDate, "Monday, 5 October 2026");
-});
+  }
+  const html = renderToString(<EmbedPage {...props} />)
+  const timeCardDate = html.match(/· ([^<]+)</)?.[1]
+  assertEquals(timeCardDate, "Monday, 5 October 2026")
+})
 
 Deno.test("mig#15: no tz known yet (missing or invalid) — links have no tz param, and the redirect script is present", () => {
   // The route resolves both a missing `tz` param and a present-but-
@@ -471,20 +471,20 @@ Deno.test("mig#15: no tz known yet (missing or invalid) — links have no tz par
     <EmbedPage
       {...fakePageProps(embedData({ tz: null }))}
     />,
-  );
-  const links = anchors(html).map((a) => a.href);
+  )
+  const links = anchors(html).map((a) => a.href)
   for (const link of links) {
-    assert(!link.includes("tz="), `expected "${link}" to carry no tz param`);
+    assert(!link.includes("tz="), `expected "${link}" to carry no tz param`)
   }
   assert(
     html.includes("location.replace"),
     "expected the tz-redirect script",
-  );
+  )
   assert(
     html.includes("Times are shown in the host&#39;s timezone."),
     "expected the host-timezone fallback note",
-  );
-});
+  )
+})
 
 // ─── mig#44: forced theme survives navigation ─────────────────────
 
@@ -497,19 +497,19 @@ Deno.test("mig#44: every picker link carries theme once forced", () => {
         theme: "dark",
       }))}
     />,
-  );
+  )
   const links = [
     ...anchors(html).map((a) => a.href),
     ...formActions(html),
-  ];
-  assert(links.length > 0, "expected at least one link to check");
+  ]
+  assert(links.length > 0, "expected at least one link to check")
   for (const link of links) {
     assert(
       link.includes("theme=dark") || link === "/embed/book",
       `expected "${link}" to carry theme= (form actions never carry query params)`,
-    );
+    )
   }
-});
+})
 
 Deno.test("mig#44: theme=auto adds no theme param to any link — today's URLs don't change", () => {
   const html = renderToString(
@@ -520,15 +520,15 @@ Deno.test("mig#44: theme=auto adds no theme param to any link — today's URLs d
         theme: null, // routes/embed/index.tsx normalizes "auto" to null
       }))}
     />,
-  );
-  const links = anchors(html).map((a) => a.href);
+  )
+  const links = anchors(html).map((a) => a.href)
   for (const link of links) {
     assertFalse(
       link.includes("theme="),
       `expected "${link}" to carry no theme param`,
-    );
+    )
   }
-});
+})
 
 Deno.test("mig#44: step 1 (calendar) — date cells and prev/next month links carry theme once forced", () => {
   // Regression guard for Calendar.tsx specifically: date cells and the
@@ -543,19 +543,19 @@ Deno.test("mig#44: step 1 (calendar) — date cells and prev/next month links ca
         dates: DATES_ACROSS_MONTHS,
       }))}
     />,
-  );
+  )
   const dateLinks = anchors(html).map((a) => a.href).filter((h) =>
     /[?&]date=/.test(h)
-  );
+  )
   const monthLinks = anchors(html).map((a) => a.href).filter((h) =>
     /[?&]month=/.test(h)
-  );
-  assert(dateLinks.length > 0, "expected at least one calendar date link");
-  assert(monthLinks.length > 0, "expected at least one month-nav link");
+  )
+  assert(dateLinks.length > 0, "expected at least one calendar date link")
+  assert(monthLinks.length > 0, "expected at least one month-nav link")
   for (const link of [...dateLinks, ...monthLinks]) {
-    assert(link.includes("theme=dark"), `expected "${link}" to carry theme=`);
+    assert(link.includes("theme=dark"), `expected "${link}" to carry theme=`)
   }
-});
+})
 
 Deno.test("mig#44: the confirm form carries a hidden theme field once forced", () => {
   const html = renderToString(
@@ -567,11 +567,11 @@ Deno.test("mig#44: the confirm form carries a hidden theme field once forced", (
         theme: "dark",
       }))}
     />,
-  );
-  const inputTag = html.match(/<input[^>]*name="theme"[^>]*>/)?.[0];
-  assert(inputTag, "expected a hidden theme input");
-  assertEquals(attr(inputTag!, "value"), "dark");
-});
+  )
+  const inputTag = html.match(/<input[^>]*name="theme"[^>]*>/)?.[0]
+  assert(inputTag, "expected a hidden theme input")
+  assertEquals(attr(inputTag!, "value"), "dark")
+})
 
 Deno.test("mig#44: the confirm form has no hidden theme field when theme is auto", () => {
   const html = renderToString(
@@ -583,32 +583,32 @@ Deno.test("mig#44: the confirm form has no hidden theme field when theme is auto
         theme: null,
       }))}
     />,
-  );
-  assertFalse(html.includes('name="theme"'));
-});
+  )
+  assertFalse(html.includes('name="theme"'))
+})
 
 Deno.test("mig#44: /embed/confirmed's 'Book another time' link carries the forced theme", () => {
-  const req = new Request("http://localhost/embed/confirmed?theme=dark");
+  const req = new Request("http://localhost/embed/confirmed?theme=dark")
   const props = {
     ...fakePageProps(confirmedData({ mode: "cancelled" })),
     url: new URL(req.url),
     req,
-  };
-  const html = renderToString(<EmbedConfirmedPage {...props} />);
-  const back = anchors(html).find((a) => a.href.startsWith("/embed"));
-  assert(back, "expected a link back to /embed");
-  assertEquals(back!.href, "/embed?theme=dark");
-});
+  }
+  const html = renderToString(<EmbedConfirmedPage {...props} />)
+  const back = anchors(html).find((a) => a.href.startsWith("/embed"))
+  assert(back, "expected a link back to /embed")
+  assertEquals(back!.href, "/embed?theme=dark")
+})
 
 Deno.test("mig#44: /embed/confirmed's back link has no theme param when theme is auto", () => {
   const html = renderToString(
     <EmbedConfirmedPage
       {...fakePageProps(confirmedData({ mode: "cancelled" }))}
     />,
-  );
-  const back = anchors(html).find((a) => a.href.startsWith("/embed"));
-  assertEquals(back?.href, "/embed");
-});
+  )
+  const back = anchors(html).find((a) => a.href.startsWith("/embed"))
+  assertEquals(back?.href, "/embed")
+})
 
 Deno.test("embed picker: month navigation links stay under /embed", () => {
   const html = renderToString(
@@ -618,12 +618,12 @@ Deno.test("embed picker: month navigation links stay under /embed", () => {
         dates: DATES_ACROSS_MONTHS,
       }))}
     />,
-  );
-  const links = anchors(html).map((a) => a.href);
-  const monthLinks = links.filter((l) => l.includes("month="));
-  assert(monthLinks.length > 0, "expected prev/next month links");
-  assertEquals(offendingLinks(links, "/embed"), []);
-});
+  )
+  const links = anchors(html).map((a) => a.href)
+  const monthLinks = links.filter((l) => l.includes("month="))
+  assert(monthLinks.length > 0, "expected prev/next month links")
+  assertEquals(offendingLinks(links, "/embed"), [])
+})
 
 // lib/book.ts's errRedirect never passes both `date` and `slot` back —
 // only rate-limit/validation failures (neither param) or
@@ -643,15 +643,15 @@ Deno.test("embed picker: error banner is visible with a date but no slot (step 2
         error: "That time is no longer available.",
       }))}
     />,
-  );
-  assert(html.includes("That time is no longer available."));
-  assert(html.includes('role="alert"'));
+  )
+  assert(html.includes("That time is no longer available."))
+  assert(html.includes('role="alert"'))
   const links = [
     ...anchors(html).map((a) => a.href),
     ...formActions(html),
-  ];
-  assertEquals(offendingLinks(links, "/embed"), []);
-});
+  ]
+  assertEquals(offendingLinks(links, "/embed"), [])
+})
 
 Deno.test("embed picker: error banner is visible with neither date nor slot (step 1)", () => {
   const html = renderToString(
@@ -660,79 +660,79 @@ Deno.test("embed picker: error banner is visible with neither date nor slot (ste
         error: "Too many attempts. Try again in 3 minutes.",
       }))}
     />,
-  );
-  assert(html.includes("Too many attempts. Try again in 3 minutes."));
-  assert(html.includes('role="alert"'));
+  )
+  assert(html.includes("Too many attempts. Try again in 3 minutes."))
+  assert(html.includes('role="alert"'))
   const links = [
     ...anchors(html).map((a) => a.href),
     ...formActions(html),
-  ];
-  assertEquals(offendingLinks(links, "/embed"), []);
-});
+  ]
+  assertEquals(offendingLinks(links, "/embed"), [])
+})
 
 Deno.test("embed pages render no header, footer, or theme toggle", () => {
   const pickerHtml = renderToString(
     <EmbedPage {...fakePageProps(embedData({}))} />,
-  );
+  )
   const confirmedHtml = renderToString(
     <EmbedConfirmedPage {...fakePageProps(confirmedData({}))} />,
-  );
+  )
   for (const html of [pickerHtml, confirmedHtml]) {
-    assertFalse(html.includes("<header"));
-    assertFalse(html.includes("<footer"));
-    assertFalse(html.includes('aria-label="Toggle theme"'));
+    assertFalse(html.includes("<header"))
+    assertFalse(html.includes("<footer"))
+    assertFalse(html.includes('aria-label="Toggle theme"'))
   }
-});
+})
 
 Deno.test("embed pages give the Skip-to-content link (#main, routes/_app.tsx) a target", () => {
   const pickerHtml = renderToString(
     <EmbedPage {...fakePageProps(embedData({}))} />,
-  );
+  )
   for (const mode of ["booked", "cancelled"] as const) {
     const confirmedHtml = renderToString(
       <EmbedConfirmedPage {...fakePageProps(confirmedData({ mode }))} />,
-    );
+    )
     assert(
       confirmedHtml.includes('id="main"'),
       `expected id="main" for mode=${mode}`,
-    );
+    )
   }
-  assert(pickerHtml.includes('id="main"'));
-});
+  assert(pickerHtml.includes('id="main"'))
+})
 
 // ─── /embed/confirmed ─────────────────────────────────────────────────
 
 Deno.test("embed confirmed: booked state keeps links under /embed except the meeting and cancel links, both opening in a new tab", () => {
   const html = renderToString(
     <EmbedConfirmedPage {...fakePageProps(confirmedData({}))} />,
-  );
-  const all = anchors(html);
-  const external = all.filter((a) => !a.href.startsWith("/embed"));
+  )
+  const all = anchors(html)
+  const external = all.filter((a) => !a.href.startsWith("/embed"))
 
   // Exactly the meeting link and the cancel link may leave /embed.
-  const meeting = external.find((a) => a.href === FAKE_CONFIG.meetingUrl);
-  const cancel = external.find((a) => a.href.startsWith("/cancel"));
+  const meeting = external.find((a) => a.href === FAKE_CONFIG.meetingUrl)
+  const cancel = external.find((a) => a.href.startsWith("/cancel"))
   assertEquals(
     external.length,
     2,
     `unexpected external links: ${JSON.stringify(external)}`,
-  );
-  assert(meeting, "expected the meeting link");
-  assert(cancel, "expected the cancel link");
-  assertEquals(meeting?.target, "_blank");
-  assertEquals(cancel?.target, "_blank");
-});
+  )
+  assert(meeting, "expected the meeting link")
+  assert(cancel, "expected the cancel link")
+  assertEquals(meeting?.target, "_blank")
+  assertEquals(cancel?.target, "_blank")
+})
 
 Deno.test("embed confirmed: cancelled state links stay under /embed", () => {
   const html = renderToString(
     <EmbedConfirmedPage
       {...fakePageProps(confirmedData({ mode: "cancelled" }))}
     />,
-  );
-  const links = anchors(html).map((a) => a.href);
-  assert(links.length > 0);
-  assertEquals(offendingLinks(links, "/embed"), []);
-});
+  )
+  const links = anchors(html).map((a) => a.href)
+  assert(links.length > 0)
+  assertEquals(offendingLinks(links, "/embed"), [])
+})
 
 for (const state of ["missing", "invalid", "expired"] as const) {
   Deno.test(`embed confirmed: ${state} link stays under /embed booking not found`, () => {
@@ -740,31 +740,31 @@ for (const state of ["missing", "invalid", "expired"] as const) {
       <EmbedConfirmedPage
         {...fakePageProps(confirmedData({ state, booking: null }))}
       />,
-    );
-    const links = anchors(html).map((a) => a.href);
-    assertEquals(links, ["/embed"]);
-  });
+    )
+    const links = anchors(html).map((a) => a.href)
+    assertEquals(links, ["/embed"])
+  })
 }
 
 // ─── mig#95: mig:booked only on a new, confirmed booking ─────────────
 
-const BOOKED_MARK = "mig:booked";
+const BOOKED_MARK = "mig:booked"
 
 Deno.test("mig#95: /embed/confirmed renders the booked script only for a booked booking", () => {
   const html = renderToString(
     <EmbedConfirmedPage {...fakePageProps(confirmedData({}))} />,
-  );
-  assertEquals(html.split(BOOKED_MARK).length - 1 >= 1, true);
-});
+  )
+  assertEquals(html.split(BOOKED_MARK).length - 1 >= 1, true)
+})
 
 Deno.test("mig#95: /embed/confirmed cancelled state renders no booked script", () => {
   const html = renderToString(
     <EmbedConfirmedPage
       {...fakePageProps(confirmedData({ mode: "cancelled" }))}
     />,
-  );
-  assertFalse(html.includes(BOOKED_MARK));
-});
+  )
+  assertFalse(html.includes(BOOKED_MARK))
+})
 
 for (const state of ["missing", "invalid", "expired"] as const) {
   Deno.test(`mig#95: /embed/confirmed ${state} state renders no booked script`, () => {
@@ -772,17 +772,17 @@ for (const state of ["missing", "invalid", "expired"] as const) {
       <EmbedConfirmedPage
         {...fakePageProps(confirmedData({ state, booking: null }))}
       />,
-    );
-    assertFalse(html.includes(BOOKED_MARK));
-  });
+    )
+    assertFalse(html.includes(BOOKED_MARK))
+  })
 }
 
 Deno.test("mig#95: the standalone /confirmed page renders no booked script", () => {
   const html = renderToString(
     <ConfirmedPage {...fakePageProps(confirmedData({}))} />,
-  );
-  assertFalse(html.includes(BOOKED_MARK));
-});
+  )
+  assertFalse(html.includes(BOOKED_MARK))
+})
 
 // ─── mig#15: confirmation page shows the visitor's labelled clock ────
 
@@ -802,14 +802,14 @@ Deno.test("mig#15: confirmed page shows the visitor's converted, labelled clock,
         },
       }))}
     />,
-  );
-  assert(html.includes("22:00, New York, UTC-4"));
-  assert(html.includes("Monday, 5 October 2026"));
+  )
+  assert(html.includes("22:00, New York, UTC-4"))
+  assert(html.includes("Monday, 5 October 2026"))
   // Never the raw host time/date, and never the host-fallback note —
   // the visitor's zone is known here.
-  assertFalse(html.includes("09:00, Ho Chi Minh"));
-  assertFalse(html.includes("host&#39;s timezone"));
-});
+  assertFalse(html.includes("09:00, Ho Chi Minh"))
+  assertFalse(html.includes("host&#39;s timezone"))
+})
 
 Deno.test("mig#15: confirmed page falls back to the labelled host clock when no visitor zone was captured", () => {
   const html = renderToString(
@@ -827,13 +827,13 @@ Deno.test("mig#15: confirmed page falls back to the labelled host clock when no 
         },
       }))}
     />,
-  );
-  assert(html.includes("09:00, Ho Chi Minh, UTC+7"));
+  )
+  assert(html.includes("09:00, Ho Chi Minh, UTC+7"))
   assert(
     html.includes("Times are shown in the host&#39;s timezone."),
     "expected the host-timezone fallback note",
-  );
-});
+  )
+})
 
 // ─── Baseline: default basePath must still be "/" ───────────────────
 // Guards against the base path default silently changing for the
@@ -853,31 +853,31 @@ Deno.test("picker defaults to root links when basePath is omitted", () => {
       error={null}
       tz={null}
     />,
-  );
-  const links = [...anchors(html).map((a) => a.href), ...formActions(html)];
+  )
+  const links = [...anchors(html).map((a) => a.href), ...formActions(html)]
   for (const link of links) {
     assert(
       link === "/" || link.startsWith("/?") || link === "/api/book",
       `expected a root link, got "${link}"`,
-    );
+    )
   }
-  assertEquals(formActions(html), ["/api/book"]);
+  assertEquals(formActions(html), ["/api/book"])
   // Standalone keeps the BookingSubmit island (guestTz capture).
-  assert(html.includes('name="guestTz"'));
-});
+  assert(html.includes('name="guestTz"'))
+})
 
 Deno.test("standalone confirmed page keeps header, footer, and same-tab cancel link", () => {
   const html = renderToString(
     <ConfirmedPage {...fakePageProps(confirmedData({}))} />,
-  );
-  assert(html.includes("<header"));
-  assert(html.includes("<footer"));
-  const cancel = anchors(html).find((a) => a.href.startsWith("/cancel"));
-  assert(cancel, "expected the cancel link");
-  assertEquals(cancel?.target, null);
-  const back = anchors(html).find((a) => a.href === "/");
-  assert(back, "expected a link back to /");
-});
+  )
+  assert(html.includes("<header"))
+  assert(html.includes("<footer"))
+  const cancel = anchors(html).find((a) => a.href.startsWith("/cancel"))
+  assert(cancel, "expected the cancel link")
+  assertEquals(cancel?.target, null)
+  const back = anchors(html).find((a) => a.href === "/")
+  assert(back, "expected a link back to /")
+})
 
 Deno.test("standalone confirmed page's cancelled state keeps its original padding", () => {
   // Regression guard: the ConfirmedView extraction briefly changed the
@@ -889,12 +889,12 @@ Deno.test("standalone confirmed page's cancelled state keeps its original paddin
     <ConfirmedPage
       {...fakePageProps(confirmedData({ mode: "cancelled" }))}
     />,
-  );
-  assert(html.includes('class="flex-1 grid place-items-center px-6 py-16"'));
+  )
+  assert(html.includes('class="flex-1 grid place-items-center px-6 py-16"'))
   assertFalse(
     html.includes('class="flex-1 grid place-items-center px-4 sm:px-6 py-12"'),
-  );
-});
+  )
+})
 
 // ─── mig#44 review round 3: height-report wiring ──────────────────────
 // The auto-resize fix depends on exactly one element per /embed page
@@ -908,39 +908,39 @@ Deno.test("standalone confirmed page's cancelled state keeps its original paddin
 // /embed and /embed/confirmed state.
 
 function heightMarkedTags(html: string): string[] {
-  const re = new RegExp(`<[a-z0-9]+\\b[^>]*\\b${HEIGHT_ATTR}\\b[^>]*>`, "gi");
-  return html.match(re) ?? [];
+  const re = new RegExp(`<[a-z0-9]+\\b[^>]*\\b${HEIGHT_ATTR}\\b[^>]*>`, "gi")
+  return html.match(re) ?? []
 }
 
-const FORBIDDEN_HEIGHT_CLASSES = ["min-h-dvh", "min-h-screen", "h-full"];
+const FORBIDDEN_HEIGHT_CLASSES = ["min-h-dvh", "min-h-screen", "h-full"]
 
 function assertHeightWrapper(html: string, label: string) {
-  const tags = heightMarkedTags(html);
+  const tags = heightMarkedTags(html)
   assertEquals(
     tags.length,
     1,
     `${label}: expected exactly one [${HEIGHT_ATTR}] element, got ${tags.length}`,
-  );
+  )
   assert(
     html.includes("mig:height"),
     `${label}: expected the height-report script (posts "mig:height")`,
-  );
-  const cls = attr(tags[0], "class") ?? "";
-  const tokens = cls.split(/\s+/).filter(Boolean);
+  )
+  const cls = attr(tags[0], "class") ?? ""
+  const tokens = cls.split(/\s+/).filter(Boolean)
   for (const forbidden of FORBIDDEN_HEIGHT_CLASSES) {
     assertFalse(
       tokens.includes(forbidden),
       `${label}: expected the marked wrapper's class list to omit "${forbidden}" (got "${cls}")`,
-    );
+    )
   }
 }
 
 Deno.test("mig#44: /embed date step — one data-mig-height wrapper, height script present, no forced min-height class", () => {
   const html = renderToString(
     <EmbedPage {...fakePageProps(embedData({}))} />,
-  );
-  assertHeightWrapper(html, "date step");
-});
+  )
+  assertHeightWrapper(html, "date step")
+})
 
 Deno.test("mig#44: /embed confirm step — one data-mig-height wrapper, height script present, no forced min-height class", () => {
   const html = renderToString(
@@ -951,34 +951,34 @@ Deno.test("mig#44: /embed confirm step — one data-mig-height wrapper, height s
         slots: SLOTS,
       }))}
     />,
-  );
-  assertHeightWrapper(html, "confirm step");
-});
+  )
+  assertHeightWrapper(html, "confirm step")
+})
 
 Deno.test("mig#44: /embed/confirmed booked state — one data-mig-height wrapper, height script present, no forced min-height class", () => {
   const html = renderToString(
     <EmbedConfirmedPage {...fakePageProps(confirmedData({}))} />,
-  );
-  assertHeightWrapper(html, "confirmed (booked)");
-});
+  )
+  assertHeightWrapper(html, "confirmed (booked)")
+})
 
 Deno.test("mig#44: /embed/confirmed cancelled state — one data-mig-height wrapper, height script present, no forced min-height class", () => {
   const html = renderToString(
     <EmbedConfirmedPage
       {...fakePageProps(confirmedData({ mode: "cancelled" }))}
     />,
-  );
-  assertHeightWrapper(html, "confirmed (cancelled)");
-});
+  )
+  assertHeightWrapper(html, "confirmed (cancelled)")
+})
 
 Deno.test("mig#44: /embed/confirmed not-found state — one data-mig-height wrapper, height script present, no forced min-height class", () => {
   const html = renderToString(
     <EmbedConfirmedPage
       {...fakePageProps(confirmedData({ state: "missing", booking: null }))}
     />,
-  );
-  assertHeightWrapper(html, "confirmed (not-found)");
-});
+  )
+  assertHeightWrapper(html, "confirmed (not-found)")
+})
 
 // ─── Structural guard ────────────────────────────────────────────────
 // /embed hydrates BookingFlow (mig#85) as a progressive enhancement;
@@ -988,11 +988,11 @@ Deno.test("mig#44: /embed/confirmed not-found state — one data-mig-height wrap
 Deno.test("embed routes import no island except BookingFlow on the picker", async () => {
   const islandImports = async (file: string) =>
     (await Deno.readTextFile(new URL(file, import.meta.url)))
-      .match(/islands\/[A-Za-z]+\.tsx/g) ?? [];
-  assertEquals(await islandImports("./index.tsx"), ["islands/BookingFlow.tsx"]);
-  assertEquals(await islandImports("./confirmed.tsx"), []);
-  assertEquals(await islandImports("./book.ts"), []);
-});
+      .match(/islands\/[A-Za-z]+\.tsx/g) ?? []
+  assertEquals(await islandImports("./index.tsx"), ["islands/BookingFlow.tsx"])
+  assertEquals(await islandImports("./confirmed.tsx"), [])
+  assertEquals(await islandImports("./book.ts"), [])
+})
 
 Deno.test("embed picker: the mobile summary bar is not rendered inside the frame", () => {
   // SummaryBar is fixed to the viewport's bottom; the frame grows to
@@ -1001,8 +1001,8 @@ Deno.test("embed picker: the mobile summary bar is not rendered inside the frame
     <EmbedPage
       {...fakePageProps(embedData({ date: "2027-01-04", slots: SLOTS }))}
     />,
-  );
-  assertFalse(html.includes("fixed inset-x-0 bottom-0"));
+  )
+  assertFalse(html.includes("fixed inset-x-0 bottom-0"))
   // The same step on / does render it, so the check above can't pass
   // just because SummaryBar's classes changed.
   const standalone = renderToString(
@@ -1018,9 +1018,9 @@ Deno.test("embed picker: the mobile summary bar is not rendered inside the frame
       error={null}
       tz={null}
     />,
-  );
-  assert(standalone.includes("fixed inset-x-0 bottom-0"));
-});
+  )
+  assert(standalone.includes("fixed inset-x-0 bottom-0"))
+})
 
 Deno.test("mig#44: the time card's Change link carries theme once forced", () => {
   const html = renderToString(
@@ -1032,8 +1032,8 @@ Deno.test("mig#44: the time card's Change link carries theme once forced", () =>
         theme: "dark",
       }))}
     />,
-  );
-  const tag = html.match(/<a\b[^>]*aria-label="Change time"[^>]*>/)?.[0];
-  assert(tag, "expected the time card's Change link");
-  assert(attr(tag!, "href")?.includes("theme=dark"), `got "${tag}"`);
-});
+  )
+  const tag = html.match(/<a\b[^>]*aria-label="Change time"[^>]*>/)?.[0]
+  assert(tag, "expected the time card's Change link")
+  assert(attr(tag!, "href")?.includes("theme=dark"), `got "${tag}"`)
+})
