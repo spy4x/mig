@@ -56,7 +56,7 @@ day.
 # compose.yml
 services:
   mig:
-    image: antonshubin/mig:v0.12.1
+    image: antonshubin/mig:v0.13.0
     restart: unless-stopped
     ports: ["8080:8080"]
     volumes: ["./data:/data:z"]
