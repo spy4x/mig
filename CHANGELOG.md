@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-14
+
 ### Security
 
 - Mail to the guest's address no longer holds anything the booker typed except
@@ -555,7 +557,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/spy4x/mig/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/spy4x/mig/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/spy4x/mig/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/spy4x/mig/compare/v0.9.0...v0.10.0
