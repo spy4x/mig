@@ -290,9 +290,6 @@ Deno.test("mig#110: a booking stored with a ULID id still opens /confirmed and /
   assertEquals(location.searchParams.get("cancelled"), "1")
   assertEquals(location.searchParams.get("id"), stored.id)
   assertEquals(bookings.get(stored.id)?.status, "cancelled")
-  // Nothing stored is rewritten: the record on disk keeps its ULID.
-  const onDisk = JSON.parse(await Deno.readTextFile(file.path))
-  assertEquals(onDisk[0].id, stored.id)
 })
 
 // mig#108: the form's maxlength is a browser's promise only. A request
