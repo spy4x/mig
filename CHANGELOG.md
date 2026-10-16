@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-16
+
+The first stable release. The configuration, the data file and the routes,
+`/embed` and its messages included, now follow Semantic Versioning: a change
+that breaks any of them waits for 2.0.0.
+
 ### Security
 
 - `POST /api/cancel` reads its body with the same 64 KiB cap and 10-second read
@@ -29,6 +35,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A `#` or `&` in the cancel form's id or token no longer changes the address
   the cancel route redirects to, and both are cut to 100 characters there
   (#113).
+- A day whose every slot is booked shows as full in the date picker, on the
+  booking page and on `/embed`. The picker used to count booked slots as free,
+  so that day still linked to an empty list of times (#117).
 
 ## [0.13.0] - 2026-10-14
 
@@ -591,7 +600,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/spy4x/mig/compare/v0.13.0...v1.0.0
 [0.13.0]: https://github.com/spy4x/mig/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/spy4x/mig/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/spy4x/mig/compare/v0.11.0...v0.12.0
