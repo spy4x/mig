@@ -42,9 +42,11 @@ Git Flow, review and cleanup; this file adds what is specific to this repo.
   dates, slot duration, notice horizon, meeting URL, SMTP creds) lives in
   environment variables. Changing behaviour = restarting the container.
 - **Stateless cancel tokens.** A booking stores
-  `sha256(raw token + CANCEL_SECRET)` (`@spy4x/platform/tokens`); the raw token
-  goes only in the email. `CANCEL_SECRET` needs at least 32 printable ASCII
-  characters. No per-booking revoke — rotate `CANCEL_SECRET` to invalidate all.
+  `sha256(raw token + CANCEL_SECRET)` (`@spy4x/platform/tokens`) twice: one for
+  the guest's link, one for the owner's, so a cancellation records who made it.
+  Each raw token goes only in its own email. `CANCEL_SECRET` needs at least 32
+  printable ASCII characters. No per-booking revoke — rotate `CANCEL_SECRET` to
+  invalidate all.
 - **No background jobs.** Everything is request/response. No cron, no reminder
   worker. v1 has no reminder emails.
 - **Single instance only.** In-memory mutex serialises writes within the
@@ -81,6 +83,7 @@ src/
 │   ├── config-issue.ts      — mig's fixed startup wording for four variables, over ConfigError.issues
 │   ├── availability.ts      — weekly pattern + blocked-dates parser
 │   ├── bookings.ts          — JSON store (mutex + atomic write: @spy4x/platform)
+│   ├── cancel-token.ts      — whose cancel link (guest's or owner's) a token is
 │   ├── email.ts             — email content; sending via @spy4x/email
 │   ├── notify.ts            — ntfy pushes (client: @spy4x/integrations), NTFY_MODE
 │   ├── invite.ts            — booking → .ics invite (writer: @spy4x/time/ics)
