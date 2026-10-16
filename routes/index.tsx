@@ -3,11 +3,7 @@ import { Header } from "../components/Header.tsx"
 import { Footer } from "../components/Footer.tsx"
 import BookingFlow from "../islands/BookingFlow.tsx"
 import { gridDay } from "../components/TimeSlots.tsx"
-import {
-  countSlotsForDate,
-  getCandidateDates,
-  offeredSlots,
-} from "../lib/availability.ts"
+import { getCandidateDates, offeredSlots } from "../lib/availability.ts"
 import { canonicalValidTimeZoneOrNull, isoDateInTz } from "@spy4x/time/tz"
 import {
   EARLIEST_DATE,
@@ -69,10 +65,6 @@ function parseMonthParam(v: string | null): string | null {
   return `${m[1]}-${m[2]}-01`
 }
 
-function minStartInstant(hours: number): Date {
-  return new Date(Date.now() + hours * 3600_000)
-}
-
 export default define.page(function Index(ctx) {
   const cfg = ctx.state.config
   const url = new URL(ctx.req.url)
@@ -91,7 +83,6 @@ export default define.page(function Index(ctx) {
   const displayTz = tz ?? cfg.hostTz
 
   const now = new Date()
-  const minStart = minStartInstant(cfg.minNoticeHours)
   const today = isoDateInTz(now, cfg.hostTz)
   const candidates = getCandidateDates(
     today,
@@ -110,19 +101,9 @@ export default define.page(function Index(ctx) {
   })()
 
   const dates = candidates.map((d) => {
-    const blocked = cfg.blockedDates.has(d)
-    const bookedCount = blocked
-      ? 999
-      : ctx.state.bookings.forDate(d).filter((b) => b.status === "active")
-        .length
-    const slots = blocked ? 0 : countSlotsForDate(
-      d,
-      cfg.weeklyAvailability,
-      cfg.slotDurationMin,
-      bookedCount,
-      cfg.hostTz,
-      minStart,
-    )
+    // offeredSlots gives nothing for a blocked date or one past the horizon.
+    const slots = offeredSlots(cfg, d, ctx.state.bookings.forDate(d), now)
+      .filter((s) => s.available).length
     return { date: d, slots }
   })
 

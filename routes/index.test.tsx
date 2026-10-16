@@ -11,7 +11,7 @@ import { assert, assertEquals, assertFalse } from "@std/assert"
 import { renderToString } from "preact-render-to-string"
 import type { Context } from "fresh"
 import type { State } from "../lib/utils.ts"
-import type { Config } from "../lib/types.ts"
+import type { Booking, Config } from "../lib/types.ts"
 import { BookingsStore } from "../lib/bookings.ts"
 import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory"
 import { parseWeeklyAvailability } from "../lib/availability.ts"
@@ -80,12 +80,16 @@ function fakeConfig(): Config {
 async function renderIndex(
   url: string,
   cfgOverrides: Partial<Config> = {},
+  seed: Booking[] = [],
 ): Promise<string> {
   const cfg = { ...fakeConfig(), ...cfgOverrides }
   await using file = await tempDataFile()
   const path = file.path
   const bookings = new BookingsStore({ filePath: path })
   await bookings.init()
+  if (seed.length > 0) {
+    await bookings.mutate((current) => void current.push(...seed))
+  }
   const req = new Request(url)
   const ctx = {
     req,
@@ -540,4 +544,33 @@ Deno.test("mig#113: standalone / offers no slot for a date past the booking hori
 
   assert(lastDay.includes("slot=10%3A00"), "the last day offers 10:00")
   assertFalse(pastHorizon.includes("slot="), "a day past it offers nothing")
+})
+
+Deno.test("standalone / marks a day whose every slot is booked as full", async () => {
+  const date = bookableDate()
+  const cfg = {
+    weeklyAvailability: parseWeeklyAvailability("MON-FRI 09:00-09:30"),
+  }
+  const booking: Booking = {
+    id: "test-booking",
+    createdAt: new Date().toISOString(),
+    date,
+    time: "09:00",
+    hostTz: HOST_TZ,
+    guestName: "John Doe",
+    guestEmail: "john@example.com",
+    cancelTokenHash: "unused",
+    status: "active",
+  }
+  const free = await renderIndex("http://localhost/", cfg)
+  const full = await renderIndex("http://localhost/", cfg, [booking])
+
+  assert(
+    free.includes(`date=${date}`),
+    "a day with a free slot links to its times",
+  )
+  assertFalse(
+    full.includes(`date=${date}`),
+    "a fully booked day offers no link",
+  )
 })

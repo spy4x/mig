@@ -415,30 +415,6 @@ function dayNameFromDate(date: string, tz: string): DayOfWeek {
   return w as DayOfWeek
 }
 
-// Count slots (excluding past) for a date — used to mark "Full" vs "8 slots"
-// in the date picker.
-export function countSlotsForDate(
-  date: string,
-  availability: Availability,
-  slotMin: number,
-  bookedCount: number,
-  hostTz: string,
-  minStartInstant: Date,
-): number {
-  const slots = getSlotsForDate(
-    date,
-    availability,
-    slotMin,
-    Array.from({ length: bookedCount }, () => ({
-      time: "00:00",
-      status: "active" as const,
-    })),
-    hostTz,
-    minStartInstant,
-  )
-  return slots.filter((s) => s.available).length
-}
-
 // Generate candidate booking dates within the horizon. Returns YYYY-MM-DD
 // strings in order. Excludes dates with no availability or all blocked.
 export function getCandidateDates(
