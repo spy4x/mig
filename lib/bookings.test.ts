@@ -85,10 +85,15 @@ Deno.test("BookingsStore — temp file cleanup on crash simulation", async () =>
   const tmp = path + ".tmp"
   await Deno.remove(path)
   await Deno.writeTextFile(tmp, "{ broken json")
-  const s = new BookingsStore({ filePath: path })
-  await s.init() // should still succeed
-  assertEquals(s.list().length, 0)
-  await Deno.remove(tmp)
+  try {
+    const s = new BookingsStore({ filePath: path })
+    await s.init() // should still succeed
+    assertEquals(s.list().length, 0)
+  } finally {
+    // Removed even when the assertion above fails, so a failing run
+    // leaves no stray file behind.
+    await Deno.remove(tmp)
+  }
 })
 
 Deno.test("BookingsStore — get returns booking by id", async () => {
