@@ -1,5 +1,8 @@
 # AGENTS.md — mig
 
+Read `README.md` and `CONTRIBUTING.md` first. The global agent instructions own
+Git Flow, review and cleanup; this file adds what is specific to this repo.
+
 ## Stack
 
 - **Language:** TypeScript on Deno 2.x
@@ -264,10 +267,9 @@ longer matches `deno.json` is silently rewritten instead of failing the build.
 **The Dockerfile's build stage honours `deno.lock` the same way.** It keeps
 `deno.lock` in the build context and runs `deno install --frozen` before
 `deno task build`, in the same image as CI, with no Node.js or npm. So the
-published image carries exactly the versions CI tested. An earlier build stage
-ran its own `npm install` by `^` range and shipped a different `@preact/signals`
-than the lock recorded; never reintroduce a separate install. `.dockerignore`
-keeps a host `node_modules` out of the build context, because
+published image carries exactly the versions CI tested. Never reintroduce a
+separate install (such as `npm install` by `^` range) in the build stage.
+`.dockerignore` keeps a host `node_modules` out of the build context, because
 `deno install --frozen` builds its own there.
 
 The release is two steps, `build` then `push`, on a `v<digit>` tag after
@@ -331,17 +333,7 @@ map. Write a variable the shell should expand at run time as `$${VAR}`.
 
 ## Hard rules
 
-- **NEVER commit plaintext secrets.** `.env` is gitignored.
 - **NEVER hardcode real domains, emails, or hosts.** Templates only.
 - **Single-process assumption.** No multi-instance; do not add distributed locks
   or external stores.
 - **No background jobs in v1.** Reminders come later, if ever.
-
-## Shared libraries
-
-Before writing a component, helper or library here, search
-[spy4x/ts-libs](https://github.com/spy4x/ts-libs) and
-[spy4x/preact-components](https://github.com/spy4x/preact-components) for it.
-The global rule
-["Shared libs before local code"](https://github.com/spy4x/dotfiles/blob/main/ai-harnesses/AGENTS.md)
-says what belongs in each library; code only this repo needs stays here.
