@@ -52,8 +52,9 @@ Deno.test("booking validator rejects a bad email with the visitor-facing message
   }
 })
 
-// The email rule is `emailAddress` from @spy4x/platform: the same
-// address check @spy4x/email uses to send, plus a 254-character limit.
+// The email rule is `parseBareAddress` from @spy4x/email: the same
+// address check it uses to send, plus a 254-character limit and a
+// 64-character limit before the `@`.
 // It replaced mig's copy of Zod 3's `.email()` pattern (mig#89); the
 // cases below are the ones that pattern already decided, plus `%`,
 // which Zod refused and the library accepts.
@@ -82,6 +83,27 @@ Deno.test("booking validator rejects an address longer than 254 characters", () 
   assertEquals(long.length > 254, true)
   const result = BookingSchema.safeParse({ ...validBooking, email: long })
   assertEquals(result.success, false)
+})
+
+// mig#113: the part before the `@` reaches the guest's `To` header, the
+// invitation and the owner's mail. Mail servers refuse one over 64
+// characters, so the form does too.
+Deno.test("booking validator rejects more than 64 characters before the @", () => {
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    email: `${"a".repeat(65)}@example.com`,
+  })
+  assertEquals(result.success, false)
+})
+
+Deno.test("booking validator accepts 64 characters before the @, plus-tag included", () => {
+  const local = `someone+${"a".repeat(56)}`
+  assertEquals(local.length, 64)
+  const result = BookingSchema.safeParse({
+    ...validBooking,
+    email: `${local}@example.com`,
+  })
+  assertEquals(result.success, true)
 })
 
 for (
