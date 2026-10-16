@@ -104,6 +104,14 @@ function socketHostname(addr: Deno.Addr): string | undefined {
   return "hostname" in addr ? addr.hostname : undefined
 }
 
+/** The `/cancel` page's address for one booking and one raw token. */
+function cancelLink(publicUrl: string, id: string, token: string): string {
+  const url = new URL("/cancel", publicUrl)
+  url.searchParams.set("id", id)
+  url.searchParams.set("token", token)
+  return url.toString()
+}
+
 export async function handleBookingSubmit(
   ctx: Context<State>,
   basePath: string,
@@ -274,6 +282,11 @@ export async function handleBookingSubmit(
   const { raw: tokenRaw, hash: tokenHash } = await newOpaqueToken(
     cfg.cancelSecret,
   )
+  // The owner's mail carries its own cancel link, so a cancellation
+  // through it is recorded as the owner's (mig#113).
+  const { raw: ownerTokenRaw, hash: ownerTokenHash } = await newOpaqueToken(
+    cfg.cancelSecret,
+  )
   const bookingId = uuidV7()
   const booking = {
     id: bookingId,
@@ -286,6 +299,7 @@ export async function handleBookingSubmit(
     guestEmail: input.email.trim().toLowerCase(),
     notes: input.notes.trim() || undefined,
     cancelTokenHash: tokenHash,
+    ownerCancelTokenHash: ownerTokenHash,
     status: "active" as const,
   }
 
@@ -358,11 +372,12 @@ export async function handleBookingSubmit(
   // "New booking" email actually went out before a later failure, so
   // the failure branch below knows whether it needs to correct that
   // email rather than just roll the booking back silently.
-  const cancelUrl = new URL(
-    `/cancel?id=${bookingId}&token=${tokenRaw}`,
-    cfg.publicUrl,
-  ).toString()
-  const ownerSent = await sendOwnerBookingEmail(cfg, booking, cancelUrl)
+  const cancelUrl = cancelLink(cfg.publicUrl, bookingId, tokenRaw)
+  const ownerSent = await sendOwnerBookingEmail(
+    cfg,
+    booking,
+    cancelLink(cfg.publicUrl, bookingId, ownerTokenRaw),
+  )
   const ownerEmailSucceeded = ownerSent.ok
   const sent = ownerSent.ok
     ? await sendGuestBookingEmail(cfg, booking, cancelUrl)

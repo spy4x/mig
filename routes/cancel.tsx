@@ -3,7 +3,7 @@ import { Field } from "@spy4x/preact-ui/field"
 import { Textarea } from "@spy4x/preact-ui/input"
 import { define } from "../lib/utils.ts"
 import { NOTES_MAX_LENGTH } from "../lib/validators.ts"
-import { verifyOpaqueToken } from "@spy4x/platform/tokens"
+import { cancelTokenHolder } from "../lib/cancel-token.ts"
 import { Header } from "../components/Header.tsx"
 import { Footer } from "../components/Footer.tsx"
 import { canonicalTimeZoneOr, isValidTimeZone } from "@spy4x/time/tz"
@@ -71,11 +71,8 @@ export const handler = define.handlers({
       }
     }
 
-    const ok = await verifyOpaqueToken(
-      token,
-      booking.cancelTokenHash,
-      cfg.cancelSecret,
-    )
+    const ok = await cancelTokenHolder(booking, token, cfg.cancelSecret) !==
+      null
     if (!ok) {
       return {
         data: {

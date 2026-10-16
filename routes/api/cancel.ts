@@ -1,7 +1,7 @@
 // POST /api/cancel — cancel a booking. Form fields: id, token, reason.
 
 import { define } from "../../lib/utils.ts"
-import { verifyOpaqueToken } from "@spy4x/platform/tokens"
+import { cancelTokenHolder } from "../../lib/cancel-token.ts"
 import { capRedirectField, readBoundedForm } from "../../lib/book.ts"
 import { sendCancellationEmails } from "../../lib/email.ts"
 import { notifyBookingCancelled } from "../../lib/notify.ts"
@@ -52,17 +52,14 @@ export const handler = define.handlers({
 
     const booking = ctx.state.bookings.get(id)
     if (!booking) return back()
-    const tokenOk = await verifyOpaqueToken(
+    // The owner's mail carries its own token, so the token says who is
+    // cancelling. A booking stored before mig#113 has only the guest's.
+    const cancelledBy = await cancelTokenHolder(
+      booking,
       token,
-      booking.cancelTokenHash,
       cfg.cancelSecret,
     )
-    if (!tokenOk || booking.status === "cancelled") return back()
-
-    // Determine who is cancelling. The cancel URL is the same for owner
-    // and guest — the recipient of the cancellation email reveals it.
-    // Owner always receives the email; guest only receives if they cancel.
-    const cancelledBy: "owner" | "guest" = "guest" // best guess; refined below
+    if (!cancelledBy || booking.status === "cancelled") return back()
     const cancelledAt = new Date().toISOString()
 
     try {

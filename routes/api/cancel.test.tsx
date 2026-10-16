@@ -17,7 +17,8 @@ import CancelPage, { handler as cancelPage } from "../cancel.tsx"
 import { handler } from "./cancel.ts"
 import { tempDataFile } from "../../lib/test-temp.ts"
 import { NOTES_MAX_LENGTH } from "../../lib/validators.ts"
-import { MAX_BOOKING_BODY_BYTES } from "../../lib/book.ts"
+import { handleBookingSubmit, MAX_BOOKING_BODY_BYTES } from "../../lib/book.ts"
+import { futureWeekday } from "../../lib/test-dates.ts"
 
 const SECRET = "fake-cancel-secret-only-for-tests"
 
@@ -386,6 +387,145 @@ Deno.test("mig#113: POST /api/cancel refuses a body over the cap with 413 before
     pulled <= MAX_BOOKING_BODY_BYTES + 2 * chunk.length,
     `read ${pulled} of ${total} bytes`,
   )
+})
+
+/** Books one slot through the real booking route and returns the cancel
+ *  link from each recipient's mail, plus the state both routes share. */
+async function bookThroughRoute(path: string): Promise<{
+  state: State
+  id: string
+  guestLink: URL
+  ownerLink: URL
+  mails: { to: string; text: string }[]
+}> {
+  const mails: { to: string; text: string }[] = []
+  setTransportForTesting({
+    sendMail(message) {
+      mails.push({ to: String(message.to), text: String(message.text) })
+      return Promise.resolve({})
+    },
+  })
+  const bookings = new BookingsStore({ filePath: path })
+  await bookings.init()
+  const state = {
+    config: fakeConfig(),
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+  } as State
+  const res = await handleBookingSubmit(
+    {
+      req: new Request("http://localhost/api/book", {
+        method: "POST",
+        body: new URLSearchParams({
+          name: "Visitor",
+          email: "visitor@example.com",
+          notes: "",
+          date: futureWeekday(3, "Europe/Berlin"),
+          slot: "10:00",
+          website: "",
+        }),
+      }),
+      info: {
+        remoteAddr: { transport: "tcp", hostname: "192.0.2.1", port: 40100 },
+      },
+      state,
+    } as unknown as Context<State>,
+    "",
+  )
+  assertEquals(new URL(res.headers.get("location")!).pathname, "/confirmed")
+  const linkIn = (to: string) => {
+    const text = mails.find((m) => m.to === to)?.text ?? ""
+    const m = /https:\/\/mig\.example\.com\/cancel\?\S+/.exec(text)
+    if (!m) throw new Error(`no cancel link in the mail to ${to}`)
+    return new URL(m[0])
+  }
+  const guestLink = linkIn("visitor@example.com")
+  const ownerLink = linkIn("jane@example.com")
+  mails.length = 0
+  return {
+    state,
+    id: guestLink.searchParams.get("id")!,
+    guestLink,
+    ownerLink,
+    mails,
+  }
+}
+
+async function cancelWith(state: State, link: URL): Promise<Response> {
+  return await handler.POST!(
+    {
+      req: new Request("http://localhost/api/cancel", {
+        method: "POST",
+        body: new URLSearchParams({
+          id: link.searchParams.get("id")!,
+          token: link.searchParams.get("token")!,
+        }),
+      }),
+      state,
+    } as unknown as Context<State>,
+  ) as Response
+}
+
+// mig#113: both mails carried the same link, so a cancellation through
+// the owner's mail told the guest "Cancelled by: you".
+Deno.test("mig#113: cancelling through the owner's link is recorded and mailed as the owner's", async () => {
+  await using file = await tempDataFile()
+  try {
+    const { state, id, guestLink, ownerLink, mails } = await bookThroughRoute(
+      file.path,
+    )
+    assert(
+      guestLink.searchParams.get("token") !==
+        ownerLink.searchParams.get("token"),
+      "the two mails carry different tokens",
+    )
+    const confirmed = await loadConfirmedData(
+      {
+        req: new Request(`http://localhost/confirmed${ownerLink.search}`),
+        state,
+      } as unknown as Context<State>,
+    )
+    assertEquals(confirmed.state, "ok")
+
+    const res = await cancelWith(state, ownerLink)
+
+    assertEquals(res.status, 303)
+    assertEquals(state.bookings.get(id)?.status, "cancelled")
+    assertEquals(state.bookings.get(id)?.cancelledBy, "owner")
+    const guest = mails.find((m) => m.to === "visitor@example.com")!.text
+    const owner = mails.find((m) => m.to === "jane@example.com")!.text
+    assert(guest.includes("Cancelled by: Jane Doe"), guest)
+    assert(owner.includes("Cancelled by: you"), owner)
+  } finally {
+    setTransportForTesting({ sendMail: () => Promise.resolve({}) })
+  }
+})
+
+Deno.test("mig#113: cancelling through the guest's link is recorded and mailed as the guest's", async () => {
+  await using file = await tempDataFile()
+  try {
+    const { state, id, guestLink, mails } = await bookThroughRoute(file.path)
+
+    const res = await cancelWith(state, guestLink)
+
+    assertEquals(res.status, 303)
+    assertEquals(state.bookings.get(id)?.cancelledBy, "guest")
+    const guest = mails.find((m) => m.to === "visitor@example.com")!.text
+    assert(guest.includes("Cancelled by: you"), guest)
+  } finally {
+    setTransportForTesting({ sendMail: () => Promise.resolve({}) })
+  }
+})
+
+Deno.test("mig#113: a booking stored without an owner token still cancels, as the guest", async () => {
+  await withOldLinkBooking(OLD_LINK.secret, async (state, id) => {
+    const res = await cancelWith(
+      state,
+      new URL(`https://mig.example.com/cancel?id=${id}&token=${OLD_LINK.raw}`),
+    )
+    assertEquals(res.status, 303)
+    assertEquals(state.bookings.get(id)?.cancelledBy, "guest")
+  })
 })
 
 // mig#113: the redirects pasted `id` and `token` into the address as
