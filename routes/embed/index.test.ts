@@ -14,7 +14,7 @@ import type { Config } from "../../lib/types.ts"
 import { BookingsStore } from "../../lib/bookings.ts"
 import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory"
 import { parseWeeklyAvailability } from "../../lib/availability.ts"
-import { zonedDateTime } from "@spy4x/time/tz"
+import { addDays, isoDateInTz, zonedDateTime } from "@spy4x/time/tz"
 import { futureWeekday } from "../../lib/test-dates.ts"
 import EmbedPage, { handler } from "./index.tsx"
 import type { EmbedData } from "./index.tsx"
@@ -466,6 +466,8 @@ Deno.test("mig#57: /embed offers no slot inside the spring-forward gap", async (
   const data = await getEmbedData("http://localhost/embed?date=2027-03-28", {
     hostTz: "Europe/Berlin",
     weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
+    // 2027-03-28 lies past the default horizon (mig#113).
+    bookingHorizonDays: 3650,
   })
 
   assertEquals(data.slots.map((s) => s.time), [
@@ -578,4 +580,24 @@ Deno.test("mig#50: /embed names the clicked day when some slots fall on it, and 
       ["10:30", "Mon 5 Oct"],
     ],
   )
+})
+
+// mig#113: the same slot rule as `/` and /api/slots.
+Deno.test("mig#113: /embed offers no slot for a date past the booking horizon", async () => {
+  const cfg = {
+    weeklyAvailability: parseWeeklyAvailability("MON-SUN 09:00-17:00"),
+    bookingHorizonDays: 14,
+  }
+  const today = isoDateInTz(new Date(), HOST_TZ)
+  const lastDay = await getEmbedData(
+    `http://localhost/embed?date=${addDays(today, 14, HOST_TZ)}`,
+    cfg,
+  )
+  const pastHorizon = await getEmbedData(
+    `http://localhost/embed?date=${addDays(today, 15, HOST_TZ)}`,
+    cfg,
+  )
+
+  assertEquals(lastDay.slots.length, 16)
+  assertEquals(pastHorizon.slots.length, 0)
 })

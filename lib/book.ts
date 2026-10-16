@@ -19,8 +19,8 @@ import {
 } from "./email.ts"
 import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts"
 import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip"
-import { zonedDateTime } from "@spy4x/time/tz"
-import { EARLIEST_DATE, hostSlotInstant } from "./clock.ts"
+import { EARLIEST_DATE } from "./clock.ts"
+import { isDateOpen, offeredSlots } from "./availability.ts"
 import { BookingSchema } from "./validators.ts"
 import { isHoneypotFilled } from "@spy4x/platform/validation/predicates"
 import {
@@ -203,63 +203,38 @@ export async function handleBookingSubmit(
     return Response.redirect(fakeUrl.toString(), 303)
   }
 
-  // Sanity: slot must be within availability, not booked, not in the past.
-  // This and every other availability/conflict/persist failure below
-  // drops `slot` — it's no longer a valid pick, so keeping it would
-  // land the visitor back on the confirm step for a slot they can't
-  // book (mig#15 round 2).
-  const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000)
+  // The slot must be one the booking page offers for this date: on the
+  // grid, on an open date inside the horizon, and outside the minimum
+  // notice (mig#113). Whether another booking holds it is checked under
+  // the mutex below. This and every other availability/conflict/persist
+  // failure below drops `slot` — it's no longer a valid pick, so keeping
+  // it would land the visitor back on the confirm step for a slot they
+  // can't book (mig#15 round 2).
+  //
   // The validator checked the calendar. Before EARLIEST_DATE the host's
   // zone may not resolve the slot to the minute — Phoenix ran on a local
   // mean time until noon on 1883-11-18 — and the zone math below would
   // throw (mig#57).
-  if (input.date < EARLIEST_DATE) {
+  const now = new Date()
+  if (input.date < EARLIEST_DATE || !isDateOpen(cfg, input.date, now)) {
     return errRedirect(
       "That date is not available for booking.",
       redirectDateTz,
     )
   }
-  const slotInstant = hostSlotInstant(input.date, input.slot, cfg.hostTz)
-  // A spring-forward gap time (mig#57): the host's clock never shows
-  // it, so no slot was offered for it either.
-  if (!slotInstant) {
-    return errRedirect(
-      "That time is outside availability hours.",
-      redirectDateTz,
-    )
-  }
-  if (slotInstant < minStart) {
-    return errRedirect("That time is no longer available.", redirectDateTz)
-  }
-
-  // Check slot is in availability
-  const dayName = (() => {
-    const dt = zonedDateTime(input.date, "12:00", cfg.hostTz)
-    return new Intl.DateTimeFormat("en-GB", {
-      timeZone: cfg.hostTz,
-      weekday: "short",
-    }).format(dt).toUpperCase()
-  })()
-  const ranges =
-    cfg.weeklyAvailability[dayName as keyof typeof cfg.weeklyAvailability]
-  const slotMin = parseInt(input.slot.slice(0, 2), 10) * 60 +
-    parseInt(input.slot.slice(3), 10)
-  const inAvail = ranges.some((r) =>
-    slotMin >= r.startMin && slotMin + cfg.slotDurationMin <= r.endMin
+  // A time off the grid, outside the day's hours or inside a
+  // spring-forward gap (mig#57) is not among the offered slots.
+  const offered = offeredSlots(cfg, input.date, [], now).find((s) =>
+    s.time === input.slot
   )
-  if (!inAvail) {
+  if (!offered) {
     return errRedirect(
       "That time is outside availability hours.",
       redirectDateTz,
     )
   }
-
-  // Blocked date?
-  if (cfg.blockedDates.has(input.date)) {
-    return errRedirect(
-      "That date is not available for booking.",
-      redirectDateTz,
-    )
+  if (!offered.available) {
+    return errRedirect("That time is no longer available.", redirectDateTz)
   }
 
   // Transactional booking flow: save first, then send (mig#19). A

@@ -9,6 +9,7 @@ import { MemoryRateLimiter } from "@spy4x/platform/rate-limit/memory"
 import { parseWeeklyAvailability } from "../../lib/availability.ts"
 import { handler } from "./slots.ts"
 import { tempDataFile } from "../../lib/test-temp.ts"
+import { addDays, isoDateInTz } from "@spy4x/time/tz"
 
 function fakeConfig(): Config {
   return {
@@ -20,7 +21,9 @@ function fakeConfig(): Config {
     weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
     slotDurationMin: 30,
     minNoticeHours: 0,
-    bookingHorizonDays: 60,
+    // 2027-03-28, the date the gap test asks for, lies past a short
+    // horizon, and a date past the horizon offers nothing (mig#113).
+    bookingHorizonDays: 3650,
     blockedDates: new Set<string>(),
     rateLimitPer5Min: 10,
     theme: "auto",
@@ -96,4 +99,35 @@ Deno.test("mig#57: /api/slots answers 400 for a date before 1980", async () => {
   assertEquals(await lastBefore.json(), { error: "bad date" })
   assertEquals(first.status, 200)
   assertEquals(await first.json(), { date: "1980-01-01", slots: [] })
+})
+
+// mig#113: the list ignored the booking horizon, so a date far past it
+// still listed bookable slots.
+Deno.test("mig#113: /api/slots lists no slot for a date past the booking horizon", async () => {
+  await using file = await tempDataFile()
+  const bookings = new BookingsStore({ filePath: file.path })
+  await bookings.init()
+  const config = {
+    ...fakeConfig(),
+    weeklyAvailability: parseWeeklyAvailability("MON-SUN 09:00-17:00"),
+    bookingHorizonDays: 14,
+  }
+  const slotsFor = async (date: string) => {
+    const res = await handler.GET!(
+      {
+        req: new Request(`http://localhost/api/slots?date=${date}`),
+        state: {
+          config,
+          bookings,
+          rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+        },
+      } as unknown as Context<State>,
+    ) as Response
+    return (await res.json() as { slots: unknown[] }).slots.length
+  }
+  const today = isoDateInTz(new Date(), "Europe/Berlin")
+
+  assertEquals(await slotsFor(addDays(today, 14, "Europe/Berlin")), 16)
+  assertEquals(await slotsFor(addDays(today, 15, "Europe/Berlin")), 0)
+  assertEquals(await slotsFor("2099-06-01"), 0)
 })
