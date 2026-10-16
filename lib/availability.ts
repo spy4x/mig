@@ -12,8 +12,8 @@
 //   2026-12-24..2026-12-26                     (range, ISO, ..)
 // Range inclusive both ends.
 
-import type { Availability, DayOfWeek } from "./types.ts"
-import { addDays, minToHHMM, zonedDateTime } from "@spy4x/time/tz"
+import type { Availability, Config, DayOfWeek } from "./types.ts"
+import { addDays, isoDateInTz, minToHHMM, zonedDateTime } from "@spy4x/time/tz"
 import { hostSlotInstant, isCalendarDateTime } from "./clock.ts"
 
 const DAYS: DayOfWeek[] = [
@@ -283,8 +283,37 @@ export function parseBlockedDates(s: string, hostTz = "UTC"): Set<string> {
   return out
 }
 
-// Slot generation. Returns slot start times as HH:MM strings (host-local).
-// `now` is passed in for testability.
+/** One slot on a date's grid: its host-local start and the instant it
+ *  starts at. */
+interface GridSlot {
+  time: string
+  instant: Date
+}
+
+/** The grid a date's availability makes: each range's start, start +
+ *  slot length, and so on, while a whole slot still fits the range. A
+ *  time inside a spring-forward gap is left out, since the host's clock
+ *  never shows it (mig#57). */
+function gridSlots(
+  date: string,
+  availability: Availability,
+  slotMin: number,
+  hostTz: string,
+): GridSlot[] {
+  const out: GridSlot[] = []
+  for (const range of availability[dayNameFromDate(date, hostTz)]) {
+    for (let m = range.startMin; m <= range.endMin - slotMin; m += slotMin) {
+      const time = minToHHMM(m)
+      const instant = hostSlotInstant(date, time, hostTz)
+      if (instant) out.push({ time, instant })
+    }
+  }
+  return out
+}
+
+/** The slots the booking page shows for a date, `available` false for a
+ *  booked one or one inside the minimum notice. Ignores the booking
+ *  horizon and blocked dates; `offeredSlots` applies both. */
 export function getSlotsForDate(
   date: string,
   availability: Availability,
@@ -293,30 +322,84 @@ export function getSlotsForDate(
   hostTz: string,
   minStartInstant: Date,
 ): { time: string; available: boolean }[] {
-  const dayName = dayNameFromDate(date, hostTz)
-  const ranges = availability[dayName]
-  if (ranges.length === 0) return []
-
   const booked = new Set(
     bookingsForDate.filter((b) => b.status === "active").map((b) => b.time),
   )
-  const out: { time: string; available: boolean }[] = []
+  return gridSlots(date, availability, slotMin, hostTz).map((s) => ({
+    time: s.time,
+    available: !booked.has(s.time) && s.instant >= minStartInstant,
+  }))
+}
 
-  for (const range of ranges) {
-    // Slots start at range.startMin, range.startMin + slotMin, ... up to
-    // (range.endMin - slotMin) inclusive.
-    const lastStart = range.endMin - slotMin
-    for (let m = range.startMin; m <= lastStart; m += slotMin) {
-      const time = minToHHMM(m)
-      // null inside a spring-forward gap: no such slot (mig#57).
-      const instant = hostSlotInstant(date, time, hostTz)
-      if (!instant) continue
-      const available = !booked.has(time) && instant >= minStartInstant
-      out.push({ time, available })
-    }
-  }
+/** The settings that decide which slots a date offers. */
+export type SlotSettings = Pick<
+  Config,
+  | "hostTz"
+  | "weeklyAvailability"
+  | "slotDurationMin"
+  | "minNoticeHours"
+  | "bookingHorizonDays"
+  | "blockedDates"
+>
 
-  return out
+/** The last date a guest may book: today in the host's zone plus the
+ *  horizon, the same last day `getCandidateDates` lists. */
+export function lastBookableDate(cfg: SlotSettings, now: Date): string {
+  return addDays(
+    isoDateInTz(now, cfg.hostTz),
+    cfg.bookingHorizonDays,
+    cfg.hostTz,
+  )
+}
+
+/** False for a blocked date and for a date past the booking horizon:
+ *  such a date offers no slot at all. */
+export function isDateOpen(
+  cfg: SlotSettings,
+  date: string,
+  now: Date,
+): boolean {
+  return !cfg.blockedDates.has(date) && date <= lastBookableDate(cfg, now)
+}
+
+/** A slot a date offers. */
+export interface OfferedSlot {
+  /** Host-local start, `HH:MM`. */
+  time: string
+  /** The instant the slot starts at. */
+  instant: Date
+  /** False when an active booking holds it or it starts inside the
+   *  minimum notice. */
+  available: boolean
+}
+
+/**
+ * Every slot `date` offers, in host order. This is the one rule the
+ * booking page, `/embed`, `/api/slots` and the booking route share, so
+ * the slots a page shows and the slots the server accepts cannot drift
+ * apart (mig#113): a blocked date or a date past the horizon offers
+ * nothing, and only times on the grid are offered.
+ */
+export function offeredSlots(
+  cfg: SlotSettings,
+  date: string,
+  bookingsForDate: { time: string; status: "active" | "cancelled" }[],
+  now: Date,
+): OfferedSlot[] {
+  if (!isDateOpen(cfg, date, now)) return []
+  const booked = new Set(
+    bookingsForDate.filter((b) => b.status === "active").map((b) => b.time),
+  )
+  const minStart = new Date(now.getTime() + cfg.minNoticeHours * 3600_000)
+  return gridSlots(
+    date,
+    cfg.weeklyAvailability,
+    cfg.slotDurationMin,
+    cfg.hostTz,
+  ).map((s) => ({
+    ...s,
+    available: !booked.has(s.time) && s.instant >= minStart,
+  }))
 }
 
 function dayNameFromDate(date: string, tz: string): DayOfWeek {

@@ -18,6 +18,7 @@ import { parseWeeklyAvailability } from "../lib/availability.ts"
 import { futureWeekday } from "../lib/test-dates.ts"
 import Index from "./index.tsx"
 import { tempDataFile } from "../lib/test-temp.ts"
+import { addDays, isoDateInTz } from "@spy4x/time/tz"
 
 const HOST_TZ = "Asia/Ho_Chi_Minh"
 // A fixed Tuesday within MON-FRI 09:00-17:00, for tests that pin exact
@@ -337,6 +338,8 @@ Deno.test("mig#57: standalone / offers no slot inside the spring-forward gap", a
   const html = await renderIndex(`http://localhost/?date=${date}`, {
     hostTz: "Europe/Berlin",
     weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
+    // The next spring-forward Sunday can be most of a year away.
+    bookingHorizonDays: 3650,
   })
 
   assert(html.includes("slot=03%3A00"), "expected the 03:00 slot")
@@ -516,4 +519,25 @@ Deno.test("mig#50: when no slot falls on the clicked day in the visitor's zone, 
   assertFalse(html.includes("Tuesday, 6 October 2026"), "DateCard too")
   assert(html.includes("16:00, New York, UTC-4"), "expected the 09:00 slot")
   assertFalse(/UTC-4, \w{3} \d/.test(html), "no slot needs a date note")
+})
+
+// mig#113: `/?date=` listed slots for any date in the address, which is
+// how a person reached a working form for a date past the horizon.
+Deno.test("mig#113: standalone / offers no slot for a date past the booking horizon", async () => {
+  const cfg = {
+    weeklyAvailability: parseWeeklyAvailability("MON-SUN 09:00-17:00"),
+    bookingHorizonDays: 14,
+  }
+  const today = isoDateInTz(new Date(), "Europe/Berlin")
+  const lastDay = await renderIndex(
+    `http://localhost/?date=${addDays(today, 14, "Europe/Berlin")}`,
+    cfg,
+  )
+  const pastHorizon = await renderIndex(
+    `http://localhost/?date=${addDays(today, 15, "Europe/Berlin")}`,
+    cfg,
+  )
+
+  assert(lastDay.includes("slot=10%3A00"), "the last day offers 10:00")
+  assertFalse(pastHorizon.includes("slot="), "a day past it offers nothing")
 })

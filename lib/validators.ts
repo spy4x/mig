@@ -15,8 +15,8 @@
 
 import { type } from "arktype"
 import { canonicalTimeZone, isValidTimeZone } from "@spy4x/time/tz"
+import { parseBareAddress } from "@spy4x/email/address"
 import {
-  emailAddress,
   hasHeaderControlCharacters,
   hasTextControlCharacters,
 } from "@spy4x/platform/validation/predicates"
@@ -70,13 +70,17 @@ const NameRule = type("string").pipe((s: string, ctx) => {
   return trimmed
 })
 
+// The address reaches the guest's `To` header, the invitation and the
+// owner's mail, so it is the only text of the booker's own that the
+// guest's mail carries (mig#108). parseBareAddress refuses a part
+// before the `@` over 64 characters, the limit mail servers use
+// (mig#113); plus-tags stay, since a guest may really use one.
 const EmailRule = type("string").pipe((s: string, ctx) => {
-  const trimmed = s.trim().toLowerCase()
-  const checked = emailAddress(trimmed)
-  if (checked instanceof type.errors) {
+  const address = parseBareAddress(s)
+  if (address === null) {
     return ctx.reject({ message: "Please enter a valid email." })
   }
-  return trimmed
+  return address
 })
 
 /** The most characters the booking form's notes may hold. The cancel

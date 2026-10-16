@@ -2,12 +2,8 @@
 // Used by the optional JS-enhanced picker.
 
 import { define } from "../../lib/utils.ts"
-import { minToHHMM, zonedDateTime } from "@spy4x/time/tz"
-import {
-  EARLIEST_DATE,
-  hostSlotInstant,
-  isCalendarDateTime,
-} from "../../lib/clock.ts"
+import { offeredSlots } from "../../lib/availability.ts"
+import { EARLIEST_DATE, isCalendarDateTime } from "../../lib/clock.ts"
 
 export const handler = define.handlers({
   GET(ctx) {
@@ -26,43 +22,14 @@ export const handler = define.handlers({
         headers: { "content-type": "application/json" },
       })
     }
-    if (cfg.blockedDates.has(date)) {
-      return Response.json({ date, slots: [] })
-    }
-
-    const dayName = (() => {
-      const dt = zonedDateTime(date, "12:00", cfg.hostTz)
-      return new Intl.DateTimeFormat("en-GB", {
-        timeZone: cfg.hostTz,
-        weekday: "short",
-      }).format(dt).toUpperCase()
-    })()
-    const ranges =
-      cfg.weeklyAvailability[dayName as keyof typeof cfg.weeklyAvailability]
-    const booked = new Set(
-      ctx.state.bookings.forDate(date)
-        .filter((b) => b.status === "active")
-        .map((b) => b.time),
-    )
-    const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000)
-
-    const slots = []
-    for (const r of ranges) {
-      for (
-        let m = r.startMin;
-        m <= r.endMin - cfg.slotDurationMin;
-        m += cfg.slotDurationMin
-      ) {
-        const time = minToHHMM(m)
-        // null inside a spring-forward gap: no such slot (mig#57).
-        const instant = hostSlotInstant(date, time, cfg.hostTz)
-        if (!instant) continue
-        slots.push({
-          time,
-          available: !booked.has(time) && instant >= minStart,
-        })
-      }
-    }
+    // A blocked date or one past the booking horizon offers nothing
+    // (mig#113).
+    const slots = offeredSlots(
+      cfg,
+      date,
+      ctx.state.bookings.forDate(date),
+      new Date(),
+    ).map(({ time, available }) => ({ time, available }))
     return Response.json({ date, slots })
   },
 })

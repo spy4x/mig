@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- `POST /api/cancel` reads its body with the same 64 KiB cap and 10-second read
+  deadline as the booking routes, and answers 413 or 408 the same way. It used
+  to read a body of any size into memory before it looked at anything, so a few
+  very large posts could push mig out of memory (#113).
+
+### Fixed
+
+- A booking must be one of the slots the page offers: a time off the slot grid
+  (`09:07` on a 30-minute grid) and a date past `BOOKING_HORIZON_DAYS` are
+  refused. The booking page, `/embed` and `/api/slots` offer no slots for a date
+  past the horizon either (#113).
+- When you cancel through the link in your own booking mail, the booking, both
+  cancellation mails and the push say you cancelled. Your mail now carries its
+  own cancel link; the guest was told "Cancelled by: you" before. Bookings made
+  before this release have only the guest's link, and a cancellation of one
+  still counts as the guest's (#113).
+- An address with more than 64 characters before the `@`, which mail servers
+  refuse, is no longer accepted on the booking form (#113).
+- A `#` or `&` in the cancel form's id or token no longer changes the address
+  the cancel route redirects to, and both are cut to 100 characters there
+  (#113).
+
 ## [0.13.0] - 2026-10-14
 
 ### Changed

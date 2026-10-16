@@ -1,19 +1,17 @@
 import { define } from "../../lib/utils.ts"
 import BookingFlow from "../../islands/BookingFlow.tsx"
 import { gridDay } from "../../components/TimeSlots.tsx"
-import { countSlotsForDate, getCandidateDates } from "../../lib/availability.ts"
 import {
-  canonicalValidTimeZoneOrNull,
-  isoDateInTz,
-  minToHHMM,
-  zonedDateTime,
-} from "@spy4x/time/tz"
+  countSlotsForDate,
+  getCandidateDates,
+  offeredSlots,
+} from "../../lib/availability.ts"
+import { canonicalValidTimeZoneOrNull, isoDateInTz } from "@spy4x/time/tz"
 import {
   EARLIEST_DATE,
   formatGridHeader,
   formatShortDateAt,
   formatSlotDisplay,
-  hostSlotInstant,
   isCalendarDateTime,
 } from "../../lib/clock.ts"
 import { embedTzRedirectScript } from "../../lib/guest-tz-script.ts"
@@ -109,24 +107,6 @@ function minStartInstant(hours: number): Date {
   return new Date(Date.now() + hours * 3600_000)
 }
 
-function dayNameFromDate(
-  date: string,
-  tz: string,
-): "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN" {
-  const dt = zonedDateTime(date, "12:00", tz)
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    weekday: "short",
-  }).format(dt).toUpperCase() as
-    | "MON"
-    | "TUE"
-    | "WED"
-    | "THU"
-    | "FRI"
-    | "SAT"
-    | "SUN"
-}
-
 export const handler = define.handlers({
   GET(ctx) {
     const cfg = ctx.state.config
@@ -150,8 +130,9 @@ export const handler = define.handlers({
     const themeParam = parseThemeParam(url.searchParams.get("theme"))
     const theme = themeParam === "auto" ? null : themeParam
 
+    const now = new Date()
     const minStart = minStartInstant(cfg.minNoticeHours)
-    const today = isoDateInTz(new Date(), cfg.hostTz)
+    const today = isoDateInTz(now, cfg.hostTz)
     const candidates = getCandidateDates(
       today,
       cfg.bookingHorizonDays,
@@ -182,33 +163,13 @@ export const handler = define.handlers({
     })
 
     let slots: SlotCell[] = []
-    if (date && !cfg.blockedDates.has(date)) {
-      const dayBookings = ctx.state.bookings.forDate(date)
-      const dayName = dayNameFromDate(date, cfg.hostTz)
-      const ranges = cfg.weeklyAvailability[dayName]
-      const booked = new Set(
-        dayBookings.filter((b) => b.status === "active").map((b) => b.time),
+    if (date) {
+      const withInstant = offeredSlots(
+        cfg,
+        date,
+        ctx.state.bookings.forDate(date),
+        now,
       )
-      const withInstant: Array<
-        { time: string; available: boolean; instant: Date }
-      > = []
-      for (const r of ranges) {
-        for (
-          let m = r.startMin;
-          m <= r.endMin - cfg.slotDurationMin;
-          m += cfg.slotDurationMin
-        ) {
-          const time = minToHHMM(m)
-          // null inside a spring-forward gap: no such slot (mig#57).
-          const instant = hostSlotInstant(date, time, cfg.hostTz)
-          if (!instant) continue
-          withInstant.push({
-            time,
-            available: !booked.has(time) && instant >= minStart,
-            instant,
-          })
-        }
-      }
       // Sorted by instant (mig#15 review) — host-local generation order
       // already happens to be instant-ordered for a single host day,
       // but making the sort explicit means a slot that wraps into the

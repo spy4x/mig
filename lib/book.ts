@@ -19,8 +19,9 @@ import {
 } from "./email.ts"
 import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts"
 import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip"
-import { zonedDateTime } from "@spy4x/time/tz"
-import { EARLIEST_DATE, hostSlotInstant } from "./clock.ts"
+import { EARLIEST_DATE } from "./clock.ts"
+import { isDateOpen, offeredSlots } from "./availability.ts"
+import { err, ok, type Result } from "./types.ts"
 import { BookingSchema } from "./validators.ts"
 import { isHoneypotFilled } from "@spy4x/platform/validation/predicates"
 import {
@@ -43,7 +44,9 @@ function formPath(basePath: string): string {
 // it outright.
 const MAX_REDIRECT_FIELD_LEN = 100
 
-function capRedirectField(value: string | undefined): string | undefined {
+export function capRedirectField(
+  value: string | undefined,
+): string | undefined {
   return value !== undefined && value.length > MAX_REDIRECT_FIELD_LEN
     ? value.slice(0, MAX_REDIRECT_FIELD_LEN)
     : value
@@ -59,6 +62,35 @@ export const MAX_BOOKING_BODY_BYTES = 64 * 1024
 // read gives up with 408, so a slow client cannot hold a request open.
 export const BOOKING_BODY_TIMEOUT_MS = 10_000
 
+/**
+ * The request's form, read with `MAX_BOOKING_BODY_BYTES` as the cap and
+ * `timeoutMs` as the stall budget, or the response that refuses it: 413
+ * for a body over the cap, 408 for one that stalls. Every route that
+ * reads a form from a stranger reads it through this, so none of them
+ * buffers a body of any size (mig#73, mig#113).
+ */
+export async function readBoundedForm(
+  req: Request,
+  timeoutMs: number = BOOKING_BODY_TIMEOUT_MS,
+): Promise<Result<FormData, Response>> {
+  try {
+    return ok(
+      await parseBoundedFormData(req, {
+        maxBytes: MAX_BOOKING_BODY_BYTES,
+        timeoutMs,
+      }),
+    )
+  } catch (e) {
+    if (e instanceof PayloadTooLargeError) {
+      return err(new Response("Request body too large.", { status: 413 }))
+    }
+    if (e instanceof BodyReadTimeoutError) {
+      return err(new Response("Request body timed out.", { status: 408 }))
+    }
+    throw e
+  }
+}
+
 /** Knobs for `handleBookingSubmit`; the routes pass none. */
 export interface BookingSubmitOptions {
   /** Stall budget for reading the body, in milliseconds. Tests pass a
@@ -70,6 +102,14 @@ export interface BookingSubmitOptions {
  *  (a Unix socket). */
 function socketHostname(addr: Deno.Addr): string | undefined {
   return "hostname" in addr ? addr.hostname : undefined
+}
+
+/** The `/cancel` page's address for one booking and one raw token. */
+function cancelLink(publicUrl: string, id: string, token: string): string {
+  const url = new URL("/cancel", publicUrl)
+  url.searchParams.set("id", id)
+  url.searchParams.set("token", token)
+  return url.toString()
 }
 
 export async function handleBookingSubmit(
@@ -112,21 +152,9 @@ export async function handleBookingSubmit(
   // below: a rate-limited request never got far enough to confirm the
   // slot is still free, unlike the failure modes below that already
   // checked it moments earlier.
-  let form: FormData
-  try {
-    form = await parseBoundedFormData(ctx.req, {
-      maxBytes: MAX_BOOKING_BODY_BYTES,
-      timeoutMs: options.bodyTimeoutMs ?? BOOKING_BODY_TIMEOUT_MS,
-    })
-  } catch (e) {
-    if (e instanceof PayloadTooLargeError) {
-      return new Response("Request body too large.", { status: 413 })
-    }
-    if (e instanceof BodyReadTimeoutError) {
-      return new Response("Request body timed out.", { status: 408 })
-    }
-    throw e
-  }
+  const read = await readBoundedForm(ctx.req, options.bodyTimeoutMs)
+  if (!read.ok) return read.error
+  const form = read.value
   // Raw, unvalidated — used only to carry state back on a failed
   // redirect (mig#15 review). `date` and `tz` always ride along: the
   // route re-validates both on the way back in, so passing the raw
@@ -203,63 +231,38 @@ export async function handleBookingSubmit(
     return Response.redirect(fakeUrl.toString(), 303)
   }
 
-  // Sanity: slot must be within availability, not booked, not in the past.
-  // This and every other availability/conflict/persist failure below
-  // drops `slot` — it's no longer a valid pick, so keeping it would
-  // land the visitor back on the confirm step for a slot they can't
-  // book (mig#15 round 2).
-  const minStart = new Date(Date.now() + cfg.minNoticeHours * 3600_000)
+  // The slot must be one the booking page offers for this date: on the
+  // grid, on an open date inside the horizon, and outside the minimum
+  // notice (mig#113). Whether another booking holds it is checked under
+  // the mutex below. This and every other availability/conflict/persist
+  // failure below drops `slot` — it's no longer a valid pick, so keeping
+  // it would land the visitor back on the confirm step for a slot they
+  // can't book (mig#15 round 2).
+  //
   // The validator checked the calendar. Before EARLIEST_DATE the host's
   // zone may not resolve the slot to the minute — Phoenix ran on a local
   // mean time until noon on 1883-11-18 — and the zone math below would
   // throw (mig#57).
-  if (input.date < EARLIEST_DATE) {
+  const now = new Date()
+  if (input.date < EARLIEST_DATE || !isDateOpen(cfg, input.date, now)) {
     return errRedirect(
       "That date is not available for booking.",
       redirectDateTz,
     )
   }
-  const slotInstant = hostSlotInstant(input.date, input.slot, cfg.hostTz)
-  // A spring-forward gap time (mig#57): the host's clock never shows
-  // it, so no slot was offered for it either.
-  if (!slotInstant) {
-    return errRedirect(
-      "That time is outside availability hours.",
-      redirectDateTz,
-    )
-  }
-  if (slotInstant < minStart) {
-    return errRedirect("That time is no longer available.", redirectDateTz)
-  }
-
-  // Check slot is in availability
-  const dayName = (() => {
-    const dt = zonedDateTime(input.date, "12:00", cfg.hostTz)
-    return new Intl.DateTimeFormat("en-GB", {
-      timeZone: cfg.hostTz,
-      weekday: "short",
-    }).format(dt).toUpperCase()
-  })()
-  const ranges =
-    cfg.weeklyAvailability[dayName as keyof typeof cfg.weeklyAvailability]
-  const slotMin = parseInt(input.slot.slice(0, 2), 10) * 60 +
-    parseInt(input.slot.slice(3), 10)
-  const inAvail = ranges.some((r) =>
-    slotMin >= r.startMin && slotMin + cfg.slotDurationMin <= r.endMin
+  // A time off the grid, outside the day's hours or inside a
+  // spring-forward gap (mig#57) is not among the offered slots.
+  const offered = offeredSlots(cfg, input.date, [], now).find((s) =>
+    s.time === input.slot
   )
-  if (!inAvail) {
+  if (!offered) {
     return errRedirect(
       "That time is outside availability hours.",
       redirectDateTz,
     )
   }
-
-  // Blocked date?
-  if (cfg.blockedDates.has(input.date)) {
-    return errRedirect(
-      "That date is not available for booking.",
-      redirectDateTz,
-    )
+  if (!offered.available) {
+    return errRedirect("That time is no longer available.", redirectDateTz)
   }
 
   // Transactional booking flow: save first, then send (mig#19). A
@@ -279,6 +282,11 @@ export async function handleBookingSubmit(
   const { raw: tokenRaw, hash: tokenHash } = await newOpaqueToken(
     cfg.cancelSecret,
   )
+  // The owner's mail carries its own cancel link, so a cancellation
+  // through it is recorded as the owner's (mig#113).
+  const { raw: ownerTokenRaw, hash: ownerTokenHash } = await newOpaqueToken(
+    cfg.cancelSecret,
+  )
   const bookingId = uuidV7()
   const booking = {
     id: bookingId,
@@ -291,6 +299,7 @@ export async function handleBookingSubmit(
     guestEmail: input.email.trim().toLowerCase(),
     notes: input.notes.trim() || undefined,
     cancelTokenHash: tokenHash,
+    ownerCancelTokenHash: ownerTokenHash,
     status: "active" as const,
   }
 
@@ -363,11 +372,12 @@ export async function handleBookingSubmit(
   // "New booking" email actually went out before a later failure, so
   // the failure branch below knows whether it needs to correct that
   // email rather than just roll the booking back silently.
-  const cancelUrl = new URL(
-    `/cancel?id=${bookingId}&token=${tokenRaw}`,
-    cfg.publicUrl,
-  ).toString()
-  const ownerSent = await sendOwnerBookingEmail(cfg, booking, cancelUrl)
+  const cancelUrl = cancelLink(cfg.publicUrl, bookingId, tokenRaw)
+  const ownerSent = await sendOwnerBookingEmail(
+    cfg,
+    booking,
+    cancelLink(cfg.publicUrl, bookingId, ownerTokenRaw),
+  )
   const ownerEmailSucceeded = ownerSent.ok
   const sent = ownerSent.ok
     ? await sendGuestBookingEmail(cfg, booking, cancelUrl)

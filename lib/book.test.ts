@@ -20,6 +20,7 @@ import { futureWeekday } from "./test-dates.ts"
 import { setTransportForTesting } from "./email.ts"
 import { handleBookingSubmit } from "./book.ts"
 import { tempDataFile } from "./test-temp.ts"
+import { addDays, isoDateInTz } from "@spy4x/time/tz"
 
 // ─── Fixtures ──────────────────────────────────────────────────────
 
@@ -2036,6 +2037,8 @@ Deno.test("mig#57: a slot inside the spring-forward gap is refused", async () =>
   const cfg = {
     ...fakeConfig(),
     weeklyAvailability: parseWeeklyAvailability("SUN 01:00-04:00"),
+    // 2027-03-28 lies past the default horizon (mig#113).
+    bookingHorizonDays: 3650,
   }
   await using file = await tempDataFile()
   const path = file.path
@@ -2059,4 +2062,74 @@ Deno.test("mig#57: a slot inside the spring-forward gap is refused", async () =>
     "That time is outside availability hours.",
   )
   assertEquals(bookings.forDate("2027-03-28").length, 0)
+})
+
+// mig#113: the route checked only that a time fell inside the day's
+// hours. 09:07 and 09:15 were stored beside 09:00 on a 30-minute grid,
+// and the conflict check, which compares exact times, let all three in.
+Deno.test("mig#113: a time off the slot grid is refused and stores nothing", async () => {
+  await using file = await tempDataFile()
+  const bookings = new BookingsStore({ filePath: file.path })
+  await bookings.init()
+  const date = futureWeekday(3, HOST_TZ)
+
+  for (const slot of ["09:07", "09:15"]) {
+    const res = await handleBookingSubmit(
+      stubContext({
+        config: fakeConfig(),
+        bookings,
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+        fields: validFields(date, slot),
+      }),
+      "",
+    )
+    const url = new URL(res.headers.get("location")!)
+    assertEquals(url.pathname, "/", slot)
+    assertEquals(
+      url.searchParams.get("err"),
+      "That time is outside availability hours.",
+      slot,
+    )
+  }
+  assertEquals(bookings.list().length, 0)
+})
+
+// mig#113: nothing read BOOKING_HORIZON_DAYS on the way in, so a form
+// edited by hand booked a meeting for 2099.
+Deno.test("mig#113: a date past the booking horizon is refused and stores nothing", async () => {
+  await using file = await tempDataFile()
+  const bookings = new BookingsStore({ filePath: file.path })
+  await bookings.init()
+  const cfg = {
+    ...fakeConfig(),
+    weeklyAvailability: parseWeeklyAvailability("MON-SUN 09:00-17:00"),
+  }
+  const today = isoDateInTz(new Date(), HOST_TZ)
+  const book = (date: string) =>
+    handleBookingSubmit(
+      stubContext({
+        config: cfg,
+        bookings,
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+        fields: validFields(date, "10:00"),
+      }),
+      "",
+    )
+
+  for (const date of [addDays(today, 15, HOST_TZ), "2099-06-01"]) {
+    const url = new URL((await book(date)).headers.get("location")!)
+    assertEquals(url.pathname, "/", date)
+    assertEquals(
+      url.searchParams.get("err"),
+      "That date is not available for booking.",
+      date,
+    )
+  }
+  assertEquals(bookings.list().length, 0)
+
+  // The horizon's last day, 14 days out, is still bookable.
+  const last = new URL(
+    (await book(addDays(today, 14, HOST_TZ))).headers.get("location")!,
+  )
+  assertEquals(last.pathname, "/confirmed")
 })

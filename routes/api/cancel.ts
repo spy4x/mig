@@ -1,7 +1,8 @@
 // POST /api/cancel — cancel a booking. Form fields: id, token, reason.
 
 import { define } from "../../lib/utils.ts"
-import { verifyOpaqueToken } from "@spy4x/platform/tokens"
+import { cancelTokenHolder } from "../../lib/cancel-token.ts"
+import { capRedirectField, readBoundedForm } from "../../lib/book.ts"
 import { sendCancellationEmails } from "../../lib/email.ts"
 import { notifyBookingCancelled } from "../../lib/notify.ts"
 import { NOTES_MAX_LENGTH } from "../../lib/validators.ts"
@@ -16,44 +17,49 @@ function boundedReason(raw: string): string {
     .trimEnd()
 }
 
+/** An address on mig's own origin with `params` set one by one, so a
+ *  `#` or `&` in a value stays inside that value. `id` and `token` are
+ *  cut to the booking route's redirect-field length, so a long value
+ *  never makes a long `Location` header (mig#113). */
+function redirectTo(
+  publicUrl: string,
+  path: string,
+  params: Record<string, string>,
+): Response {
+  const url = new URL(path, publicUrl)
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, capRedirectField(value) ?? "")
+  }
+  return Response.redirect(url.toString(), 303)
+}
+
 export const handler = define.handlers({
   async POST(ctx) {
     const cfg = ctx.state.config
-    const form = await ctx.req.formData()
+    // A stranger can post here, so the body is read with the booking
+    // route's cap and deadline before anything else (mig#113).
+    const read = await readBoundedForm(ctx.req)
+    if (!read.ok) return read.error
+    const form = read.value
     const id = String(form.get("id") ?? "")
     const token = String(form.get("token") ?? "")
     const reason = boundedReason(String(form.get("reason") ?? ""))
 
     if (!id || !token) {
-      return Response.redirect(
-        new URL("/cancel?err=missing", cfg.publicUrl).toString(),
-        303,
-      )
+      return redirectTo(cfg.publicUrl, "/cancel", { err: "missing" })
     }
+    const back = () => redirectTo(cfg.publicUrl, "/cancel", { id, token })
 
     const booking = ctx.state.bookings.get(id)
-    if (!booking) {
-      return Response.redirect(
-        new URL(`/cancel?id=${id}&token=${token}`, cfg.publicUrl).toString(),
-        303,
-      )
-    }
-    const tokenOk = await verifyOpaqueToken(
+    if (!booking) return back()
+    // The owner's mail carries its own token, so the token says who is
+    // cancelling. A booking stored before mig#113 has only the guest's.
+    const cancelledBy = await cancelTokenHolder(
+      booking,
       token,
-      booking.cancelTokenHash,
       cfg.cancelSecret,
     )
-    if (!tokenOk || booking.status === "cancelled") {
-      return Response.redirect(
-        new URL(`/cancel?id=${id}&token=${token}`, cfg.publicUrl).toString(),
-        303,
-      )
-    }
-
-    // Determine who is cancelling. The cancel URL is the same for owner
-    // and guest — the recipient of the cancellation email reveals it.
-    // Owner always receives the email; guest only receives if they cancel.
-    const cancelledBy: "owner" | "guest" = "guest" // best guess; refined below
+    if (!cancelledBy || booking.status === "cancelled") return back()
     const cancelledAt = new Date().toISOString()
 
     try {
@@ -67,19 +73,13 @@ export const handler = define.handlers({
       })
     } catch (e) {
       console.error("mig: cancel failed:", e)
-      return Response.redirect(
-        new URL(`/cancel?id=${id}&token=${token}`, cfg.publicUrl).toString(),
-        303,
-      )
+      return back()
     }
 
     // Re-fetch to get the freshly-mutated record
     const updated = ctx.state.bookings.get(id)
     if (!updated) {
-      return Response.redirect(
-        new URL("/?err=cancel", cfg.publicUrl).toString(),
-        303,
-      )
+      return redirectTo(cfg.publicUrl, "/", { err: "cancel" })
     }
 
     const sent = await sendCancellationEmails(
@@ -95,10 +95,10 @@ export const handler = define.handlers({
     // NTFY push for the cancellation (subject to NTFY_MODE).
     await notifyBookingCancelled(cfg, updated, cancelledBy, reason)
 
-    return Response.redirect(
-      new URL(`/confirmed?id=${id}&token=${token}&cancelled=1`, cfg.publicUrl)
-        .toString(),
-      303,
-    )
+    return redirectTo(cfg.publicUrl, "/confirmed", {
+      id,
+      token,
+      cancelled: "1",
+    })
   },
 })

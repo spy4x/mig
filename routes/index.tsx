@@ -3,19 +3,17 @@ import { Header } from "../components/Header.tsx"
 import { Footer } from "../components/Footer.tsx"
 import BookingFlow from "../islands/BookingFlow.tsx"
 import { gridDay } from "../components/TimeSlots.tsx"
-import { countSlotsForDate, getCandidateDates } from "../lib/availability.ts"
 import {
-  canonicalValidTimeZoneOrNull,
-  isoDateInTz,
-  minToHHMM,
-  zonedDateTime,
-} from "@spy4x/time/tz"
+  countSlotsForDate,
+  getCandidateDates,
+  offeredSlots,
+} from "../lib/availability.ts"
+import { canonicalValidTimeZoneOrNull, isoDateInTz } from "@spy4x/time/tz"
 import {
   EARLIEST_DATE,
   formatGridHeader,
   formatShortDateAt,
   formatSlotDisplay,
-  hostSlotInstant,
   isCalendarDateTime,
 } from "../lib/clock.ts"
 
@@ -75,24 +73,6 @@ function minStartInstant(hours: number): Date {
   return new Date(Date.now() + hours * 3600_000)
 }
 
-function dayNameFromDate(
-  date: string,
-  tz: string,
-): "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN" {
-  const dt = zonedDateTime(date, "12:00", tz)
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: tz,
-    weekday: "short",
-  }).format(dt).toUpperCase() as
-    | "MON"
-    | "TUE"
-    | "WED"
-    | "THU"
-    | "FRI"
-    | "SAT"
-    | "SUN"
-}
-
 export default define.page(function Index(ctx) {
   const cfg = ctx.state.config
   const url = new URL(ctx.req.url)
@@ -110,8 +90,9 @@ export default define.page(function Index(ctx) {
   const tz = canonicalValidTimeZoneOrNull(url.searchParams.get("tz"))
   const displayTz = tz ?? cfg.hostTz
 
+  const now = new Date()
   const minStart = minStartInstant(cfg.minNoticeHours)
-  const today = isoDateInTz(new Date(), cfg.hostTz)
+  const today = isoDateInTz(now, cfg.hostTz)
   const candidates = getCandidateDates(
     today,
     cfg.bookingHorizonDays,
@@ -152,33 +133,9 @@ export default define.page(function Index(ctx) {
   // below takes the FIRST of these — the first slot actually shown —
   // not an arbitrary anchor like noon of the host day, which can
   // label the header with an offset no visible slot has.
-  const daySlots: Array<{ time: string; available: boolean; instant: Date }> =
-    []
-  if (date && !cfg.blockedDates.has(date)) {
-    const dayBookings = ctx.state.bookings.forDate(date)
-    const dayName = dayNameFromDate(date, cfg.hostTz)
-    const ranges = cfg.weeklyAvailability[dayName]
-    const booked = new Set(
-      dayBookings.filter((b) => b.status === "active").map((b) => b.time),
-    )
-    for (const r of ranges) {
-      for (
-        let m = r.startMin;
-        m <= r.endMin - cfg.slotDurationMin;
-        m += cfg.slotDurationMin
-      ) {
-        const time = minToHHMM(m)
-        // null inside a spring-forward gap: no such slot (mig#57).
-        const instant = hostSlotInstant(date, time, cfg.hostTz)
-        if (!instant) continue
-        daySlots.push({
-          time,
-          available: !booked.has(time) && instant >= minStart,
-          instant,
-        })
-      }
-    }
-  }
+  const daySlots = date
+    ? offeredSlots(cfg, date, ctx.state.bookings.forDate(date), now)
+    : []
 
   const header = formatGridHeader(
     daySlots.map((s) => s.instant),

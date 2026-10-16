@@ -15,6 +15,10 @@ export interface Booking {
   guestTz?: string // optional, captured client-side if present
   notes?: string
   cancelTokenHash: string
+  /** Hash of the cancel token in the owner's mail, made like
+   *  `cancelTokenHash`. A booking stored before mig#113 has none, and a
+   *  cancellation of it is recorded as the guest's. */
+  ownerCancelTokenHash?: string
   status: BookingStatus
   cancelledAt?: string
   cancelledBy?: "owner" | "guest"
