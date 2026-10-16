@@ -17,6 +17,7 @@ import CancelPage, { handler as cancelPage } from "../cancel.tsx"
 import { handler } from "./cancel.ts"
 import { tempDataFile } from "../../lib/test-temp.ts"
 import { NOTES_MAX_LENGTH } from "../../lib/validators.ts"
+import { MAX_BOOKING_BODY_BYTES } from "../../lib/book.ts"
 
 const SECRET = "fake-cancel-secret-only-for-tests"
 
@@ -310,9 +311,10 @@ Deno.test("mig#108: a cancel reason over the notes limit is cut before it is sto
   try {
     await withOldLinkBooking(OLD_LINK.secret, async (state, id) => {
       // 499 letters, then an emoji whose two code units straddle the
-      // limit, then far more than fits.
+      // limit, then far more than fits. The whole body stays under the
+      // route's 64 KiB cap (mig#113), which answers 413 above it.
       const kept = "r".repeat(NOTES_MAX_LENGTH - 1)
-      const reason = `  ${kept}\u{1F600}${"X".repeat(200_000)}`
+      const reason = `  ${kept}\u{1F600}${"X".repeat(20_000)}`
       const res = await handler.POST!(
         {
           req: new Request("http://localhost/api/cancel", {
@@ -343,4 +345,80 @@ Deno.test("mig#108: a cancel reason over the notes limit is cut before it is sto
   } finally {
     setTransportForTesting({ sendMail: () => Promise.resolve({}) })
   }
+})
+
+// mig#113: the route read the whole body into memory before it looked at
+// anything, so a few very large posts could push the one process out of
+// memory. It now reads with the booking route's 64 KiB cap.
+Deno.test("mig#113: POST /api/cancel refuses a body over the cap with 413 before reading it all", async () => {
+  await using file = await tempDataFile()
+  const bookings = new BookingsStore({ filePath: file.path })
+  await bookings.init()
+  const chunk = new TextEncoder().encode("x".repeat(16 * 1024))
+  const total = 64 * chunk.length
+  let pulled = 0
+  // No `id`, no `token`, no Content-Length: only the running byte count
+  // can stop this body.
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (pulled >= total) return controller.close()
+      pulled += chunk.length
+      controller.enqueue(chunk)
+    },
+  })
+  const res = await handler.POST!(
+    {
+      req: new Request("http://localhost/api/cancel", {
+        method: "POST",
+        body,
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+      }),
+      state: {
+        config: fakeConfig(),
+        bookings,
+        rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+      },
+    } as unknown as Context<State>,
+  ) as Response
+
+  assertEquals(res.status, 413)
+  assert(
+    pulled <= MAX_BOOKING_BODY_BYTES + 2 * chunk.length,
+    `read ${pulled} of ${total} bytes`,
+  )
+})
+
+// mig#113: the redirects pasted `id` and `token` into the address as
+// raw text, so a `#` or `&` in either changed where the person landed.
+Deno.test("mig#113: the cancel redirect keeps id and token whole and caps their length", async () => {
+  await using file = await tempDataFile()
+  const bookings = new BookingsStore({ filePath: file.path })
+  await bookings.init()
+  const state = {
+    config: fakeConfig(),
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+  } as State
+  const post = async (id: string, token: string) =>
+    new URL(
+      (await handler.POST!(
+        {
+          req: new Request("http://localhost/api/cancel", {
+            method: "POST",
+            body: new URLSearchParams({ id, token }),
+          }),
+          state,
+        } as unknown as Context<State>,
+      ) as Response).headers.get("location")!,
+    )
+
+  const odd = await post("x", "other#frag&token=a b")
+  assertEquals(odd.pathname, "/cancel")
+  assertEquals(odd.hash, "")
+  assertEquals(odd.searchParams.getAll("token"), ["other#frag&token=a b"])
+  assertEquals(odd.searchParams.get("id"), "x")
+
+  const long = await post("i".repeat(5000), "t".repeat(5000))
+  assertEquals(long.searchParams.get("id"), "i".repeat(100))
+  assertEquals(long.searchParams.get("token"), "t".repeat(100))
 })

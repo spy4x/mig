@@ -21,6 +21,7 @@ import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts"
 import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip"
 import { EARLIEST_DATE } from "./clock.ts"
 import { isDateOpen, offeredSlots } from "./availability.ts"
+import { err, ok, type Result } from "./types.ts"
 import { BookingSchema } from "./validators.ts"
 import { isHoneypotFilled } from "@spy4x/platform/validation/predicates"
 import {
@@ -43,7 +44,9 @@ function formPath(basePath: string): string {
 // it outright.
 const MAX_REDIRECT_FIELD_LEN = 100
 
-function capRedirectField(value: string | undefined): string | undefined {
+export function capRedirectField(
+  value: string | undefined,
+): string | undefined {
   return value !== undefined && value.length > MAX_REDIRECT_FIELD_LEN
     ? value.slice(0, MAX_REDIRECT_FIELD_LEN)
     : value
@@ -58,6 +61,35 @@ export const MAX_BOOKING_BODY_BYTES = 64 * 1024
 // How long a booking body may go without sending a byte before the
 // read gives up with 408, so a slow client cannot hold a request open.
 export const BOOKING_BODY_TIMEOUT_MS = 10_000
+
+/**
+ * The request's form, read with `MAX_BOOKING_BODY_BYTES` as the cap and
+ * `timeoutMs` as the stall budget, or the response that refuses it: 413
+ * for a body over the cap, 408 for one that stalls. Every route that
+ * reads a form from a stranger reads it through this, so none of them
+ * buffers a body of any size (mig#73, mig#113).
+ */
+export async function readBoundedForm(
+  req: Request,
+  timeoutMs: number = BOOKING_BODY_TIMEOUT_MS,
+): Promise<Result<FormData, Response>> {
+  try {
+    return ok(
+      await parseBoundedFormData(req, {
+        maxBytes: MAX_BOOKING_BODY_BYTES,
+        timeoutMs,
+      }),
+    )
+  } catch (e) {
+    if (e instanceof PayloadTooLargeError) {
+      return err(new Response("Request body too large.", { status: 413 }))
+    }
+    if (e instanceof BodyReadTimeoutError) {
+      return err(new Response("Request body timed out.", { status: 408 }))
+    }
+    throw e
+  }
+}
 
 /** Knobs for `handleBookingSubmit`; the routes pass none. */
 export interface BookingSubmitOptions {
@@ -112,21 +144,9 @@ export async function handleBookingSubmit(
   // below: a rate-limited request never got far enough to confirm the
   // slot is still free, unlike the failure modes below that already
   // checked it moments earlier.
-  let form: FormData
-  try {
-    form = await parseBoundedFormData(ctx.req, {
-      maxBytes: MAX_BOOKING_BODY_BYTES,
-      timeoutMs: options.bodyTimeoutMs ?? BOOKING_BODY_TIMEOUT_MS,
-    })
-  } catch (e) {
-    if (e instanceof PayloadTooLargeError) {
-      return new Response("Request body too large.", { status: 413 })
-    }
-    if (e instanceof BodyReadTimeoutError) {
-      return new Response("Request body timed out.", { status: 408 })
-    }
-    throw e
-  }
+  const read = await readBoundedForm(ctx.req, options.bodyTimeoutMs)
+  if (!read.ok) return read.error
+  const form = read.value
   // Raw, unvalidated — used only to carry state back on a failed
   // redirect (mig#15 review). `date` and `tz` always ride along: the
   // route re-validates both on the way back in, so passing the raw
