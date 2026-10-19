@@ -324,6 +324,8 @@ async function main(): Promise<void> {
         SMTP_USER: "jane@example.com",
         SMTP_PASSWORD: "placeholder",
         SMTP_FROM: "Bookings <book@example.com>",
+        // The local sink has no TLS (mig#98).
+        SMTP_ALLOW_PLAINTEXT: "true",
         PUBLIC_URL: local,
         PORT: String(port),
         DATA_PATH: `${tmp}/bookings.json`,

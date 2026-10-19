@@ -12,6 +12,7 @@ import type { ConfigIssue } from "@spy4x/server/config"
 // prototype chain for a name like `"toString"`.
 const FIXED_MESSAGES: Record<string, string> = {
   HIDE_BRANDING: "must be true, false, 1, 0, yes, no or empty",
+  SMTP_ALLOW_PLAINTEXT: "must be true, false, 1, 0, yes, no or empty",
   TRUSTED_PROXY_HEADER:
     "must be cf-connecting-ip, x-forwarded-for, x-real-ip or empty",
   THEME: 'must be "auto", "dark" or "light"',

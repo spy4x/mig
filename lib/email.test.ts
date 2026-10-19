@@ -8,6 +8,7 @@ import {
   setTransportForTesting,
 } from "./email.ts"
 import type { Booking, Config } from "./types.ts"
+import { startSmtpSink } from "../scripts/local-app.ts"
 
 function makeConfig(): Config {
   return {
@@ -692,5 +693,53 @@ Deno.test("the invite attachment's Content-Type carries a charset and the calend
       "text/calendar; charset=utf-8; method=REQUEST",
     )
     assertStringIncludes(invite.content, "METHOD:REQUEST")
+  }
+})
+
+// mig#98: these two go through the real nodemailer transport to the
+// in-process sink from scripts/local-app.ts, which offers no STARTTLS,
+// so they pin what reaches the wire, not just the option mig passes.
+Deno.test("a relay without STARTTLS gets no message, and the error carries no password", async () => {
+  const smtp = startSmtpSink()
+  const config = makeConfig()
+  const pass = "not-a-real-password-0123"
+  try {
+    const sent = await sendEmail(
+      {
+        ...config,
+        smtp: { ...config.smtp, host: "127.0.0.1", port: smtp.port, pass },
+      },
+      { to: "visitor@example.com", subject: "Hi", text: "Hi" },
+    )
+    assertEquals(sent.ok, false)
+    if (sent.ok) return
+    assertStringIncludes(sent.error, "STARTTLS")
+    assertEquals(sent.error.includes(pass), false, sent.error)
+    assertEquals(smtp.mails.length, 0)
+  } finally {
+    smtp.close()
+  }
+})
+
+Deno.test("SMTP_ALLOW_PLAINTEXT sends through a relay without STARTTLS", async () => {
+  const smtp = startSmtpSink()
+  const config = makeConfig()
+  try {
+    const sent = await sendEmail(
+      {
+        ...config,
+        smtp: {
+          ...config.smtp,
+          host: "127.0.0.1",
+          port: smtp.port,
+          allowPlaintext: true,
+        },
+      },
+      { to: "visitor@example.com", subject: "Hi", text: "Hi" },
+    )
+    assertEquals(sent, { ok: true, value: undefined })
+    assertEquals(smtp.mails.map((m) => m.to), ["visitor@example.com"])
+  } finally {
+    smtp.close()
   }
 })

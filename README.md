@@ -92,6 +92,10 @@ The ones you must set:
 | `CANCEL_SECRET`       | output of `openssl rand -base64 32`       |
 | `SMTP_*`              | host, port, user, password, from          |
 
+mig requires STARTTLS from the SMTP relay on every port but 465. For a relay
+without TLS on the same host or a private network, set
+`SMTP_ALLOW_PLAINTEXT=true`.
+
 Blocked dates, notice period, booking horizon, rate limit, theme, branding and
 NTFY are optional: see [configuration.md](docs/configuration.md).
 
