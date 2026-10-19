@@ -50,6 +50,14 @@
 :root {
   --color-primary: oklch(0.5 0.09 178);
   --color-accent: oklch(0.5 0.09 178);
+  /* The form fields' focus ring. The library's light value is a fixed
+     purple-600 rather than a step of the accent, so mig names its own. */
+  --color-primary-muted: var(--color-accent-900);
+}
+
+/* The dark ring is the step ink and the default dark palette both use. */
+.dark {
+  --color-primary-muted: var(--color-accent-400);
 }
 
 @layer base {
