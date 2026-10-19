@@ -120,11 +120,6 @@ export function ConfirmedView(props: ConfirmedViewProps) {
             {dateLabel} · {timeLabel}
           </p>
           {hostTzNote}
-          {b.cancelledReason && (
-            <p class="mt-3 text-sm text-pretty break-words text-muted">
-              {`“${b.cancelledReason}”`}
-            </p>
-          )}
           <p class="mt-3 text-sm text-muted">
             Both you and {hostName} have been notified.
           </p>

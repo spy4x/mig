@@ -16,8 +16,6 @@ export interface ConfirmedBooking {
   guestName: string
   guestEmail: string
   cancelToken: string
-  /** What the person who cancelled wrote, when they wrote anything. */
-  cancelledReason?: string | null
 }
 
 export interface ConfirmedData {
@@ -69,7 +67,6 @@ export async function loadConfirmedData(
       guestName: booking.guestName,
       guestEmail: booking.guestEmail,
       cancelToken: token,
-      cancelledReason: booking.cancelledReason ?? null,
     },
   }
 }

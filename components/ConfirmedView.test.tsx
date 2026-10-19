@@ -1,6 +1,6 @@
 // mig#119 — /confirmed's three states on the library's parts.
 
-import { assert, assertEquals, assertFalse } from "@std/assert"
+import { assert, assertEquals } from "@std/assert"
 import { renderToString } from "preact-render-to-string"
 import { ConfirmedView, type ConfirmedViewProps } from "./ConfirmedView.tsx"
 import type { ConfirmedBooking } from "../lib/confirmed-data.ts"
@@ -39,18 +39,10 @@ Deno.test("the booked page names the host and where the invite went", () => {
   assert(html.includes(">Cancel booking<"))
 })
 
-Deno.test("the cancelled page shows what the canceller wrote", () => {
-  const html = render({
-    mode: "cancelled",
-    booking: { ...BOOKING, cancelledReason: "Something came up." },
-  })
-  assert(html.includes("This booking was cancelled"))
-  assert(html.includes("Something came up."), "expected the reason")
-})
-
-Deno.test("the cancelled page without a reason shows no empty quote", () => {
+Deno.test("the cancelled page says so and offers a new time", () => {
   const html = render({ mode: "cancelled" })
-  assertFalse(html.includes("“"), "no quote marks around nothing")
+  assert(html.includes("This booking was cancelled"), html)
+  assert(/<a\b[^>]*href="\/"[^>]*>Book a new time<\/a>/.test(html))
 })
 
 Deno.test("a missing, tampered or unknown link gets one message and a way to book", () => {
