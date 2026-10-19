@@ -489,7 +489,7 @@ Deno.test("mig#50: a day with no slots names the picked calendar day, not the vi
     },
   )
   assert(
-    html.includes("No times left on Sunday, 1 November 2026."),
+    /isn(&#39;|')t taking meetings on Sunday, 1 November 2026</.test(html),
     "expected the empty-day line to name the picked day",
   )
   assertFalse(html.includes("Saturday, 31 October 2026"))
@@ -588,4 +588,22 @@ Deno.test("the booking page's main content is the skip link's focusable target",
     ?.[0] ?? ""
   assert(main.includes('id="main"'), main)
   assert(main.includes('tabindex="-1"'), main)
+})
+
+Deno.test("?field= puts the server's message under that form field; any other value keeps the notice", async () => {
+  const at = `date=${bookableDate()}&slot=09:00`
+  const err = encodeURIComponent("Please enter a valid email.")
+  const under = await renderIndex(
+    `http://localhost/?${at}&err=${err}&field=email`,
+  )
+  assertFalse(under.includes('role="alert"'), "no notice")
+  const email = under.match(/<input\b[^>]*\bid="f-email"[^>]*>/)?.[0] ?? ""
+  assert(/\bautofocus\b/.test(email), email)
+  assert(under.includes(">Please enter a valid email.</p>"))
+
+  const notice = await renderIndex(
+    `http://localhost/?${at}&err=${err}&field=date`,
+  )
+  assert(notice.includes('role="alert"'), "an unknown field keeps the notice")
+  assertFalse(/<input\b[^>]*\bautofocus\b/.test(notice))
 })

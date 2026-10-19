@@ -1,5 +1,9 @@
 import { define } from "../../lib/utils.ts"
 import BookingFlow from "../../islands/BookingFlow.tsx"
+import {
+  type FormField,
+  parseFormField,
+} from "../../components/BookingForm.tsx"
 import { gridDay } from "../../components/TimeSlots.tsx"
 import { getCandidateDates, offeredSlots } from "../../lib/availability.ts"
 import { canonicalValidTimeZoneOrNull, isoDateInTz } from "@spy4x/time/tz"
@@ -53,6 +57,8 @@ export interface EmbedData {
   slots: SlotCell[]
   monthAnchor: string
   error: string | null
+  /** The form field `error` is about (`?field=`), when it is one. */
+  errorField: FormField | null
   /** The visitor's IANA zone, once known from the `tz` query param
    *  (mig#15), canonicalized (canonicalValidTimeZoneOrNull) so a
    *  legacy alias or odd casing in the URL always resolves to one
@@ -107,6 +113,7 @@ export const handler = define.handlers({
     const slot = parseSlotParam(url.searchParams.get("slot"))
     const monthParam = parseMonthParam(url.searchParams.get("month"))
     const error = url.searchParams.get("err")
+    const errorField = parseFormField(url.searchParams.get("field"))
 
     // Visitor timezone (mig#15) — the slot list has to render in the
     // visitor's zone from the first paint, not just at submit, and
@@ -191,6 +198,7 @@ export const handler = define.handlers({
         slots,
         monthAnchor,
         error,
+        errorField,
         tz,
         theme,
       },
@@ -237,7 +245,17 @@ export const handler = define.handlers({
   page load. See docs/embedding.md for the parent-side listener.
 */
 export default define.page<typeof handler>(function Embed({ data, state }) {
-  const { date, slot, dates, slots, monthAnchor, error, tz, theme } = data
+  const {
+    date,
+    slot,
+    dates,
+    slots,
+    monthAnchor,
+    error,
+    errorField,
+    tz,
+    theme,
+  } = data
   const cfg = state.config
 
   return (
@@ -299,6 +317,7 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
           hostName={cfg.hostName}
           hostTz={cfg.hostTz}
           error={error}
+          errorField={errorField}
           tz={tz}
           basePath="/embed"
           theme={theme}

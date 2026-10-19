@@ -1,3 +1,4 @@
+import type { Ref } from "preact"
 import { useEffect } from "preact/hooks"
 import { useSignal } from "@preact/signals"
 import { Button } from "@spy4x/preact-ui/button"
@@ -5,12 +6,13 @@ import { Card } from "@spy4x/preact-ui/card"
 import { EmptyState } from "@spy4x/preact-ui/empty-state"
 import { LoadingSpinner } from "@spy4x/preact-ui/loading-spinner"
 import { Notice } from "@spy4x/preact-ui/notice"
+import { useFocusOnChange } from "@spy4x/preact-ui/use-focus-on-change"
 import { useFocusOnError } from "@spy4x/preact-ui/use-focus-on-error"
 import { PickerCalendar } from "../components/PickerCalendar.tsx"
 import { gridDay, TimeSlots } from "../components/TimeSlots.tsx"
 import { DateCard } from "../components/DateCard.tsx"
 import { TimeCard } from "../components/TimeCard.tsx"
-import { BookingForm } from "../components/BookingForm.tsx"
+import { BookingForm, type FormField } from "../components/BookingForm.tsx"
 import { pickerHref, pickerLinks } from "../lib/picker-links.ts"
 import { isoDateInTz, zonedDateTime } from "@spy4x/time/tz"
 import {
@@ -85,6 +87,10 @@ interface BookingFlowProps {
   hostName: string
   hostTz: string
   error: string | null
+  /** The form field `error` is about, from the redirect's `?field=`
+   *  (lib/book.ts's errRedirect). Set, the message shows under that
+   *  field instead of in the step's notice. */
+  errorField?: FormField | null
   /** The visitor's IANA zone, once known from the server-side `tz`
    *  query param (mig#18) — canonicalized the same way /embed does
    *  (routes/index.tsx). `null` when missing or invalid. This is the
@@ -182,6 +188,10 @@ export default function BookingFlow(props: BookingFlowProps) {
   // SSR error prop, but dismissible so a stale error doesn't haunt
   // the visitor after they edit the form.
   const serverError = useSignal<string | null>(props.error)
+  // Counts every pick and clear. Focus follows this, not the step
+  // number: going back to the step the page opened on is a change too,
+  // and useFocusOnChange ignores a return to the mounted value.
+  const stepChanges = useSignal(0)
 
   useEffect(() => {
     mounted.value = true
@@ -189,6 +199,12 @@ export default function BookingFlow(props: BookingFlowProps) {
       guestTz.value = Intl.DateTimeFormat().resolvedOptions().timeZone
     } catch {
       // Empty fallback — server-side stays host-local.
+    }
+    // Hydration moves the server's nodes, which drops the focus that
+    // autofocus gave a step heading or a field. Put it back when nothing
+    // else took it. A frame that never had focus (/embed) is left alone.
+    if (document.hasFocus() && document.activeElement === document.body) {
+      document.querySelector<HTMLElement>("#main [autofocus]")?.focus()
     }
   }, [])
 
@@ -282,6 +298,7 @@ export default function BookingFlow(props: BookingFlowProps) {
     date.value = d
     slot.value = null
     serverError.value = null
+    stepChanges.value++
     pushUrl({ date: d })
     void fetchSlots(d)
   }
@@ -296,6 +313,7 @@ export default function BookingFlow(props: BookingFlowProps) {
     date.value = d
     slot.value = s
     serverError.value = null
+    stepChanges.value++
     pushUrl({ date: d, slot: s })
     // Scroll the booking form into view smoothly. setTimeout gives
     // the new section a tick to render before we measure.
@@ -312,12 +330,14 @@ export default function BookingFlow(props: BookingFlowProps) {
     slot.value = null
     slots.value = []
     serverError.value = null
+    stepChanges.value++
     pushUrl({ date: null, slot: null })
   }
 
   function clearSlot(): void {
     slot.value = null
     serverError.value = null
+    stepChanges.value++
     pushUrl({ date: date.value, slot: null })
   }
 
@@ -458,13 +478,36 @@ export default function BookingFlow(props: BookingFlowProps) {
   // Error banner: serverError (from ?err=… redirect) OR fetchError
   // (slots fetch failed). Both shown inline so the user knows the
   // picker is in a degraded state.
-  const error = serverError.value ?? fetchError.value
+  // A message about one form field shows under that field instead
+  // (BookingForm), and only while the form it came back to is showing.
+  const fieldError = serverError.value && props.errorField
+    ? { field: props.errorField, message: serverError.value }
+    : null
+  const error = fieldError
+    ? fetchError.value
+    : serverError.value ?? fetchError.value
+  // After each pick or clear, focus moves to the heading of the step now
+  // showing, so a screen reader announces where the visitor is.
+  const stepHeading = useFocusOnChange<HTMLHeadingElement>(stepChanges.value)
   // A failed booking or slot fetch lands focus on its message, so a
-  // keyboard or screen reader visitor hears it at once (mig#119).
+  // keyboard or screen reader visitor hears it at once (mig#119). Its
+  // effect runs after the heading's, so an error wins.
   const errorBox = useFocusOnError<HTMLDivElement>(error)
   // The message sits at the top of the step the visitor is on: above the
   // times after a slot conflict, above the form after a refused form.
   const errorStep = !date.value ? 1 : !slot.value ? 2 : 3
+  // Without JavaScript, a page that opens on step 2 or 3 starts with focus
+  // on that step's heading (autofocus), unless a field error puts it on
+  // the field. The island leaves the attribute where the server put it;
+  // a browser applies autofocus once per page load.
+  const openingStep = !props.selectedDate ? 0 : !props.selectedSlot ? 2 : 3
+  const autofocusStep = openingStep === 3 && props.errorField && props.error
+    ? 0
+    : openingStep
+  const headingProps = (step: number) => ({
+    headingRef: step === errorStep ? stepHeading : undefined,
+    autofocus: step === autofocusStep,
+  })
   const notice = error && (
     <div ref={errorBox} tabIndex={-1} class="mb-3 outline-hidden">
       <Notice tone="danger" urgent>{error}</Notice>
@@ -488,6 +531,7 @@ export default function BookingFlow(props: BookingFlowProps) {
         <StepHeader
           step={1}
           label={hasDate ? "Date" : "Choose a date"}
+          {...headingProps(1)}
         />
         <div class="mt-3">
           {errorStep === 1 && notice}
@@ -521,13 +565,11 @@ export default function BookingFlow(props: BookingFlowProps) {
 
       {/* Step 2 — time (only after date picked) */}
       {hasDate && (
-        <section
-          aria-labelledby="step-time"
-          class="scroll-mt-20"
-        >
+        <section aria-labelledby="step-time">
           <StepHeader
             step={2}
             label={hasSlot ? "Time" : "Choose a time"}
+            {...headingProps(2)}
           />
           <div class="mt-3">
             {errorStep === 2 && notice}
@@ -546,7 +588,7 @@ export default function BookingFlow(props: BookingFlowProps) {
               )
               : loading.value
               ? <LoadingSpinner label="Loading times…" />
-              : slotsForDisplay.length > 0
+              : slots.value.some((s) => s.available)
               ? (
                 <TimeSlots
                   date={date.value!}
@@ -564,7 +606,11 @@ export default function BookingFlow(props: BookingFlowProps) {
                 <Card>
                   <EmptyState
                     inset
-                    title={`No times left on ${dateLabel ?? date.value}.`}
+                    title={emptyDayTitle(
+                      slots.value.length > 0,
+                      props.hostName,
+                      dateLabel ?? date.value!,
+                    )}
                     action={interactive
                       ? (
                         <Button
@@ -601,11 +647,8 @@ export default function BookingFlow(props: BookingFlowProps) {
 
       {/* Step 3 — booking form (only after date+slot picked) */}
       {hasDate && hasSlot && (
-        <section
-          aria-labelledby="step-details"
-          class="scroll-mt-20"
-        >
-          <StepHeader step={3} label="Your details" />
+        <section aria-labelledby="step-details">
+          <StepHeader step={3} label="Your details" {...headingProps(3)} />
           <div class="mt-3">
             {errorStep === 3 && notice}
             <BookingForm
@@ -615,6 +658,7 @@ export default function BookingFlow(props: BookingFlowProps) {
               durationMin={props.durationMin}
               hostName={props.hostName}
               error={null}
+              fieldError={fieldError}
               confirmLabel={confirmLabel ?? `Confirm — ${slot.value}`}
               basePath={links.basePath}
               guestTz={links.tz}
@@ -650,9 +694,28 @@ function maxDate(dates: DateCell[], hostTz: string): string {
   return max || isoDateInTz(new Date(), hostTz)
 }
 
+/** The empty day's title: a day with times, all taken, or a day the host
+ *  does not work at all (a weekday off, a blocked date, past the horizon). */
+function emptyDayTitle(
+  hasTimes: boolean,
+  hostName: string,
+  dayLabel: string,
+): string {
+  return hasTimes
+    ? `No times left on ${dayLabel}`
+    : `${hostName} isn't taking meetings on ${dayLabel}`
+}
+
 // A step's number and title. The number is neutral: the brand colour is
 // kept for the one primary action and the picked day (design-language.md).
-function StepHeader({ step, label }: { step: number; label: string }) {
+// The title takes focus after a step change (`tabIndex` -1), without a
+// ring: a heading is not a control.
+function StepHeader({ step, label, headingRef, autofocus }: {
+  step: number
+  label: string
+  headingRef?: Ref<HTMLHeadingElement>
+  autofocus?: boolean
+}) {
   return (
     <div class="flex items-center gap-2">
       <span
@@ -662,8 +725,11 @@ function StepHeader({ step, label }: { step: number; label: string }) {
         {step}
       </span>
       <h2
+        ref={headingRef}
         id={`step-${step === 1 ? "date" : step === 2 ? "time" : "details"}`}
-        class="text-base font-medium text-foreground"
+        tabIndex={-1}
+        autofocus={autofocus || undefined}
+        class="scroll-mt-20 text-base font-medium text-foreground outline-hidden"
       >
         {label}
       </h2>

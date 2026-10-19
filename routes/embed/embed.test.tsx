@@ -114,6 +114,7 @@ function embedData(overrides: Partial<EmbedData>): EmbedData {
     slots: [],
     monthAnchor: "2027-01-01",
     error: null,
+    errorField: null,
     tz: null,
     theme: null,
     ...overrides,

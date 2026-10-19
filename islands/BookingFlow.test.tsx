@@ -1,5 +1,6 @@
 // mig#119 — the booking flow on the library's parts: where a refused
 // booking's message sits, and what a day with no free time offers.
+// mig#125 — where focus starts, and the empty day's two wordings.
 
 import { assert, assertEquals, assertFalse } from "@std/assert"
 import { renderToString } from "preact-render-to-string"
@@ -80,7 +81,7 @@ Deno.test("a day whose every time is taken says so and links back to the calenda
     />,
   )
   const time = section(html, "step-time")
-  assert(time.includes("No times left on Monday, 4 January 2027."))
+  assert(time.includes(">No times left on Monday, 4 January 2027<"), time)
   const link = time.match(/<a\b[^>]*>Choose another date<\/a>/)?.[0]
   assert(link, "expected a 'Choose another date' link")
   assertEquals(link.match(/href="([^"]*)"/)?.[1], "/embed")
@@ -140,4 +141,127 @@ Deno.test("on a phone, Choose another date and Confirm are at least 44 px tall",
       `Confirm on "${basePath}": ${confirm}`,
     )
   }
+})
+
+/** The opening tag of each step heading, by its id. */
+function headings(html: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const tag of html.match(/<h2\b[^>]*>/g) ?? []) {
+    const id = tag.match(/\bid="([^"]*)"/)?.[1]
+    if (id) out[id] = tag
+  }
+  return out
+}
+
+Deno.test("every step heading can take focus without a ring and clears the sticky edge", () => {
+  const html = renderToString(
+    <BookingFlow
+      {...BASE}
+      selectedDate="2027-01-04"
+      selectedSlot="09:30"
+      slots={[{ time: "09:30", available: true }]}
+      error={null}
+    />,
+  )
+  const tags = headings(html)
+  assertEquals(Object.keys(tags).sort(), [
+    "step-date",
+    "step-details",
+    "step-time",
+  ])
+  for (const [id, tag] of Object.entries(tags)) {
+    assert(tag.includes('tabindex="-1"'), `${id}: ${tag}`)
+    assert(tag.includes("outline-hidden"), `${id}: ${tag}`)
+    assert(tag.includes("scroll-mt-20"), `${id}: ${tag}`)
+  }
+  assertFalse(
+    /<section\b[^>]*scroll-mt-20/.test(html),
+    "the scroll margin is on the heading, not the section",
+  )
+})
+
+Deno.test("without JavaScript, a page opened on a step starts with focus on its heading", () => {
+  const cases: Array<[string | null, string | null, string | null]> = [
+    [null, null, null],
+    ["2027-01-04", null, "step-time"],
+    ["2027-01-04", "09:30", "step-details"],
+  ]
+  for (const [date, slot, expected] of cases) {
+    const html = renderToString(
+      <BookingFlow
+        {...BASE}
+        selectedDate={date}
+        selectedSlot={slot}
+        slots={[{ time: "09:30", available: true }]}
+        error={null}
+      />,
+    )
+    const focused = Object.entries(headings(html))
+      .filter(([, tag]) => /\bautofocus\b/.test(tag))
+      .map(([id]) => id)
+    assertEquals(focused, expected ? [expected] : [], `${date} ${slot}`)
+  }
+})
+
+Deno.test("a server message about one field shows under it, focused, with no notice", () => {
+  for (const field of ["name", "email", "notes"] as const) {
+    const html = renderToString(
+      <BookingFlow
+        {...BASE}
+        selectedDate="2027-01-04"
+        selectedSlot="09:30"
+        slots={[{ time: "09:30", available: true }]}
+        error="Enter a name of 100 characters or fewer."
+        errorField={field}
+      />,
+    )
+    const details = section(html, "step-details")
+    assertFalse(details.includes('role="alert"'), `${field}: no notice`)
+    const control = details.match(
+      new RegExp(`<(input|textarea)\\b[^>]*\\bid="f-${field}"[^>]*>`),
+    )?.[0]
+    assert(control, `${field}: expected the control`)
+    assert(/\bautofocus\b/.test(control), `${field}: ${control}`)
+    const describedBy = control.match(/aria-describedby="([^"]*)"/)?.[1]
+    assert(describedBy, `${field}: the message describes the control`)
+    const message = details.match(
+      new RegExp(`<p\\b[^>]*id="${describedBy.split(" ")[0]}"[^>]*>([^<]*)<`),
+    )?.[1]
+    assertEquals(message, "Enter a name of 100 characters or fewer.", field)
+    assertEquals(
+      html.match(/\bautofocus\b/g)?.length,
+      1,
+      `${field}: only the field takes focus, not the heading`,
+    )
+  }
+})
+
+Deno.test("a message about no field stays in the step's notice", () => {
+  const html = renderToString(
+    <BookingFlow
+      {...BASE}
+      selectedDate="2027-01-04"
+      selectedSlot="09:30"
+      slots={[{ time: "09:30", available: true }]}
+      error="Too many attempts. Try again in 5 minutes."
+      errorField={null}
+    />,
+  )
+  const details = section(html, "step-details")
+  assert(details.includes('role="alert"'))
+  assertFalse(/<input\b[^>]*\bautofocus\b/.test(details))
+})
+
+Deno.test("a day the host does not work says so, by name, without a period", () => {
+  const html = renderToString(
+    <BookingFlow {...BASE} selectedDate="2027-01-09" slots={[]} error={null} />,
+  )
+  const time = section(html, "step-time")
+  assert(
+    /<h3\b[^>]*>Jane Doe isn(&#39;|')t taking meetings on Saturday, 9 January 2027<\/h3>/
+      .test(time),
+    time,
+  )
+  assertFalse(time.includes("No times left"))
+  assert(/<a\b[^>]*>Choose another date<\/a>/.test(time))
 })
