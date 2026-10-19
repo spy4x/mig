@@ -1,3 +1,13 @@
+# Runs on pull requests into main, pushes to main, release tags and manual runs.
+# `branch` matches a pull request by its target branch, so a commit on a PR
+# branch builds once, as a pull_request, not again as a push.
+when:
+  - event: [push, pull_request]
+    branch: main
+  - event: tag
+    ref: refs/tags/v[0-9]*
+  - event: manual
+
 steps:
   # Stops a mistaken release: a tag pushed on a commit that is not on main fails
   # here, before build and push. It is not a security boundary. Woodpecker reads
