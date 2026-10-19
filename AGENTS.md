@@ -97,7 +97,7 @@ src/
 │   ├── height-report-script.ts — /embed's postMessage height-reporting script
 │   └── booked-report-script.ts — /embed/confirmed's one-time mig:booked postMessage script
 ├── components/              — server-side Preact components (no hydration); PickerCalendar wires
-│                              the library's Calendar to the picker links; Header draws BrandMark
+│                              the library's Calendar to the picker links; Header: SiteHeader, BrandMark
 ├── scripts/screenshots.ts   — writes the README pictures (see "Screenshots")
 ├── scripts/embed-check.ts   — /embed in a real browser, with and without JS
 ├── scripts/local-app.ts     — SMTP sink + server helpers for both scripts
@@ -129,19 +129,21 @@ src/
   design-system packages `@spy4x/preact-ui` (`Button`, `Card`, `BrandMark`,
   `ThemeToggle`, `Notice`, `EmptyState`, `ErrorState`, `Field`, `Input`,
   `Textarea`, `LoadingSpinner`, `useFocusOnError`, `honeypotField`),
-  `@spy4x/preact-system` (`Calendar`, `SEOHead`), `@spy4x/preact-icons` and
-  `@spy4x/preact-theme` (tokens, preset, the ink palette and the Vite plugins in
-  `vite.config.ts`). Before writing a helper or a component, check whether one
-  of those already has it. Anything else needs a comment.
+  `@spy4x/preact-system` (`Calendar`, `SiteHeader`, `SEOHead`),
+  `@spy4x/preact-icons` and `@spy4x/preact-theme` (tokens, preset, the ink
+  palette and the Vite plugins in `vite.config.ts`). Before writing a helper or
+  a component, check whether one of those already has it. Anything else needs a
+  comment.
 - **Colours.** mig's teal, `oklch(0.5 0.09 178)` (`#097463`), reaches the
   library's components through the library's own tokens: `static/styles.css`
-  sets `--color-primary` and `--color-accent` on `:root` after the theme's
-  `@import` lines, and nothing else. Neutrals are the library's: cool gray in
-  light, the ink palette in dark (`<html data-theme="ink">` on every page, so
-  `.dark` alone switches it; /embed's forced theme is `data-forced-theme`).
-  Fonts are Geist, self-hosted in `static/fonts/`. The emails' links are
-  `#46bba5`. A page background is `bg-canvas`, a card is `bg-surface`; never
-  write the library's purple or gray classes in mig's own markup.
+  sets `--color-primary`, `--color-accent` and the fields' focus ring
+  `--color-primary-muted` after the theme's `@import` lines, and nothing else.
+  Neutrals are the library's: cool gray in light, the ink palette in dark
+  (`<html data-theme="ink">` on every page, so `.dark` alone switches it;
+  /embed's forced theme is `data-forced-theme`). Fonts are Geist, self-hosted in
+  `static/fonts/`. The emails' links are `#46bba5`. A page background is
+  `bg-canvas`, a card is `bg-surface`; never write the library's purple or gray
+  classes in mig's own markup.
 - **One `@preact/signals`.** `@spy4x/preact-signals` (and every other
   `@spy4x/preact-*` package, at 8.x) imports `npm:@preact/signals@^2.5.1`. A
   second copy next to mig's own hooks into Preact twice and server rendering
