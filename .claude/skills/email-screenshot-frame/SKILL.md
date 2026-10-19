@@ -37,11 +37,11 @@ One 760 px card, centred, 40 px from the top, on a near-black page:
    joins, in the muted colour. They are decoration: no buttons, no labels, since
    nobody can click a picture.
 2. **Subject.** 20 px, semibold, in the ink colour.
-3. **Sender row.** A 40 px round avatar in mig's orange with the sender name's
-   first letter in the page colour; next to it the sender name (semibold) with
-   the address muted in angle brackets, and below that `to <recipient>`, muted.
-   The sender name and address are split from the `From` header; a header
-   without angle brackets shows whole as the name.
+3. **Sender row.** A 40 px round avatar in mig's teal link colour with the
+   sender name's first letter in the page colour; next to it the sender name
+   (semibold) with the address muted in angle brackets, and below that
+   `to <recipient>`, muted. The sender name and address are split from the
+   `From` header; a header without angle brackets shows whole as the name.
 4. **Attachment chip.** A bordered pill with a file icon, `meeting.ics` and a
    muted "Calendar invite", because every confirmation carries the `.ics`
    invite.
@@ -64,7 +64,7 @@ Tailwind's slate scale, kept in `MAIL_FRAME` in the script:
 | Lines and borders         | `#1e293b` |
 | Ink (subject, names)      | `#e2e8f0` |
 | Muted (icons, addresses)  | `#94a3b8` |
-| Avatar                    | `#f97316` |
+| Avatar                    | `#46bba5` |
 
 The card uses the email's own background, so the frame and the email read as one
 surface split by lines, not two boxes. If `lib/email.ts` changes its background,

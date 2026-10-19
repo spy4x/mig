@@ -202,7 +202,7 @@ const MAIL_FRAME = {
   line: "#1e293b",
   ink: "#e2e8f0",
   muted: "#94a3b8",
-  accent: "#f97316",
+  accent: "#46bba5",
 }
 
 /** One toolbar icon: a 20px stroked SVG path, the way mail clients draw them. */
