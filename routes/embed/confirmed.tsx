@@ -71,8 +71,7 @@ export default define.page<typeof handler>(
           slotDurationMin={cfg.slotDurationMin}
           backHref={pickerHref("/embed", undefined, null, theme)}
           cancelTarget="_blank"
-          cancelledMainClass="flex-1 px-4 py-4 sm:px-6 sm:py-6"
-          mainId="main"
+          cancelledMainClass="flex-1 px-4 py-4 outline-hidden sm:px-6 sm:py-6"
         />
       </div>
     )

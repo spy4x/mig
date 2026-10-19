@@ -21,7 +21,11 @@ export default define.page(function NotFound({ state, url }) {
         defaultTheme={cfg.theme}
         themeToggle={forcedThemeFor(url, cfg.theme) === null}
       />
-      <main class="flex-1 px-4 py-12 sm:px-6">
+      <main
+        id="main"
+        tabIndex={-1}
+        class="flex-1 px-4 py-12 outline-hidden sm:px-6"
+      >
         <div class="mx-auto w-full max-w-md text-center">
           <p class="mb-2 text-sm font-medium text-muted tabular-nums">404</p>
           <h1 class="mb-4 text-2xl font-semibold tracking-tight text-foreground">

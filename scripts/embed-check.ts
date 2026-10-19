@@ -5,6 +5,8 @@
 //     without a page load, the address stays under /embed with its
 //     `tz` and `theme`, and the frame posts a new `mig:height` after
 //     each step;
+//   - with JavaScript, each pick or "Change" moves focus to the heading
+//     of the step now showing (mig#125);
 //   - with JavaScript, the form still books and lands on
 //     /embed/confirmed;
 //   - without JavaScript, the same flow books end to end through
@@ -77,6 +79,11 @@ const DATE_CELL =
 const SLOT =
   `section[aria-labelledby="step-time"] :is(button, a):not([aria-disabled="true"])`
 const FORM = `form[aria-label="Booking details"]`
+
+/** The id of the element that has focus inside the frame. */
+function focusedId(frame: Frame): Promise<unknown> {
+  return frame.evaluate(`document.activeElement?.id ?? ""`)
+}
 
 /** The first fully bookable weekday after today, from the calendar. */
 async function pickableDate(frame: Frame): Promise<string> {
@@ -175,6 +182,10 @@ async function withJavaScript(browser: Browser, local: string, smtp: {
       h1 !== undefined && h1 !== h0,
       `the frame reports a new height after the day step (${h0} → ${h1})`,
     )
+    check(
+      await focusedId(frame) === "step-time",
+      "choosing a day moves focus to the Choose a time heading",
+    )
 
     const slot = frame.locator(
       `section[aria-labelledby="step-time"] button:not([disabled])`,
@@ -196,6 +207,10 @@ async function withJavaScript(browser: Browser, local: string, smtp: {
     check(
       h2 !== undefined && h2 !== h1,
       `the frame reports a new height after the time step (${h1} → ${h2})`,
+    )
+    check(
+      await focusedId(frame) === "step-details",
+      "choosing a time moves focus to the Your details heading",
     )
     check(
       await frame.locator(FORM).getAttribute("action") === "/embed/book",
@@ -220,8 +235,22 @@ async function withJavaScript(browser: Browser, local: string, smtp: {
         h3 !== undefined && h2 !== undefined && h3 < h2,
       `going back to the calendar shrinks the frame without a page load (${h2} → ${h3})`,
     )
+    check(
+      await focusedId(frame) === "step-date",
+      "Change on the day moves focus to the Choose a date heading",
+    )
 
     await frame.locator(`button[data-calendar-date="${date}"]`).click()
+    await frame.locator(
+      `section[aria-labelledby="step-time"] button:not([disabled])`,
+    ).first()
+      .click()
+    await frame.locator(`button[aria-label="Change time"]`).click()
+    await frame.locator(SLOT).first().waitFor()
+    check(
+      await focusedId(frame) === "step-time",
+      "Change on the time moves focus to the Choose a time heading",
+    )
     await frame.locator(
       `section[aria-labelledby="step-time"] button:not([disabled])`,
     ).first()

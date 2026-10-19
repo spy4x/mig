@@ -42,16 +42,14 @@ export interface ConfirmedViewProps extends ConfirmedData {
    *  component existed. /embed passes a tighter class list to
    *  match its own denser layout. */
   cancelledMainClass?: string
-  /** id for every state's <main>. The standalone page's own <main>
-   *  never had one (matching routes/index.tsx would be a separate,
-   *  pre-existing gap this issue doesn't cover), so this defaults to
-   *  undefined there; /embed passes "main" so its Skip-to-content
-   *  link (routes/_app.tsx, #main) has a target on every state of
-   *  /embed/confirmed, not just the picker. */
-  mainId?: string
 }
 
-const DEFAULT_CANCELLED_MAIN_CLASS = "flex-1 px-4 py-12 sm:px-6"
+/** Every state's <main> is the "Skip to content" link's target
+ *  (routes/_app.tsx, #main). `tabIndex` -1 lets Safari and screen
+ *  readers move there, and the outline stays off: it is not a control. */
+const MAIN_TARGET = { id: "main", tabIndex: -1 } as const
+
+const DEFAULT_CANCELLED_MAIN_CLASS = "flex-1 px-4 py-12 outline-hidden sm:px-6"
 
 export function ConfirmedView(props: ConfirmedViewProps) {
   const {
@@ -64,7 +62,6 @@ export function ConfirmedView(props: ConfirmedViewProps) {
     backHref,
     cancelTarget,
     cancelledMainClass = DEFAULT_CANCELLED_MAIN_CLASS,
-    mainId,
   } = props
 
   if (state !== "ok" || !booking) {
@@ -72,7 +69,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
     // can do the same thing about each, and the difference tells a
     // stranger nothing they need.
     return (
-      <main id={mainId} class="flex-1 px-4 py-12 sm:px-6">
+      <main {...MAIN_TARGET} class="flex-1 px-4 py-12 outline-hidden sm:px-6">
         <div class="mx-auto w-full max-w-md text-center">
           <h1 class="text-2xl font-semibold tracking-tight text-balance text-foreground">
             We couldn't find this booking
@@ -115,7 +112,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
 
   if (mode === "cancelled") {
     return (
-      <main id={mainId} class={cancelledMainClass}>
+      <main {...MAIN_TARGET} class={cancelledMainClass}>
         <div class="mx-auto w-full max-w-md text-center">
           <div class="mb-4 inline-flex size-12 items-center justify-center rounded-full border border-subtle bg-surface text-muted">
             <IconMinus class="size-6" />
@@ -141,7 +138,7 @@ export function ConfirmedView(props: ConfirmedViewProps) {
   }
 
   return (
-    <main id={mainId} class="flex-1 px-4 py-12 sm:px-6">
+    <main {...MAIN_TARGET} class="flex-1 px-4 py-12 outline-hidden sm:px-6">
       <div class="mx-auto w-full max-w-md">
         <div class="text-center">
           <div class="mb-4 inline-flex size-12 items-center justify-center rounded-full bg-success-soft text-success">
@@ -185,7 +182,10 @@ export function ConfirmedView(props: ConfirmedViewProps) {
           </p>
         )}
 
-        <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-between">
+        {
+          /* Stacked and full width on a phone, one centred row from sm. */
+        }
+        <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
           <Button href={backHref} variant="outline" class="min-h-11 sm:min-h-9">
             Book another time
           </Button>

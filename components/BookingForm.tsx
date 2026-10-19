@@ -39,6 +39,17 @@ import { guestTzCaptureScript } from "../lib/guest-tz-script.ts"
 
 const GUEST_TZ_INPUT_ID = "mig-embed-guest-tz"
 
+/** The form fields a server message can be about (`?field=` on the
+ *  redirect, lib/book.ts). */
+export type FormField = "name" | "email" | "notes"
+
+/** Reads `?field=`: only the three form fields count, anything else is none. */
+export function parseFormField(value: string | null): FormField | null {
+  return value === "name" || value === "email" || value === "notes"
+    ? value
+    : null
+}
+
 interface BookingFormProps {
   date: string
   slot: string
@@ -47,6 +58,9 @@ interface BookingFormProps {
   hostName: string
   /** Server-rendered inline error from ?err= query param. */
   error?: string | null
+  /** A server message about one field (`?err=` with `?field=`): shown
+   *  under that field, which the page opens with focus on. */
+  fieldError?: { field: FormField; message: string } | null
   /** Pre-computed confirm button label — "Confirm — Fri, 28 Aug,
    *  14:00". Computed by the route so it stays in lockstep with
    *  the rest of the host-local time presentation. */
@@ -79,6 +93,7 @@ export function BookingForm({
   durationMin,
   hostName,
   error,
+  fieldError,
   confirmLabel,
   basePath = "",
   guestTz,
@@ -88,7 +103,14 @@ export function BookingForm({
   const action = embed ? `${basePath}/book` : "/api/book"
   // What the standalone submit button found wrong, shown under each
   // field (BookingSubmit moves focus to the first one).
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  // It starts with the server's message about one field, if any.
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>(
+    fieldError ? { [fieldError.field]: fieldError.message } : {},
+  )
+  // A browser applies autofocus once, on page load, which is the only
+  // time a server message arrives.
+  const autofocus = (field: FormField) =>
+    fieldError?.field === field || undefined
   return (
     <Card>
       <div class="border-b border-subtle px-4 py-3 sm:px-6">
@@ -122,6 +144,7 @@ export function BookingForm({
               minLength={2}
               maxLength={100}
               autocomplete="name"
+              autofocus={autofocus("name")}
               placeholder="Your full name"
             />
           </Field>
@@ -131,12 +154,19 @@ export function BookingForm({
               type="email"
               required
               autocomplete="email"
+              autofocus={autofocus("email")}
               placeholder="jane@example.com"
             />
           </Field>
-          <Field id="f-notes" label="Notes" hint="Optional">
+          <Field
+            id="f-notes"
+            label="Notes"
+            hint="Optional"
+            error={fieldErrors.notes}
+          >
             <Textarea
               name="notes"
+              autofocus={autofocus("notes")}
               rows={3}
               maxLength={500}
               placeholder="Anything I should know before we meet?"

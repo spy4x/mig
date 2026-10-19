@@ -60,9 +60,8 @@ const NameRule = type("string").pipe((s: string, ctx) => {
     return ctx.reject({ message: "Please enter your name." })
   }
   if (trimmed.length > 100) {
-    return ctx.reject({
-      message: "String must contain at most 100 character(s)",
-    })
+    // The same words the submit button uses (islands/BookingSubmit.tsx).
+    return ctx.reject({ message: "Enter a name of 100 characters or fewer." })
   }
   if (hasHeaderControlCharacters(trimmed)) {
     return ctx.reject({ message: "Name contains unsupported characters." })
@@ -89,7 +88,7 @@ export const NOTES_MAX_LENGTH = 500
 
 const NotesRule = type("string").pipe((s: string, ctx) => {
   if (s.length > NOTES_MAX_LENGTH) {
-    return ctx.reject({ message: "Notes must be 500 characters or less." })
+    return ctx.reject({ message: "Enter notes of 500 characters or fewer." })
   }
   if (hasTextControlCharacters(s)) {
     return ctx.reject({ message: "Notes contain unsupported characters." })

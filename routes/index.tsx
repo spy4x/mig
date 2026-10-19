@@ -2,6 +2,7 @@ import { define } from "../lib/utils.ts"
 import { Header } from "../components/Header.tsx"
 import { Footer } from "../components/Footer.tsx"
 import BookingFlow from "../islands/BookingFlow.tsx"
+import { parseFormField } from "../components/BookingForm.tsx"
 import { gridDay } from "../components/TimeSlots.tsx"
 import { getCandidateDates, offeredSlots } from "../lib/availability.ts"
 import { canonicalValidTimeZoneOrNull, isoDateInTz } from "@spy4x/time/tz"
@@ -71,6 +72,7 @@ export default define.page(function Index(ctx) {
   const date = parseDateParam(url.searchParams.get("date"), cfg.hostTz)
   const slot = parseSlotParam(url.searchParams.get("slot"))
   const error = url.searchParams.get("err")
+  const errorField = parseFormField(url.searchParams.get("field"))
   const monthParam = parseMonthParam(url.searchParams.get("month"))
 
   // Visitor timezone (mig#18) — read and validated the same way
@@ -159,7 +161,7 @@ export default define.page(function Index(ctx) {
     <div class="min-h-dvh flex flex-col">
       <Header defaultTheme={cfg.theme} />
 
-      <main id="main" class="flex-1">
+      <main id="main" tabIndex={-1} class="flex-1 outline-hidden">
         <div class="mx-auto w-full max-w-2xl px-4 pt-8 sm:px-6 sm:pt-12">
           <Hero
             hostName={cfg.hostName}
@@ -198,6 +200,7 @@ export default define.page(function Index(ctx) {
               hostName={cfg.hostName}
               hostTz={cfg.hostTz}
               error={error}
+              errorField={errorField}
               tz={tz}
             />
           </div>

@@ -8,7 +8,12 @@
 // below asserts the `Location` header's pathname, not just "success".
 
 import type { SmtpTransport } from "@spy4x/email/smtp"
-import { assert, assertEquals, assertStringIncludes } from "@std/assert"
+import {
+  assert,
+  assertEquals,
+  assertFalse,
+  assertStringIncludes,
+} from "@std/assert"
 import type { Context } from "fresh"
 import type { State } from "./utils.ts"
 import type { Config } from "./types.ts"
@@ -2132,4 +2137,58 @@ Deno.test("mig#113: a date past the booking horizon is refused and stores nothin
     (await book(addDays(today, 14, HOST_TZ))).headers.get("location")!,
   )
   assertEquals(last.pathname, "/confirmed")
+})
+
+// ─── mig#125: a message about one field names that field ─────────────
+
+/** The redirect a submission with these fields gets, as a URL. */
+async function redirectFor(
+  overrides: Record<string, string>,
+  slot = "09:00",
+): Promise<URL> {
+  await using file = await tempDataFile()
+  const bookings = new BookingsStore({ filePath: file.path })
+  await bookings.init()
+  const ctx = stubContext({
+    config: fakeConfig(),
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    fields: validFields(futureWeekday(3, HOST_TZ), slot, overrides),
+  })
+  const res = await handleBookingSubmit(ctx, "")
+  assertEquals(res.status, 303)
+  return new URL(res.headers.get("location")!)
+}
+
+Deno.test("a refused name, email or notes sends the visitor back with that field named", async () => {
+  const cases: Array<[Record<string, string>, string]> = [
+    [{ name: "B".repeat(101) }, "name"],
+    [{ email: "not-an-address" }, "email"],
+    [{ notes: "N".repeat(501) }, "notes"],
+  ]
+  for (const [overrides, field] of cases) {
+    const url = await redirectFor(overrides)
+    assertEquals(url.searchParams.get("field"), field, url.search)
+    assert(url.searchParams.get("err"), `${field}: expected a message`)
+  }
+})
+
+Deno.test("a refused field's value never rides on the redirect", async () => {
+  const name = "B".repeat(101)
+  const url = await redirectFor({ name, email: "visitor@example.com" })
+  assertEquals(url.searchParams.get("field"), "name")
+  for (const value of url.searchParams.values()) {
+    assertFalse(value.includes(name), `name in the URL: ${url.search}`)
+    assertFalse(value.includes("visitor@example.com"), `email in the URL`)
+  }
+})
+
+Deno.test("a failure that is not about a form field names no field", async () => {
+  // A bad time format (the slot, not a field the visitor types) and a
+  // time outside the working hours.
+  for (const slot of ["9am", "08:00"]) {
+    const url = await redirectFor({}, slot)
+    assert(url.searchParams.get("err"), slot)
+    assertEquals(url.searchParams.get("field"), null, slot)
+  }
 })

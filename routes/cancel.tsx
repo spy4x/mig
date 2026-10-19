@@ -171,7 +171,11 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
     return (
       <div class="min-h-dvh flex flex-col">
         <Header defaultTheme={cfg.theme} />
-        <main class="flex-1 px-4 py-12 sm:px-6">
+        <main
+          id="main"
+          tabIndex={-1}
+          class="flex-1 px-4 py-12 outline-hidden sm:px-6"
+        >
           <div class="mx-auto w-full max-w-md text-center">
             <div class="mb-4 inline-flex size-12 items-center justify-center rounded-full border border-subtle bg-surface text-muted">
               <IconInformationCircle class="size-6" />
@@ -217,7 +221,11 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
   return (
     <div class="min-h-dvh flex flex-col">
       <Header defaultTheme={cfg.theme} />
-      <main class="flex-1 px-4 py-12 sm:px-6">
+      <main
+        id="main"
+        tabIndex={-1}
+        class="flex-1 px-4 py-12 outline-hidden sm:px-6"
+      >
         <div class="mx-auto w-full max-w-md">
           <Card>
             <div class="border-b border-subtle px-4 py-4 sm:px-6">

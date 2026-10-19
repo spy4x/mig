@@ -80,7 +80,7 @@ src/
 │   └── ThemeToggle.tsx      — the library's ThemeToggle on mig's theme store
 ├── lib/
 │   ├── config.ts            — env parsing: arktype schema read through @spy4x/server's loadConfig
-│   ├── config-issue.ts      — mig's fixed startup wording for four variables, over ConfigError.issues
+│   ├── config-issue.ts      — mig's fixed startup wording per variable, over ConfigError.issues
 │   ├── availability.ts      — weekly pattern + blocked-dates parser
 │   ├── bookings.ts          — JSON store (mutex + atomic write: @spy4x/platform)
 │   ├── cancel-token.ts      — whose cancel link (guest's or owner's) a token is
