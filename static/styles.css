@@ -13,19 +13,30 @@
 
 /* Geist, self-hosted (static/fonts, OFL.txt beside it). The fallback face
    is Arial resized to Geist's metrics, so the swap does not move the
-   layout. Only the sans file is preloaded (routes/_app.tsx). */
+   layout.
+
+   static/fonts/Geist-Variable.woff2 is the geist npm package 1.8.1's
+   dist/fonts/geist-sans/Geist-Variable.woff2, narrowed to the weights
+   mig uses (400 to 700) and cut to Latin and Latin Extended (no
+   Cyrillic, Greek or Vietnamese): 70 KB down to 29 KB.
+
+     F='fonttools[woff]==4.60.1'
+     uvx --from "$F" fonttools varLib.instancer Geist-Variable.woff2 \
+       wght=400:700 -o Geist-400-700.ttf
+     uvx --from "$F" pyftsubset Geist-400-700.ttf \
+       --unicodes='U+0000-00FF,U+0100-02BA,U+02BB-02BC,U+02BD-02C5,U+02C6,U+02C7-02CC,U+02CE-02D7,U+02DA,U+02DC,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2000-206F,U+20A0-20C0,U+2113,U+2122,U+2190-2193,U+2212,U+2215,U+2C60-2C7F,U+A720-A7FF,U+FEFF,U+FFFD' \
+       --layout-features='*' --flavor=woff2 \
+       --output-file=static/fonts/Geist-Variable.woff2
+
+   The file is not preloaded: a preload made it compete with the
+   stylesheet and delayed the first paint, and the fallback face above
+   keeps the swap from moving anything.
+
+   No page sets text in a monospace face, so Geist Mono is not shipped. */
 @font-face {
   font-family: "Geist";
   src: url("/fonts/Geist-Variable.woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Geist Mono";
-  src: url("/fonts/GeistMono-Variable.woff2") format("woff2");
-  font-weight: 100 900;
+  font-weight: 400 700;
   font-style: normal;
   font-display: swap;
 }
@@ -41,7 +52,6 @@
 
 @theme {
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* mig's brand hue, teal 178° (design-language.md, "Hues assigned"). Both

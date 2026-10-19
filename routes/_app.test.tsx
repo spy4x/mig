@@ -288,3 +288,11 @@ Deno.test("App: the browser chrome colour is each palette's canvas", () => {
     "dark theme-color",
   )
 })
+
+Deno.test("App: no font preload competes with the stylesheet for the first paint", () => {
+  // mig#119 review: preloading Geist delayed the largest paint on `/`
+  // under Lighthouse's mobile throttling; the metric-matched fallback
+  // face carries the first paint instead.
+  const html = renderToString(<App {...fakeAppProps("/")} />)
+  assertFalse(/<link\b[^>]*rel="preload"[^>]*as="font"/.test(html), html)
+})

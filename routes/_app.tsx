@@ -78,13 +78,6 @@ export default define.page(function App({ Component, state, url }) {
           type="image/svg+xml"
           href="/favicon.svg"
         />
-        <link
-          rel="preload"
-          href="/fonts/Geist-Variable.woff2"
-          as="font"
-          type="font/woff2"
-          crossorigin="anonymous"
-        />
 
         {
           /* The canvas before the stylesheet arrives, so neither palette
