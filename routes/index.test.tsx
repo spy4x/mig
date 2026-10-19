@@ -592,14 +592,16 @@ Deno.test("the booking page's main content is the skip link's focusable target",
 
 Deno.test("?field= puts the server's message under that form field; any other value keeps the notice", async () => {
   const at = `date=${bookableDate()}&slot=09:00`
-  const err = encodeURIComponent("Please enter a valid email.")
+  const err = encodeURIComponent(
+    "Enter an email address like name@example.com.",
+  )
   const under = await renderIndex(
     `http://localhost/?${at}&err=${err}&field=email`,
   )
   assertFalse(under.includes('role="alert"'), "no notice")
   const email = under.match(/<input\b[^>]*\bid="f-email"[^>]*>/)?.[0] ?? ""
   assert(/\bautofocus\b/.test(email), email)
-  assert(under.includes(">Please enter a valid email.</p>"))
+  assert(under.includes(">Enter an email address like name@example.com.</p>"))
 
   const notice = await renderIndex(
     `http://localhost/?${at}&err=${err}&field=date`,
