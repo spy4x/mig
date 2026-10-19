@@ -18,8 +18,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are listed, and a day with none says so and offers another date.
 - A form mistake shows under its field, and focus moves there; a time taken just
   before you confirmed shows its message above the remaining times.
-- The confirmation page names the host, and a cancelled booking shows the reason
-  given. The floating date chip on phones is gone.
+- The confirmation page names the host, and a broken link gets a clear title.
+  The floating date chip on phones is gone, and the main buttons are 44 px tall
+  on a phone.
 
 ## [2.0.0] - 2026-10-19
 
