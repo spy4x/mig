@@ -511,7 +511,7 @@ The guest's confirmation email failed to send, so the booking was removed and th
              font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
              font-size:16px;line-height:1.6">
 <div style="max-width:480px;margin:0 auto">
-<div style="margin-bottom:16px"><a href="https://github.com/spy4x/mig" style="color:#f97316;font-weight:600;text-decoration:none">mig</a></div>
+<div style="margin-bottom:16px"><a href="https://github.com/spy4x/mig" style="color:#46bba5;font-weight:600;text-decoration:none">mig</a></div>
 
     <p>Hi Host,</p>
     <p>The booking below was <strong>NOT</strong> created after all.</p>
@@ -572,7 +572,7 @@ The guest's confirmation email failed to send, and removing the booking failed t
              font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;
              font-size:16px;line-height:1.6">
 <div style="max-width:480px;margin:0 auto">
-<div style="margin-bottom:16px"><a href="https://github.com/spy4x/mig" style="color:#f97316;font-weight:600;text-decoration:none">mig</a></div>
+<div style="margin-bottom:16px"><a href="https://github.com/spy4x/mig" style="color:#46bba5;font-weight:600;text-decoration:none">mig</a></div>
 
     <p>Hi Host,</p>
     <p>The booking below was <strong>NOT</strong> confirmed.</p>
@@ -692,5 +692,40 @@ Deno.test("the invite attachment's Content-Type carries a charset and the calend
       "text/calendar; charset=utf-8; method=REQUEST",
     )
     assertStringIncludes(invite.content, "METHOD:REQUEST")
+  }
+})
+
+Deno.test("mig#119: every link in the booking and cancellation emails is mig's teal, none orange", () => {
+  const booked = buildBookingEmails(
+    makeConfig(),
+    makeBooking("America/New_York"),
+    "https://mig.example.com/cancel",
+  )
+  const cancelled = buildCancellationEmails(
+    makeConfig(),
+    makeBooking("America/New_York"),
+    "guest",
+    undefined,
+  )
+  for (
+    const html of [
+      booked.guest.html,
+      booked.owner.html,
+      cancelled.guest.html,
+      cancelled.owner.html,
+    ]
+  ) {
+    const colours = [
+      ...(html ?? "").matchAll(/<a\b[^>]*style="color:(#[0-9a-f]{6})/gi),
+    ]
+      .map((m) => m[1].toLowerCase())
+    // The signature link is the quiet muted grey on purpose; every other link is the brand's.
+    const brand = colours.filter((c) => c !== "#64748b")
+    assertEquals(
+      brand.length > 0,
+      true,
+      "expected at least one brand-coloured link",
+    )
+    assertEquals([...new Set(brand)], ["#46bba5"])
   }
 })
