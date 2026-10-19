@@ -535,6 +535,9 @@ Deno.test("mig#50: when no slot falls on the clicked day in the visitor's zone, 
 // how a person reached a working form for a date past the horizon.
 Deno.test("mig#113: standalone / offers no slot for a date past the booking horizon", async () => {
   const cfg = {
+    // "Today" below is Berlin's, so the host must be in Berlin too: with the
+    // default host zone the two dates differ for hours each day.
+    hostTz: "Europe/Berlin",
     weeklyAvailability: parseWeeklyAvailability("MON-SUN 09:00-17:00"),
     bookingHorizonDays: 14,
   }
