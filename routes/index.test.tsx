@@ -35,17 +35,20 @@ function bookableDate(): string {
 }
 
 // mig#48 review: scoped to TimeSlots.tsx's own header element
-// (`<p class="text-xs text-ink-subtle mt-0.5">{zoneLabel}</p>`) —
+// (`<p data-grid-zone>Times in {zoneLabel}</p>`) —
 // never a whole-page `html.includes(...)`, since the same zone string
 // also appears (correctly) inside every slot's `aria-label`; an
 // `includes` check would keep passing even if the header itself were
 // removed. `null` when the header isn't rendered at all.
 function gridHeaderZoneLabel(html: string): string | null {
   const m = html.match(
-    /<p class="text-xs text-ink-subtle mt-0\.5">([^<]*)<\/p>/,
+    /<p\b[^>]*\bdata-grid-zone=""[^>]*>Times in ([^<]*)<\/p>/,
   )
   return m ? m[1] : null
 }
+
+/** Hours of notice that put the fixed test dates, now in the past, back inside the bookable window. */
+const PAST_DATES_BOOKABLE = -24 * 366 * 100
 
 function fakeConfig(): Config {
   return {
@@ -56,7 +59,11 @@ function fakeConfig(): Config {
     publicUrl: "https://mig.example.com",
     weeklyAvailability: parseWeeklyAvailability("MON-FRI 09:00-17:00"),
     slotDurationMin: 30,
-    minNoticeHours: 1,
+    // A notice reaching a century back keeps every slot of the fixed,
+    // already past test dates bookable: the picker hides a time that
+    // cannot be booked (mig#119), and these tests read the labels of
+    // the times it shows, whatever day the suite runs on.
+    minNoticeHours: PAST_DATES_BOOKABLE,
     bookingHorizonDays: 60,
     blockedDates: new Set<string>(),
     rateLimitPer5Min: 10,
@@ -174,12 +181,14 @@ Deno.test("mig#18: the standalone time card shows the slot's date and clock in t
     { bookingHorizonDays: 3650 },
   )
   // Scoped to the time card's own text — TimeCard.tsx renders
-  // `{shownSlot} <span>· {dateLabel}</span>`. A whole-page
+  // `<span>{shownSlot}</span><span data-slot-date>{dateLabel}</span>`. A whole-page
   // `html.includes(...)` would also pass if some other element on the
   // page happened to carry the right substring, so this extracts the
   // card's own two pieces instead (same technique as
   // routes/embed/embed.test.tsx's confirm-label test).
-  const match = html.match(/(\d{2}:\d{2}, [^<·]+?)\s*<span[^>]*>·\s*([^<]+)</)
+  const match = html.match(
+    /<span\b[^>]*>(\d{2}:\d{2}, [^<]+?)<\/span><span\b[^>]*\bdata-slot-date=""[^>]*>([^<]+)</,
+  )
   assert(match, "expected the time card's clock + date markup")
   const [, clock, dateText] = match!
   assertEquals(clock.trim(), "22:00, New York, UTC-4")
@@ -401,7 +410,7 @@ function berlinSlotClocks(html: string): string[] {
 // The slot grid's own date heading (TimeSlots.tsx's `<h3>`).
 function gridHeading(html: string): string | null {
   const m = html.match(
-    /<h3 class="text-sm font-medium text-ink-muted">([^<]*)<\/h3>/,
+    /<h3\b[^>]*\bdata-grid-day=""[^>]*>([^<]*)<\/h3>/,
   )
   return m ? m[1] : null
 }
@@ -464,12 +473,9 @@ Deno.test("mig#50: Tokyo host, New York visitor, 1 November 2026 — the heading
   )
   assertEquals(gridHeading(html), "Sunday, 1 November 2026")
   assertFalse(html.includes("Saturday, 31 October 2026"), "DateCard too")
-  assertFalse(html.includes("Sat 31 Oct"), "the mobile summary bar too")
-  assert(html.includes("Sun 1 Nov"), "the summary bar names Sunday")
   assert(html.includes("03:00, New York, UTC-5"), "expected the 17:00 slot")
   // All three slots are on the heading's day, so no slot's accessible
-  // name ends in a date note. ("Sun 1 Nov" itself does appear: the
-  // mobile summary bar's short form of the heading.)
+  // name ends in a date note.
   assertFalse(/UTC-5, \w{3} \d/.test(html), "no slot needs a date note")
 })
 
@@ -483,7 +489,7 @@ Deno.test("mig#50: a day with no slots names the picked calendar day, not the vi
     },
   )
   assert(
-    html.includes("No available times on Sunday, 1 November 2026."),
+    html.includes("No times left on Sunday, 1 November 2026."),
     "expected the empty-day line to name the picked day",
   )
   assertFalse(html.includes("Saturday, 31 October 2026"))

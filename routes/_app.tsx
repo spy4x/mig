@@ -1,4 +1,5 @@
 import { SEOHead } from "@spy4x/preact-system/seo-head"
+import { buttonClasses } from "@spy4x/preact-ui/button"
 import { define } from "../lib/utils.ts"
 import {
   forcedThemeFor,
@@ -15,9 +16,13 @@ import {
 //   - OG / Twitter: same stable description for unfurled links
 //   - theme-color: light + dark variants for browser chrome
 //
-// Inline critical CSS prevents the FOUC while Tailwind loads. We
-// intentionally keep this short — full styles arrive via the
-// Vite-bundled stylesheet.
+// The inline <style> paints the canvas while the stylesheet loads. The
+// full styles arrive via the Vite-bundled stylesheet.
+
+/** The library's light canvas (gray-100). */
+const CANVAS_LIGHT = "#f3f4f6"
+/** The library's ink canvas, `oklch(0.15 0.012 260)`. */
+const CANVAS_DARK = "#080b10"
 
 export default define.page(function App({ Component, state, url }) {
   const cfg = state.config
@@ -31,13 +36,18 @@ export default define.page(function App({ Component, state, url }) {
     <html
       lang="en"
       class={`h-full antialiased${forcedTheme === "dark" ? " dark" : ""}`}
-      data-theme={forcedTheme ?? undefined}
+      // The library's ink dark palette applies to `.dark[data-theme="ink"]`,
+      // so every page carries `data-theme="ink"` and the theme script only
+      // toggles `.dark`. /embed's forced theme (mig#44) sits on its own
+      // attribute.
+      data-theme="ink"
+      data-forced-theme={forcedTheme ?? undefined}
       // mig#44 review: the meta color-scheme tag below stays "light
       // dark" (the page's default supported schemes); this inline
       // style is what actually pins native UI — scrollbars, form
       // control and autofill chrome — to the one scheme this document
       // renders in once a theme is forced, the same way `class="dark"`
-      // pins Tailwind's own tokens.
+      // pins the palette.
       style={forcedTheme ? `color-scheme: ${forcedTheme}` : undefined}
     >
       <head>
@@ -47,14 +57,15 @@ export default define.page(function App({ Component, state, url }) {
           content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
         <meta name="color-scheme" content="light dark" />
+        {/* Each equals the canvas of its palette: the library's gray-100 and ink. */}
         <meta
           name="theme-color"
-          content="#ffffff"
+          content={CANVAS_LIGHT}
           media="(prefers-color-scheme: light)"
         />
         <meta
           name="theme-color"
-          content="#0a0a0b"
+          content={CANVAS_DARK}
           media="(prefers-color-scheme: dark)"
         />
         <SEOHead
@@ -69,21 +80,14 @@ export default define.page(function App({ Component, state, url }) {
         />
 
         {
-          /* Critical inline CSS to prevent FOUC while Tailwind loads.
-           Variables here mirror the @theme tokens; the real values
-           are baked in by Tailwind once it loads. */
+          /* The canvas before the stylesheet arrives, so neither palette
+             flashes the other's background. Only the page background:
+             every token stays the library's. */
         }
         <style
           dangerouslySetInnerHTML={{
-            __html: `:root{
-  --color-canvas:oklch(0.99 0.003 80);
-  --color-ink:oklch(0.18 0.01 60);
-}
-.dark{
-  --color-canvas:oklch(0.16 0.012 260);
-  --color-ink:oklch(0.96 0.005 80);
-}
-html,body{margin:0;background:var(--color-canvas);color:var(--color-ink);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}`,
+            __html:
+              `html{background:${CANVAS_LIGHT}}html.dark{background:${CANVAS_DARK}}body{margin:0}`,
           }}
         />
         {
@@ -108,10 +112,14 @@ html,body{margin:0;background:var(--color-canvas);color:var(--color-ink);font-fa
           />
         )}
       </head>
-      <body class="h-full min-h-dvh">
+      <body class="theme-base h-full min-h-dvh">
         <a
           href="#main"
-          class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-3.5 focus:py-2 focus:bg-brand-500 focus:text-white focus:rounded-lg focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand-300"
+          class={buttonClasses(
+            "outline",
+            "md",
+            "sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 shadow-popover",
+          )}
         >
           Skip to content
         </a>

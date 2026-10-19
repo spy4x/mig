@@ -42,7 +42,10 @@ export default define.page<typeof handler>(
       // also means the not-ok and cancelled states' `place-items-center`
       // no longer has extra height to center within — intended: a
       // frame sized to this element's content has no such space.
-      <div class="flex flex-col bg-canvas text-ink" {...{ [HEIGHT_ATTR]: "" }}>
+      <div
+        class="flex flex-col bg-canvas text-foreground"
+        {...{ [HEIGHT_ATTR]: "" }}
+      >
         {
           /* mig#44 — see routes/embed/index.tsx for why this runs on
              every /embed page. */
@@ -68,7 +71,7 @@ export default define.page<typeof handler>(
           slotDurationMin={cfg.slotDurationMin}
           backHref={pickerHref("/embed", undefined, null, theme)}
           cancelTarget="_blank"
-          cancelledMainClass="flex-1 grid place-items-center px-4 sm:px-5 py-4 sm:py-5"
+          cancelledMainClass="flex-1 px-4 py-4 sm:px-6 sm:py-6"
           mainId="main"
         />
       </div>

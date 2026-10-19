@@ -1,19 +1,18 @@
-import { Logo } from "./Logo.tsx"
+import { BrandMark } from "@spy4x/preact-ui/brand-mark"
+import { SiteHeader } from "@spy4x/preact-system/site-header"
+import { IconCalendar } from "@spy4x/preact-icons"
 import ThemeToggle from "../islands/ThemeToggle.tsx"
 import type { ThemeParam } from "../lib/theme.ts"
 
 /*
-  Top app chrome. Slim, sticky, hairline bottom border, blurred
-  background so content scrolls under it cleanly.
-
-  No host name / tz in here — those belong in the hero, not the
-  chrome. The header is brand-only: mark on the left, theme toggle
-  on the right.
+  mig's top bar: the library's `SiteHeader` with no links, so it draws
+  no navigation and no menu button (design-language.md, "Layout
+  patterns", a single-page tool). The brand links home; the theme
+  toggle is the only action. Host name and zone belong in the page.
+  Kept as one component because five routes draw the same bar.
 */
 
 interface HeaderProps {
-  /** Used by the embed variant to swap to a tighter header. */
-  compact?: boolean
   /** False hides the theme button, for pages rendered without the theme script (mig#63). */
   themeToggle?: boolean
   /** The owner's `THEME`, the toggle's default when nothing is stored. */
@@ -22,11 +21,16 @@ interface HeaderProps {
 
 export function Header({ themeToggle = true, defaultTheme }: HeaderProps) {
   return (
-    <header class="sticky top-0 z-40 w-full border-b border-line bg-(--color-canvas)/80 backdrop-blur-md backdrop-saturate-150">
-      <div class="mx-auto flex w-full max-w-2xl items-center justify-between px-4 sm:px-6 py-4 sm:py-5">
-        <Logo size={28} href="/" />
-        {themeToggle && <ThemeToggle defaultTheme={defaultTheme} />}
-      </div>
-    </header>
+    <SiteHeader
+      brand={
+        <a
+          href="/"
+          class="-m-1 rounded-card p-1 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-focus focus-visible:outline-hidden"
+        >
+          <BrandMark Icon={IconCalendar} name="mig" />
+        </a>
+      }
+      actions={themeToggle && <ThemeToggle defaultTheme={defaultTheme} />}
+    />
   )
 }

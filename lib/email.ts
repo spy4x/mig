@@ -497,13 +497,13 @@ function guestHtml(
       <tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Where</td>
           <td style="padding:4px 0"><a href="${
       esc(config.meetingUrl)
-    }" style="color:#f97316">${esc(config.meetingUrl)}</a></td></tr>
+    }" style="color:${LINK_COLOR}">${esc(config.meetingUrl)}</a></td></tr>
     </table>
     ${tzNoteHtml}
     <p>Add to calendar: open the attached <code>.ics</code> file.</p>
     <p>Need to cancel? <a href="${
       esc(cancelUrl)
-    }" style="color:#f97316">Click here</a></p>
+    }" style="color:${LINK_COLOR}">Click here</a></p>
   `,
   )
 }
@@ -582,7 +582,7 @@ function ownerHtml(
     </table>
     <p><a href="${
       esc(cancelUrl)
-    }" style="color:#f97316">Cancel this booking</a></p>
+    }" style="color:${LINK_COLOR}">Cancel this booking</a></p>
   `,
   )
 }
@@ -670,16 +670,23 @@ function inviteAttachment(
   })
 }
 
+/** mig's teal as a link on the email's dark navy shell: the brand hue,
+ *  lightened to read at 4.5:1 or better there. */
+const LINK_COLOR = "#46bba5"
+
+/** The library's dark shell with mig's teal links in place of its orange. */
+const MIG_HTML_SHELL_THEME = { ...DARK_HTML_SHELL_THEME, linkColor: LINK_COLOR }
+
 // Constrained to 480px so the email reads as a letter, not a full
 // desktop pane, on the dark shell mig's emails have always used.
 function htmlWrap(config: Config, body: string): string {
   // The signature is mig's own muted, underlined link, not the
-  // shell's orange one, so it stays quieter than the header.
+  // shell's teal one, so it stays quieter than the header.
   return shellWrap({
     body,
     brand: "mig",
     brandUrl: config.githubUrl,
-    theme: DARK_HTML_SHELL_THEME,
+    theme: MIG_HTML_SHELL_THEME,
     maxWidth: 480,
     signaturePrefix: null,
     footer:

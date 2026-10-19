@@ -160,7 +160,7 @@ export default define.page(function Index(ctx) {
       <Header defaultTheme={cfg.theme} />
 
       <main id="main" class="flex-1">
-        <div class="mx-auto w-full max-w-2xl px-4 sm:px-6 pt-10 sm:pt-14 pb-24 md:pb-16">
+        <div class="mx-auto w-full max-w-2xl px-4 pt-8 sm:px-6 sm:pt-12">
           <Hero
             hostName={cfg.hostName}
             durationMin={cfg.slotDurationMin}
@@ -181,13 +181,13 @@ export default define.page(function Index(ctx) {
           }
           {displayTz === cfg.hostTz && (
             <noscript>
-              <p class="mt-4 text-xs text-ink-subtle">
+              <p class="mt-4 text-sm text-muted">
                 Times are shown in the host's timezone.
               </p>
             </noscript>
           )}
 
-          <div class="mt-8 sm:mt-10">
+          <div class="mt-8">
             <BookingFlow
               dates={dates}
               slots={slots}
@@ -214,10 +214,8 @@ export default define.page(function Index(ctx) {
 })
 
 /*
-  Hero — bigger, more confident type. The host name is the hero
-  (no pun intended); the "Book a meeting" line is a small uppercase
-  eyebrow above it. The description sits underneath, sized for
-  comfortable reading without competing with the headline.
+  Hero — who the meeting is with, then what it is. The host name is the
+  page's h1; the line above it is a quiet sentence-case lead-in.
 */
 function Hero(
   { hostName, durationMin }: {
@@ -226,14 +224,12 @@ function Hero(
   },
 ) {
   return (
-    <section class="space-y-5">
-      <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-600 dark:text-brand-300">
-        Book a meeting with
-      </p>
-      <h1 class="text-[34px] sm:text-[40px] font-semibold tracking-(--tracking-display) text-ink leading-[1.05] -mt-2">
+    <section>
+      <p class="text-sm text-muted">Book a meeting with</p>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-balance text-foreground">
         {hostName}
       </h1>
-      <p class="text-base sm:text-[17px] text-ink-muted leading-relaxed max-w-md -mt-1">
+      <p class="mt-3 max-w-md text-lg text-pretty text-muted">
         A {durationMin}-minute call. Pick a time that works for you.
       </p>
     </section>

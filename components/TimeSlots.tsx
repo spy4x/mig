@@ -52,19 +52,18 @@
 */
 
 import { isoDateInTz } from "@spy4x/time/tz"
-import { formatShortDateAt } from "../lib/clock.ts"
 import { pickerHref } from "../lib/picker-links.ts"
+import { Button, buttonClasses } from "@spy4x/preact-ui/button"
+import { Card } from "@spy4x/preact-ui/card"
 
-/** The day a slot grid's heading names, in three forms. */
+/** The day a slot grid's heading names, in two forms. */
 export interface GridDay {
   /** YYYY-MM-DD, in the display zone. A slot whose own visitor-local
    *  date differs from this carries a `dateNote`. */
   date: string
   /** "Sunday, 1 November 2026" — the grid heading, DateCard, and the
-   *  "No available times on …" line. */
+   *  "No times left on …" line. */
   long: string
-  /** "Sun 1 Nov" — the mobile SummaryBar. */
-  short: string
 }
 
 /**
@@ -104,7 +103,6 @@ export function gridDay(
       month: "long",
       year: "numeric",
     }).format(at),
-    short: formatShortDateAt(at, "UTC"),
   }
 }
 
@@ -211,32 +209,30 @@ export function TimeSlots(
     theme,
   }: TimeSlotsProps,
 ) {
-  if (slots.length === 0) {
-    return (
-      <div class="rounded-2xl border border-line bg-surface px-5 py-10 text-center">
-        <p class="text-sm text-ink-muted">
-          No available times on {dateLabel}.
-        </p>
-      </div>
-    )
-  }
-
-  const groups = groupByConsecutivePeriod(slots)
+  // A booked time is not shown at all: striking it through told every
+  // visitor when the host is busy, and offered nothing to click.
+  const groups = groupByConsecutivePeriod(slots.filter((s) => s.available))
 
   return (
-    <div class="rounded-2xl border border-line bg-surface overflow-hidden">
-      <div class="px-5 py-4 border-b border-line">
-        <h3 class="text-sm font-medium text-ink-muted">{dateLabel}</h3>
-        {zoneLabel && <p class="text-xs text-ink-subtle mt-0.5">{zoneLabel}</p>}
+    <Card>
+      <div class="border-b border-subtle px-4 py-3 sm:px-6">
+        <h3 class="text-sm font-medium text-foreground" data-grid-day="">
+          {dateLabel}
+        </h3>
+        {zoneLabel && (
+          <p class="mt-0.5 text-sm text-muted" data-grid-zone="">
+            {`Times in ${zoneLabel}`}
+          </p>
+        )}
       </div>
 
-      <div class="divide-y divide-line">
+      <div class="divide-y divide-subtle">
         {groups.map((g) => (
-          <div key={g.key} class="px-5 py-4">
-            <h4 class="text-[11px] font-medium uppercase tracking-wider text-ink-subtle mb-3">
+          <div key={g.key} class="px-4 py-4 sm:px-6">
+            <h4 class="mb-3 text-sm font-medium text-muted">
               {PERIOD_LABEL[g.period]}
             </h4>
-            <div class="flex flex-wrap gap-2">
+            <div class="grid grid-cols-4 gap-2 sm:grid-cols-6">
               {g.slots.map((s) => (
                 <SlotButton
                   key={s.time}
@@ -253,9 +249,12 @@ export function TimeSlots(
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   )
 }
+
+/** A time: an outline button, 44 px tall on a phone and 36 px with a pointer. */
+const SLOT = "min-h-11 flex-col gap-0! px-2! tabular-nums sm:min-h-9"
 
 function SlotButton(
   { date, slot, selected, onSelect, basePath, tz, theme }: {
@@ -268,8 +267,6 @@ function SlotButton(
     theme?: string | null
   },
 ) {
-  const base =
-    "inline-flex flex-col min-h-10 min-w-[4.5rem] items-center justify-center gap-0 rounded-lg border px-3 py-1.5 text-sm tnum font-medium transition-all duration-(--duration-snappy) focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-surface)"
   // What the user actually sees. Falls back to host-local when the
   // route or island hasn't computed a visitor-TZ displayHHMM.
   const shownTime = slot.displayHHMM ?? slot.time
@@ -295,62 +292,49 @@ function SlotButton(
     <>
       <span>{visibleTime}</span>
       {slot.dateNote && (
-        <span class="text-[10px] font-normal leading-tight opacity-80">
+        <span class="text-xs font-normal leading-tight">
           {slot.dateNote}
         </span>
       )}
     </>
   )
-  // Selected/booked chips render as a plain <span> — no interactive
+
+  // The selected chip renders as a plain <span> — no interactive
   // role, so `aria-label` isn't reliably exposed by every screen
   // reader (mig#48 review). Visually hidden text inside the element
   // is: `sr-only` carries `fullLabel`, and the visible chip is
   // `aria-hidden` so the two aren't read twice. `display: contents` on
   // the hidden wrapper keeps the visible spans as direct flex children
-  // of `base`, so `flex-col`/`gap` still apply as if it weren't there.
-  const spanContent = fullLabel
-    ? (
-      <>
-        <span class="sr-only">{fullLabel}</span>
-        <span aria-hidden="true" class="contents">{visible}</span>
-      </>
-    )
-    : visible
-
+  // of the chip, so `flex-col` still applies as if it weren't there.
   if (selected) {
     return (
       <span
         aria-current="true"
         title="Selected"
-        class={`${base} border-brand-500 bg-brand-500 text-white font-semibold shadow-sm cursor-default`}
+        class={buttonClasses("primary", "md", `${SLOT} cursor-default`)}
       >
-        {spanContent}
-      </span>
-    )
-  }
-
-  if (!slot.available) {
-    return (
-      <span
-        aria-disabled="true"
-        title="Already booked"
-        class={`${base} border-line bg-surface-sunken text-ink-subtle/60 line-through decoration-ink-subtle/40 cursor-not-allowed`}
-      >
-        {spanContent}
+        {fullLabel
+          ? (
+            <>
+              <span class="sr-only">{fullLabel}</span>
+              <span aria-hidden="true" class="contents">{visible}</span>
+            </>
+          )
+          : visible}
       </span>
     )
   }
 
   if (onSelect) {
     return (
-      <button
-        type="button"
+      <Button
+        variant="outline"
         aria-label={fullLabel}
         onClick={() => onSelect(date, slot.time)}
-        class={`${base} border-line bg-surface text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
+        class={SLOT}
       >
         {visible}
-      </button>
+      </Button>
     )
   }
 
@@ -362,13 +346,14 @@ function SlotButton(
   // alone when `aria-current` is already set; only the selected slot's
   // chip above is current.
   return (
-    <a
+    <Button
       href={pickerHref(basePath, { date, slot: slot.time }, tz, theme)}
+      variant="outline"
       aria-current="false"
       aria-label={fullLabel}
-      class={`${base} border-line bg-surface text-ink hover:border-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-700 dark:hover:text-brand-200 active:scale-[0.98]`}
+      class={SLOT}
     >
       {visible}
-    </a>
+    </Button>
   )
 }

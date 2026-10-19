@@ -25,8 +25,8 @@ function fakeProps(path: string, theme: Config["theme"]) {
   }
 }
 
-// The unhydrated ThemeToggle island renders this placeholder label.
-const TOGGLE = `aria-label="Toggle theme"`
+// The library's ThemeToggle names itself "Theme: …" in every state.
+const TOGGLE = `aria-label="Theme: `
 
 function render404(path: string, theme: Config["theme"]): string {
   // deno-lint-ignore no-explicit-any
@@ -76,4 +76,11 @@ Deno.test("500: the page has exactly one h1, the title", () => {
   const html = render500("/boom", "auto")
   assertEquals(h1Count(html), 1)
   assert(/<h1[^>]*>\s*Something went wrong\s*<\/h1>/.test(html))
+})
+
+Deno.test("404 and 500: Book a time is at least 44 px tall on a phone", () => {
+  for (const html of [render404("/nope", "auto"), render500("/boom", "auto")]) {
+    const link = html.match(/<a\b[^>]*>Book a time<\/a>/)?.[0]
+    assert(link?.includes("min-h-11"), `Book a time: ${link}`)
+  }
 })

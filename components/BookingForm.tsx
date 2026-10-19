@@ -27,11 +27,14 @@
   real <button type="submit"> with the same label.
 */
 
+import { useState } from "preact/hooks"
 import { Button } from "@spy4x/preact-ui/button"
+import { Card, CardBody } from "@spy4x/preact-ui/card"
 import { Field } from "@spy4x/preact-ui/field"
 import { honeypotField } from "@spy4x/preact-ui/honeypot"
 import { Input, Textarea } from "@spy4x/preact-ui/input"
-import BookingSubmit from "../islands/BookingSubmit.tsx"
+import { Notice } from "@spy4x/preact-ui/notice"
+import BookingSubmit, { type FieldErrors } from "../islands/BookingSubmit.tsx"
 import { guestTzCaptureScript } from "../lib/guest-tz-script.ts"
 
 const GUEST_TZ_INPUT_ID = "mig-embed-guest-tz"
@@ -83,103 +86,107 @@ export function BookingForm({
 }: BookingFormProps) {
   const embed = basePath !== ""
   const action = embed ? `${basePath}/book` : "/api/book"
+  // What the standalone submit button found wrong, shown under each
+  // field (BookingSubmit moves focus to the first one).
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   return (
-    <div class="rounded-2xl border border-line bg-surface overflow-hidden">
-      <div class="px-5 py-4 border-b border-line">
-        <p class="text-sm text-ink-muted">
-          <span class="text-ink font-medium">{durationMin} minutes</span>{" "}
-          <span class="text-ink-subtle">·</span>{" "}
-          <span class="text-ink-subtle">with {hostName}</span>
+    <Card>
+      <div class="border-b border-subtle px-4 py-3 sm:px-6">
+        <p class="text-sm text-muted">
+          <span class="font-medium text-foreground">{durationMin} minutes</span>
+          {` · with ${hostName}`}
         </p>
       </div>
 
-      <form
-        method="POST"
-        action={action}
-        class="px-5 py-5 space-y-4"
-        aria-label="Booking details"
-      >
-        <input type="hidden" name="date" value={date} />
-        <input type="hidden" name="slot" value={slot} />
-        {embed && theme && <input type="hidden" name="theme" value={theme} />}
+      <CardBody>
+        <form
+          method="POST"
+          action={action}
+          class="space-y-4"
+          aria-label="Booking details"
+        >
+          <input type="hidden" name="date" value={date} />
+          <input type="hidden" name="slot" value={slot} />
+          {embed && theme && <input type="hidden" name="theme" value={theme} />}
 
-        {error && (
-          <div
-            role="alert"
-            class="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
-          >
-            {error}
-          </div>
-        )}
+          {error && (
+            <Notice tone="danger" urgent>
+              {error}
+            </Notice>
+          )}
 
-        <Field id="f-name" label="Your name">
-          <Input
-            name="name"
-            required
-            minLength={2}
-            maxLength={100}
-            autocomplete="name"
-            placeholder="Jane Doe"
-          />
-        </Field>
-        <Field id="f-email" label="Email">
-          <Input
-            name="email"
-            type="email"
-            required
-            autocomplete="email"
-            placeholder="jane@example.com"
-          />
-        </Field>
-        <Field id="f-notes" label="Notes" hint="Optional">
-          <Textarea
-            name="notes"
-            rows={3}
-            maxLength={500}
-            placeholder="Anything I should know before we meet?"
-            class="resize-y min-h-[5rem]"
-          />
-        </Field>
+          <Field id="f-name" label="Your name" error={fieldErrors.name}>
+            <Input
+              name="name"
+              required
+              minLength={2}
+              maxLength={100}
+              autocomplete="name"
+              placeholder="Your full name"
+            />
+          </Field>
+          <Field id="f-email" label="Email" error={fieldErrors.email}>
+            <Input
+              name="email"
+              type="email"
+              required
+              autocomplete="email"
+              placeholder="jane@example.com"
+            />
+          </Field>
+          <Field id="f-notes" label="Notes" hint="Optional">
+            <Textarea
+              name="notes"
+              rows={3}
+              maxLength={500}
+              placeholder="Anything I should know before we meet?"
+              class="min-h-20 resize-y"
+            />
+          </Field>
 
-        {
-          /* Honeypot — off-screen, real users never fill it. The server
+          {
+            /* Honeypot — off-screen, real users never fill it. The server
             rejects a booking whose `website` field has text in it. */
-        }
-        {honeypotField("website", "Website")}
+          }
+          {honeypotField("website", "Website")}
 
-        {
-          /* Progressive-enhancement timezone capture — /embed's
+          {
+            /* Progressive-enhancement timezone capture — /embed's
              equivalent of BookingSubmit's hidden guestTz field (see the
              header comment). Without this script the field just stays
              empty and the booking still completes; lib/book.ts already
              treats guestTz as optional. */
-        }
-        {embed && (
-          <>
-            <input
-              type="hidden"
-              name="guestTz"
-              id={GUEST_TZ_INPUT_ID}
-              value={guestTz ?? ""}
-            />
-            <script
-              dangerouslySetInnerHTML={{
-                __html: guestTzCaptureScript(GUEST_TZ_INPUT_ID),
-              }}
-            />
-          </>
-        )}
+          }
+          {embed && (
+            <>
+              <input
+                type="hidden"
+                name="guestTz"
+                id={GUEST_TZ_INPUT_ID}
+                value={guestTz ?? ""}
+              />
+              <script
+                dangerouslySetInnerHTML={{
+                  __html: guestTzCaptureScript(GUEST_TZ_INPUT_ID),
+                }}
+              />
+            </>
+          )}
 
-        <div class="pt-1">
-          {embed
-            ? <PlainSubmitButton label={confirmLabel} />
-            : <BookingSubmit label={confirmLabel} />}
-          <p class="text-xs text-ink-subtle mt-2.5">
-            We'll send a confirmation email with a calendar invite.
-          </p>
-        </div>
-      </form>
-    </div>
+          <div class="pt-1">
+            {embed ? <PlainSubmitButton label={confirmLabel} /> : (
+              <BookingSubmit
+                label={confirmLabel}
+                onFieldErrors={setFieldErrors}
+              />
+            )}
+            <p class="mt-3 text-sm text-muted">
+              You'll get an email with a calendar invite.
+            </p>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
   )
 }
 
@@ -198,7 +205,7 @@ export function BookingForm({
 */
 function PlainSubmitButton({ label }: { label: string }) {
   return (
-    <Button type="submit" class="w-full sm:w-auto">
+    <Button type="submit" class="w-full min-h-11 sm:min-h-9">
       {label}
     </Button>
   )

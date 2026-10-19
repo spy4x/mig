@@ -1,6 +1,6 @@
 // mig#44 — /embed's forced theme has to apply before first paint, with
 // no flash of the wrong colour. Server-rendering the `dark` class and
-// `data-theme` attribute directly on <html> is what gets that: these
+// `data-forced-theme` attribute directly on <html> is what gets that: these
 // tests render the real App layout with a fake `url` (same pattern as
 // routes/embed/embed.test.tsx's fakePageProps) and check the rendered
 // <html> tag and whether the client bootstrap script — which would
@@ -84,22 +84,22 @@ function htmlTag(html: string): string {
   return m[0]
 }
 
-Deno.test("App: /embed?theme=dark renders the dark class and data-theme before any script runs", () => {
+Deno.test("App: /embed?theme=dark renders the dark class and data-forced-theme before any script runs", () => {
   const html = renderToString(<App {...fakeAppProps("/embed?theme=dark")} />)
   const tag = htmlTag(html)
   assert(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag)
-  assert(tag.includes('data-theme="dark"'), tag)
+  assert(tag.includes('data-forced-theme="dark"'), tag)
   assertFalse(
     html.includes("mig-theme"),
     "forced theme must skip the client bootstrap script entirely",
   )
 })
 
-Deno.test("App: /embed?theme=light renders no dark class and data-theme=light", () => {
+Deno.test("App: /embed?theme=light renders no dark class and data-forced-theme=light", () => {
   const html = renderToString(<App {...fakeAppProps("/embed?theme=light")} />)
   const tag = htmlTag(html)
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag)
-  assert(tag.includes('data-theme="light"'), tag)
+  assert(tag.includes('data-forced-theme="light"'), tag)
   assertFalse(html.includes("mig-theme"))
 })
 
@@ -107,7 +107,7 @@ Deno.test("App: /embed?theme=auto keeps today's behaviour — no forced class, b
   const html = renderToString(<App {...fakeAppProps("/embed?theme=auto")} />)
   const tag = htmlTag(html)
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag)
-  assertFalse(tag.includes("data-theme="), tag)
+  assertFalse(tag.includes("data-forced-theme="), tag)
   assert(html.includes("mig-theme"))
 })
 
@@ -115,7 +115,7 @@ Deno.test("App: /embed with no theme param at all behaves exactly like ?theme=au
   const html = renderToString(<App {...fakeAppProps("/embed")} />)
   const tag = htmlTag(html)
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag)
-  assertFalse(tag.includes("data-theme="), tag)
+  assertFalse(tag.includes("data-forced-theme="), tag)
   assert(html.includes("mig-theme"))
 })
 
@@ -129,7 +129,7 @@ Deno.test("App: an invalid /embed?theme= value falls back to auto, never reflect
   )
   const tag = htmlTag(html)
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag)
-  assertFalse(tag.includes("data-theme="), tag)
+  assertFalse(tag.includes("data-forced-theme="), tag)
   assertFalse(html.toLowerCase().includes("<script>alert"))
 })
 
@@ -140,7 +140,7 @@ Deno.test("App: ?theme=dark on the standalone site (not /embed) is ignored", () 
   const html = renderToString(<App {...fakeAppProps("/?theme=dark")} />)
   const tag = htmlTag(html)
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag)
-  assertFalse(tag.includes("data-theme="), tag)
+  assertFalse(tag.includes("data-forced-theme="), tag)
   assert(html.includes("mig-theme"))
 })
 
@@ -150,7 +150,7 @@ Deno.test("App: /embed/confirmed?theme=dark also forces the theme (not just /emb
   )
   const tag = htmlTag(html)
   assert(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag)
-  assert(tag.includes('data-theme="dark"'), tag)
+  assert(tag.includes('data-forced-theme="dark"'), tag)
 })
 
 // ─── mig#44 review: color-scheme, and never writing mig-theme ────────
@@ -211,7 +211,7 @@ Deno.test("App: THEME=dark makes /embed without ?theme= render dark before any s
     const html = renderToString(<App {...fakeAppProps(path, "dark")} />)
     const tag = htmlTag(html)
     assert(/class="[^"]*\bdark\b[^"]*"/.test(tag), `${path}: ${tag}`)
-    assert(tag.includes('data-theme="dark"'), `${path}: ${tag}`)
+    assert(tag.includes('data-forced-theme="dark"'), `${path}: ${tag}`)
     assertFalse(html.includes("mig-theme"), path)
   }
 })
@@ -221,7 +221,7 @@ Deno.test("App: THEME=light makes /embed without ?theme= render light", () => {
     renderToString(<App {...fakeAppProps("/embed", "light")} />),
   )
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag)
-  assert(tag.includes('data-theme="light"'), tag)
+  assert(tag.includes('data-forced-theme="light"'), tag)
 })
 
 Deno.test("App: an explicit /embed?theme= wins over THEME", () => {
@@ -229,7 +229,7 @@ Deno.test("App: an explicit /embed?theme= wins over THEME", () => {
     renderToString(<App {...fakeAppProps("/embed?theme=light", "dark")} />),
   )
   assertFalse(/class="[^"]*\bdark\b[^"]*"/.test(tag), tag)
-  assert(tag.includes('data-theme="light"'), tag)
+  assert(tag.includes('data-forced-theme="light"'), tag)
 })
 
 Deno.test("App: THEME=dark on the standalone site is the bootstrap script's default, not forced", () => {
@@ -237,7 +237,7 @@ Deno.test("App: THEME=dark on the standalone site is the bootstrap script's defa
   // preference; the script applies THEME only when nothing is stored.
   const html = renderToString(<App {...fakeAppProps("/", "dark")} />)
   const tag = htmlTag(html)
-  assertFalse(tag.includes("data-theme="), tag)
+  assertFalse(tag.includes("data-forced-theme="), tag)
   assert(html.includes('?s:"dark"'), "script default must be dark")
 })
 
@@ -253,4 +253,46 @@ Deno.test("App: only /embed pages render a theme script that follows a live OS c
     assert(html.includes("mig-theme"), path)
     assertFalse(html.includes(`addEventListener("change"`), path)
   }
+})
+
+// ─── mig#119: the house palettes ────────────────────────────────────
+
+Deno.test("App: every page opts into the library's ink dark palette, forced or not", () => {
+  // The ink palette applies to `.dark[data-theme="ink"]`, so the theme
+  // script only has to toggle `.dark` for a dark visitor to get it.
+  for (
+    const [path, theme] of [
+      ["/", "auto"],
+      ["/embed?theme=dark", "auto"],
+      ["/embed?theme=light", "auto"],
+      ["/embed", "dark"],
+    ] as const
+  ) {
+    const tag = htmlTag(renderToString(<App {...fakeAppProps(path, theme)} />))
+    assert(tag.includes('data-theme="ink"'), `${path}: ${tag}`)
+  }
+})
+
+Deno.test("App: the browser chrome colour is each palette's canvas", () => {
+  const html = renderToString(<App {...fakeAppProps("/")} />)
+  assert(
+    html.includes(
+      '<meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)"',
+    ),
+    "light theme-color",
+  )
+  assert(
+    html.includes(
+      '<meta name="theme-color" content="#080b10" media="(prefers-color-scheme: dark)"',
+    ),
+    "dark theme-color",
+  )
+})
+
+Deno.test("App: no font preload competes with the stylesheet for the first paint", () => {
+  // mig#119 review: preloading Geist delayed the largest paint on `/`
+  // under Lighthouse's mobile throttling; the metric-matched fallback
+  // face carries the first paint instead.
+  const html = renderToString(<App {...fakeAppProps("/")} />)
+  assertFalse(/<link\b[^>]*rel="preload"[^>]*as="font"/.test(html), html)
 })

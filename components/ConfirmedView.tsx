@@ -18,15 +18,13 @@
                   link already opens in a new tab on both.
 */
 
+import { Button } from "@spy4x/preact-ui/button"
+import { Card } from "@spy4x/preact-ui/card"
+import { ErrorState } from "@spy4x/preact-ui/error-state"
 import { canonicalTimeZoneOr, isValidTimeZone } from "@spy4x/time/tz"
 import { formatHostClockIn, formatHostDateIn } from "../lib/clock.ts"
-import {
-  IconArrowLeft,
-  IconArrowRight,
-  IconCheck,
-  IconInformationCircle,
-  IconMinus,
-} from "@spy4x/preact-icons"
+import { IconCheck, IconMinus } from "@spy4x/preact-icons"
+import type { ComponentChildren } from "preact"
 import type { ConfirmedBooking, ConfirmedData } from "../lib/confirmed-data.ts"
 
 export interface ConfirmedViewProps extends ConfirmedData {
@@ -53,7 +51,7 @@ export interface ConfirmedViewProps extends ConfirmedData {
   mainId?: string
 }
 
-const DEFAULT_CANCELLED_MAIN_CLASS = "flex-1 grid place-items-center px-6 py-16"
+const DEFAULT_CANCELLED_MAIN_CLASS = "flex-1 px-4 py-12 sm:px-6"
 
 export function ConfirmedView(props: ConfirmedViewProps) {
   const {
@@ -70,30 +68,23 @@ export function ConfirmedView(props: ConfirmedViewProps) {
   } = props
 
   if (state !== "ok" || !booking) {
-    const title = state === "invalid"
-      ? "Invalid or expired link"
-      : state === "missing"
-      ? "Link missing parameters"
-      : "Booking not found"
-    const body = state === "invalid"
-      ? "The link you used has been tampered with or is no longer valid."
-      : "Check the URL and try again, or contact the host."
+    // One message for a missing, tampered or unknown link: the visitor
+    // can do the same thing about each, and the difference tells a
+    // stranger nothing they need.
     return (
-      <main id={mainId} class="flex-1 grid place-items-center px-6 py-16">
-        <div class="max-w-sm text-center">
-          <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
-            <IconInformationCircle class="size-5.5" />
-          </div>
-          <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
-            {title}
+      <main id={mainId} class="flex-1 px-4 py-12 sm:px-6">
+        <div class="mx-auto w-full max-w-md text-center">
+          <h1 class="text-2xl font-semibold tracking-tight text-balance text-foreground">
+            We couldn't find this booking
           </h1>
-          <p class="text-sm text-ink-muted mb-6">{body}</p>
-          <a
-            href={backHref}
-            class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-canvas)"
-          >
-            Back to booking
-          </a>
+          <div class="mt-4">
+            <ErrorState message="Check the link in your email." />
+          </div>
+          <div class="mt-6">
+            <Button href={backHref} class="min-h-11 sm:min-h-9">
+              Book a time
+            </Button>
+          </div>
         </div>
       </main>
     )
@@ -116,38 +107,33 @@ export function ConfirmedView(props: ConfirmedViewProps) {
   const displayTz = canonicalTimeZoneOr(b.guestTz ?? undefined, b.hostTz)
   const dateLabel = formatHostDateIn(b.date, b.time, b.hostTz, displayTz)
   const timeLabel = formatHostClockIn(b.date, b.time, b.hostTz, displayTz)
+  const hostTzNote = !knownGuestTz && (
+    <p class="mt-1 text-sm text-muted">
+      Times are shown in the host's timezone.
+    </p>
+  )
 
   if (mode === "cancelled") {
     return (
       <main id={mainId} class={cancelledMainClass}>
-        <div class="max-w-sm w-full">
-          <div class="text-center mb-8">
-            <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-surface-sunken text-ink-subtle mb-5">
-              <IconMinus class="size-6.5" />
-            </div>
-            <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
-              Booking cancelled
-            </h1>
-            <p class="text-sm text-ink-muted tnum">
-              {dateLabel} · {timeLabel}
-            </p>
-            {!knownGuestTz && (
-              <p class="text-xs text-ink-subtle mt-1">
-                Times are shown in the host's timezone.
-              </p>
-            )}
-            <p class="text-sm text-ink-muted mt-4">
-              Both you and {hostName} have been notified.
-            </p>
+        <div class="mx-auto w-full max-w-md text-center">
+          <div class="mb-4 inline-flex size-12 items-center justify-center rounded-full border border-subtle bg-surface text-muted">
+            <IconMinus class="size-6" />
           </div>
-          <div class="text-center">
-            <a
-              href={backHref}
-              class="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-canvas)"
-            >
-              Book another time
-              <IconArrowRight class="size-3.5" />
-            </a>
+          <h1 class="text-2xl font-semibold tracking-tight text-balance text-foreground">
+            This booking was cancelled
+          </h1>
+          <p class="mt-2 text-sm text-muted tabular-nums">
+            {dateLabel} · {timeLabel}
+          </p>
+          {hostTzNote}
+          <p class="mt-3 text-sm text-muted">
+            Both you and {hostName} have been notified.
+          </p>
+          <div class="mt-6">
+            <Button href={backHref} class="min-h-11 sm:min-h-9">
+              Book a new time
+            </Button>
           </div>
         </div>
       </main>
@@ -155,76 +141,77 @@ export function ConfirmedView(props: ConfirmedViewProps) {
   }
 
   return (
-    <main id={mainId} class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
-      <div class="max-w-md w-full">
-        <div class="text-center mb-8">
-          <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-brand-500/15 text-brand-600 dark:text-brand-300 mb-5">
-            <IconCheck class="size-6.5" />
+    <main id={mainId} class="flex-1 px-4 py-12 sm:px-6">
+      <div class="mx-auto w-full max-w-md">
+        <div class="text-center">
+          <div class="mb-4 inline-flex size-12 items-center justify-center rounded-full bg-success-soft text-success">
+            <IconCheck class="size-6" />
           </div>
-          <h1 class="text-2xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
-            You're booked
+          <h1 class="text-2xl font-semibold tracking-tight text-balance text-foreground">
+            You're booked with {hostName}
           </h1>
-          <p class="text-sm text-ink-muted mt-2">
-            A confirmation email is on its way to{" "}
-            <span class="text-ink font-medium">{b.guestEmail}</span>.
+          <p class="mt-2 text-sm text-pretty text-muted">
+            We sent the details and a calendar invite to{" "}
+            <span class="font-medium break-words text-foreground">
+              {b.guestEmail}
+            </span>.
           </p>
         </div>
 
-        <div class="rounded-2xl border border-line bg-surface divide-y divide-line">
-          <Detail label="Date" value={<span class="tnum">{dateLabel}</span>} />
-          <Detail label="Time" value={<span class="tnum">{timeLabel}</span>} />
-          <Detail label="Duration" value={`${slotDurationMin} minutes`} />
-          <Detail
-            label="Meeting link"
-            value={
-              <a
-                href={meetingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-brand-600 dark:text-brand-300 hover:underline break-all text-right"
-              >
-                {meetingUrl}
-              </a>
-            }
-          />
-        </div>
+        <Card class="mt-6">
+          <dl class="divide-y divide-subtle">
+            <Detail label="Date" value={dateLabel} />
+            <Detail label="Time" value={timeLabel} />
+            <Detail label="Duration" value={`${slotDurationMin} minutes`} />
+            <Detail
+              label="Join"
+              value={
+                <a
+                  href={meetingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="break-all text-foreground underline underline-offset-2 hover:text-muted"
+                >
+                  {meetingUrl}
+                </a>
+              }
+            />
+          </dl>
+        </Card>
 
         {!knownGuestTz && (
-          <p class="text-xs text-ink-subtle mt-3 text-center">
+          <p class="mt-3 text-center text-sm text-muted">
             Times are shown in the host's timezone.
           </p>
         )}
 
-        <div class="mt-5 flex items-center justify-between gap-4 text-sm">
-          <a
-            href={backHref}
-            class="inline-flex items-center gap-1 text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline"
-          >
-            <IconArrowLeft class="size-3" />
+        <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-between">
+          <Button href={backHref} variant="outline" class="min-h-11 sm:min-h-9">
             Book another time
-          </a>
-          <a
+          </Button>
+          <Button
             href={`/cancel?id=${b.id}&token=${b.cancelToken}`}
             target={cancelTarget}
             rel={cancelTarget ? "noopener noreferrer" : undefined}
-            class="inline-flex items-center gap-1 text-ink-muted hover:text-red-600 dark:hover:text-red-300 transition-colors focus:outline-none focus-visible:underline"
+            variant="ghost"
+            class="min-h-11 sm:min-h-9"
           >
-            Need to cancel?
-            <IconArrowRight class="size-3" />
-          </a>
+            Cancel booking
+          </Button>
         </div>
       </div>
     </main>
   )
 }
 
+/** One row of the booking's details: the label left, the value right. */
 function Detail(
-  { label, value }: { label: string; value: preact.ComponentChildren },
+  { label, value }: { label: string; value: ComponentChildren },
 ) {
   return (
-    <div class="flex items-center justify-between gap-4 px-5 py-3.5">
-      <span class="text-sm text-ink-muted">{label}</span>
-      <span class="text-sm text-ink">{value}</span>
+    <div class="flex items-baseline justify-between gap-4 px-4 py-3 text-sm sm:px-6">
+      <dt class="shrink-0 text-muted">{label}</dt>
+      <dd class="min-w-0 text-right text-foreground tabular-nums">{value}</dd>
     </div>
   )
 }

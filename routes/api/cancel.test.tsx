@@ -14,6 +14,7 @@ import { newOpaqueToken } from "@spy4x/platform/tokens"
 import { setTransportForTesting } from "../../lib/email.ts"
 import { loadConfirmedData } from "../../lib/confirmed-data.ts"
 import CancelPage, { handler as cancelPage } from "../cancel.tsx"
+import { ConfirmedView } from "../../components/ConfirmedView.tsx"
 import { handler } from "./cancel.ts"
 import { tempDataFile } from "../../lib/test-temp.ts"
 import { NOTES_MAX_LENGTH } from "../../lib/validators.ts"
@@ -346,6 +347,49 @@ Deno.test("mig#108: a cancel reason over the notes limit is cut before it is sto
   } finally {
     setTransportForTesting({ sendMail: () => Promise.resolve({}) })
   }
+})
+
+// mig#108, mig#119: anyone can book with someone else's address and
+// cancel with the guest link they get back, so the reason a canceller
+// typed must never reach a page the address owner opens from their mail.
+Deno.test("mig#108: the cancelled /confirmed page never shows the reason the canceller typed", async () => {
+  setTransportForTesting({ sendMail: () => Promise.resolve({}) })
+  await withOldLinkBooking(OLD_LINK.secret, async (state, id) => {
+    const reason = "Typed by a stranger"
+    const res = await handler.POST!(
+      {
+        req: new Request("http://localhost/api/cancel", {
+          method: "POST",
+          body: new URLSearchParams({ id, token: OLD_LINK.raw, reason }),
+        }),
+        state,
+      } as unknown as Context<State>,
+    ) as Response
+    assertEquals(res.status, 303)
+    assertEquals(state.bookings.get(id)?.cancelledReason, reason)
+
+    const confirmed = await loadConfirmedData(
+      {
+        req: new Request(
+          `http://localhost/confirmed?id=${id}&token=${OLD_LINK.raw}`,
+        ),
+        state,
+      } as unknown as Context<State>,
+    )
+    assertEquals(confirmed.mode, "cancelled")
+    assert(!JSON.stringify(confirmed).includes(reason), "not in the page data")
+    const html = renderToString(
+      <ConfirmedView
+        {...confirmed}
+        hostName="Jane Doe"
+        meetingUrl="https://meet.example.com/room"
+        slotDurationMin={30}
+        backHref="/"
+      />,
+    )
+    assert(html.includes("This booking was cancelled"), html)
+    assert(!html.includes(reason), "not on the page")
+  })
 })
 
 // mig#113: the route read the whole body into memory before it looked at

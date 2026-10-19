@@ -14,8 +14,8 @@ import { Button } from "@spy4x/preact-ui/button"
      303 redirect with ?err=… means the button briefly enters its
      "Confirming…" spinner state — and on slow networks that
      spinner can sit for many seconds with no feedback, looking
-     broken. Fix: validate locally first, and if invalid, surface
-     an inline error AND prevent the submit so the button label
+     broken. Fix: validate locally first, and if invalid, hand each
+     field its error (shown under it, focus on the first) AND prevent the submit so the button label
      never flips to "Confirming…". Server arktype still runs on the
      valid path as the source of truth.
 
@@ -26,11 +26,21 @@ import { Button } from "@spy4x/preact-ui/button"
      shipped in PR #7).
 */
 
+/** What is wrong with each field, by its `name`; a field with no entry is fine. */
+export interface FieldErrors {
+  name?: string
+  email?: string
+}
+
 interface Props {
   /** Full button label, e.g. "Confirm — Fri, 28 Aug, 14:00".
    *  Already in visitor TZ (the BookingFlow island re-formats it
    *  after hydration). */
   label: string
+  /** Receives the field errors of each click, `{}` when the form is
+   *  fine, so the form shows each one under its field. Always rendered
+   *  inside the BookingFlow island, so a function prop is fine here. */
+  onFieldErrors?: (errors: FieldErrors) => void
 }
 
 // Mirrors lib/validators.ts:BookingSchema (name min 2, the address
@@ -43,35 +53,31 @@ interface Props {
 const NAME_MIN = 2
 const NAME_MAX = 100
 
-export default function BookingSubmit({ label }: Props) {
+/** The first problem with the name and with the email, in the order the form shows them. */
+export function validateBooking(name: string, email: string): FieldErrors {
+  const errors: FieldErrors = {}
+  const n = name.trim()
+  const e = email.trim()
+  if (n.length < NAME_MIN) errors.name = "Enter your name."
+  else if (n.length > NAME_MAX) {
+    errors.name = "Enter a name of 100 characters or fewer."
+  }
+  if (!e) errors.email = "Enter your email."
+  else if (!isAddress(e)) {
+    errors.email = "Enter an email address like name@example.com."
+  }
+  return errors
+}
+
+export default function BookingSubmit({ label, onFieldErrors }: Props) {
   const [busy, setBusy] = useState(false)
   const [guestTz, setGuestTz] = useState("")
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Stays empty when no zone is detected; the server then falls back
     // to the host's timezone.
     setGuestTz(captureTimeZone() ?? "")
   }, [])
-
-  function validate(form: HTMLFormElement): string | null {
-    const fd = new FormData(form)
-    const name = String(fd.get("name") ?? "").trim()
-    const email = String(fd.get("email") ?? "").trim()
-    if (name.length < NAME_MIN) {
-      return "Please enter your name."
-    }
-    if (name.length > NAME_MAX) {
-      return "Name is too long."
-    }
-    if (!email) {
-      return "Please enter your email."
-    }
-    if (!isAddress(email)) {
-      return "Please enter a valid email address."
-    }
-    return null
-  }
 
   function onClick(e: MouseEvent) {
     // The native form-submit fires after this handler resolves. We
@@ -81,18 +87,19 @@ export default function BookingSubmit({ label }: Props) {
     const btn = e.currentTarget as HTMLButtonElement
     const form = btn.form
     if (!form) return
-    const err = validate(form)
-    if (err) {
+    const fd = new FormData(form)
+    const errors = validateBooking(
+      String(fd.get("name") ?? ""),
+      String(fd.get("email") ?? ""),
+    )
+    onFieldErrors?.(errors)
+    if (errors.name || errors.email) {
       e.preventDefault()
-      setError(err)
       // Move focus to the first invalid field for keyboard users.
-      const firstInvalid = form.querySelector<HTMLElement>(
-        err.startsWith("Please enter your name") ? "#f-name" : "#f-email",
-      )
-      firstInvalid?.focus()
+      form.querySelector<HTMLElement>(errors.name ? "#f-name" : "#f-email")
+        ?.focus()
       return
     }
-    setError(null)
     setBusy(true)
     // Do NOT preventDefault — the native form submit must proceed.
   }
@@ -105,18 +112,10 @@ export default function BookingSubmit({ label }: Props) {
         onClick={onClick}
         busy={busy}
         busyLabel="Confirming…"
-        class="w-full sm:w-auto"
+        class="w-full min-h-11 sm:min-h-9"
       >
         {label}
       </Button>
-      {error && (
-        <p
-          role="alert"
-          class="mt-2.5 text-xs font-medium text-red-600 dark:text-red-400"
-        >
-          {error}
-        </p>
-      )}
     </>
   )
 }

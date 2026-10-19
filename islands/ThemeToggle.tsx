@@ -1,11 +1,6 @@
-import { useEffect, useMemo, useState } from "preact/hooks"
-import {
-  createThemeStore,
-  type ThemePreference,
-  ThemeValue,
-} from "@spy4x/preact-signals/theme"
-import { cn } from "@spy4x/preact-cn"
-import { IconMoon, IconSun, IconThemeAuto } from "@spy4x/preact-icons"
+import { useEffect, useMemo } from "preact/hooks"
+import { createThemeStore } from "@spy4x/preact-signals/theme"
+import { ThemeToggle as LibraryThemeToggle } from "@spy4x/preact-ui/theme-toggle"
 import {
   THEME_STORAGE_KEY,
   type ThemeParam,
@@ -13,43 +8,11 @@ import {
 } from "../lib/theme.ts"
 
 /*
-  Theme toggle island.
-
-  Cycles through system → light → dark → system. The state lives in
-  @spy4x/preact-signals' theme store, attached on mount with the same
-  storage key and default as lib/theme.ts's first-paint script; it
-  stores the choice, repaints and follows system changes.
-
-  Why a cycle, not a tri-state dropdown: the affordance is small (one
-  icon button in the header). A cycle lets the user see + control the
-  setting without ever opening a popover. The order is system first
-  because that's the safe default.
-
-  Sun = light, moon = dark, the half-moon "auto" icon = following the
-  system.
+  Theme toggle island: the library's ThemeToggle on a theme store with
+  the same storage key and default as lib/theme.ts's first-paint script.
+  The store stores the choice, repaints and follows system changes once
+  attached; the button only reads it and cycles it.
 */
-
-export function nextPreference(p: ThemePreference): ThemePreference {
-  return p === ThemeValue.SYSTEM
-    ? ThemeValue.LIGHT
-    : p === ThemeValue.LIGHT
-    ? ThemeValue.DARK
-    : ThemeValue.SYSTEM
-}
-
-function label(p: ThemePreference): string {
-  return p === ThemeValue.SYSTEM
-    ? "Theme: follows system. Click for light."
-    : p === ThemeValue.LIGHT
-    ? "Theme: light. Click for dark."
-    : "Theme: dark. Click for auto."
-}
-
-function Icon({ preference }: { preference: ThemePreference }) {
-  if (preference === ThemeValue.LIGHT) return <IconSun class="size-4.5" />
-  if (preference === ThemeValue.DARK) return <IconMoon class="size-4.5" />
-  return <IconThemeAuto class="size-4.5" />
-}
 
 interface ThemeToggleProps {
   /** The owner's `THEME`: the preference when the visitor stored none. */
@@ -67,52 +30,6 @@ export default function ThemeToggle({ defaultTheme }: ThemeToggleProps) {
       }),
     [defaultTheme],
   )
-  const [preference, setPreference] = useState<ThemePreference>(
-    ThemeValue.SYSTEM,
-  )
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    const detach = store.attach()
-    // The store's signals come from the same @preact/signals copy as
-    // this island (deno.json maps the package's own pinned import to
-    // mig's); an explicit subscription keeps the island's state in step.
-    const unsubscribe = store.preference.subscribe(setPreference)
-    setMounted(true)
-    return () => {
-      unsubscribe()
-      detach()
-    }
-  }, [store])
-
-  // Until mounted, render a placeholder with the same dimensions so the
-  // layout doesn't shift when the real button hydrates.
-  const base = cn(
-    "relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface text-ink-muted hover:text-ink hover:bg-surface-sunken transition-colors duration-(--duration-snappy) focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-canvas)",
-  )
-
-  if (!mounted) {
-    return (
-      <button
-        type="button"
-        aria-label="Toggle theme"
-        class={cn(base, "opacity-0")}
-        tabIndex={-1}
-      >
-        <Icon preference={ThemeValue.SYSTEM} />
-      </button>
-    )
-  }
-
-  return (
-    <button
-      type="button"
-      aria-label={label(preference)}
-      title={label(preference)}
-      onClick={() => store.set(nextPreference(store.preference.value))}
-      class={base}
-    >
-      <Icon preference={preference} />
-    </button>
-  )
+  useEffect(() => store.attach(), [store])
+  return <LibraryThemeToggle store={store} />
 }
