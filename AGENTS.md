@@ -76,8 +76,8 @@ src/
 │       └── slots.ts         — GET slots for a date (JSON)
 ├── islands/
 │   ├── BookingFlow.tsx      — date → time → form; on / and /embed, works without JS
-│   ├── BookingSubmit.tsx    — standalone submit button: spinner, guestTz
-│   └── ThemeToggle.tsx      — three-way theme button (mig's own; library icons and `cn`)
+│   ├── BookingSubmit.tsx    — standalone submit button: spinner, guestTz, field errors
+│   └── ThemeToggle.tsx      — the library's ThemeToggle on mig's theme store
 ├── lib/
 │   ├── config.ts            — env parsing: arktype schema read through @spy4x/server's loadConfig
 │   ├── config-issue.ts      — mig's fixed startup wording for four variables, over ConfigError.issues
@@ -97,7 +97,7 @@ src/
 │   ├── height-report-script.ts — /embed's postMessage height-reporting script
 │   └── booked-report-script.ts — /embed/confirmed's one-time mig:booked postMessage script
 ├── components/              — server-side Preact components (no hydration); PickerCalendar wires
-│                              the library's Calendar to the picker links; icons.tsx is LogoMark only
+│                              the library's Calendar to the picker links; Header draws BrandMark
 ├── scripts/screenshots.ts   — writes the README pictures (see "Screenshots")
 ├── scripts/embed-check.ts   — /embed in a real browser, with and without JS
 ├── scripts/local-app.ts     — SMTP sink + server helpers for both scripts
@@ -126,24 +126,27 @@ src/
   `@spy4x/integrations` (ntfy client), `@spy4x/net` (bounded request body),
   `@spy4x/server` (`loadConfig`, the startup error's per-variable reasons),
   `@spy4x/preact-signals` (the theme store and its first-paint script) and the
-  design-system packages `@spy4x/preact-ui` (`Button`, `Field`, `Input`,
-  `Textarea`, `EmptyState`, `LoadingSpinner`, `honeypotField`),
-  `@spy4x/preact-system` (`Calendar`, `SEOHead`), `@spy4x/preact-icons`,
-  `@spy4x/preact-theme` (tokens, preset and the Vite plugins in
-  `vite.config.ts`) and `@spy4x/preact-cn`. Before writing a helper or a
-  component, check whether one of those already has it. Anything else needs a
-  comment.
-- **Colours.** mig's orange reaches the library's components through the
-  library's own tokens: `static/styles.css` sets `--color-primary` and
-  `--color-accent` (both palettes) and the surface, text and border tokens after
-  the theme's `@import` lines, from mig's `brand`, `ink` and `line` values. A
-  page background is `bg-canvas`, a card is `bg-surface`; never write the
-  library's purple or gray classes in mig's own markup.
+  design-system packages `@spy4x/preact-ui` (`Button`, `Card`, `BrandMark`,
+  `ThemeToggle`, `Notice`, `EmptyState`, `ErrorState`, `Field`, `Input`,
+  `Textarea`, `LoadingSpinner`, `useFocusOnError`, `honeypotField`),
+  `@spy4x/preact-system` (`Calendar`, `SEOHead`), `@spy4x/preact-icons` and
+  `@spy4x/preact-theme` (tokens, preset, the ink palette and the Vite plugins in
+  `vite.config.ts`). Before writing a helper or a component, check whether one
+  of those already has it. Anything else needs a comment.
+- **Colours.** mig's teal, `oklch(0.5 0.09 178)` (`#097463`), reaches the
+  library's components through the library's own tokens: `static/styles.css`
+  sets `--color-primary` and `--color-accent` on `:root` after the theme's
+  `@import` lines, and nothing else. Neutrals are the library's: cool gray in
+  light, the ink palette in dark (`<html data-theme="ink">` on every page, so
+  `.dark` alone switches it; /embed's forced theme is `data-forced-theme`).
+  Fonts are Geist, self-hosted in `static/fonts/`. The emails' links are
+  `#46bba5`. A page background is `bg-canvas`, a card is `bg-surface`; never
+  write the library's purple or gray classes in mig's own markup.
 - **One `@preact/signals`.** `@spy4x/preact-signals` (and every other
-  `@spy4x/preact-*` package, at 1.0.0) imports `npm:@preact/signals@2.5.1`
-  exactly. A second copy next to mig's own hooks into Preact twice and server
-  rendering throws "Cycle detected", so `deno.json` maps that exact specifier to
-  mig's `@preact/signals`. Bumping `@spy4x/preact-signals` means checking which
+  `@spy4x/preact-*` package, at 8.x) imports `npm:@preact/signals@^2.5.1`. A
+  second copy next to mig's own hooks into Preact twice and server rendering
+  throws "Cycle detected", so `deno.json` maps that specifier to mig's
+  `@preact/signals`. Bumping `@spy4x/preact-signals` means checking which
   version it now imports and moving that mapping with it.
 - **Concurrency:** every mutation goes through `bookings.mutate()` which
   acquires the in-process mutex. Never read-then-write the JSON directly.
