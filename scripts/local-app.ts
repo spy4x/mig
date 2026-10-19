@@ -10,8 +10,9 @@ export interface CapturedMail {
 
 /** Accepts every message on 127.0.0.1 and keeps it in memory. Speaks
  *  just enough SMTP for nodemailer: EHLO, AUTH (any credentials),
- *  MAIL, RCPT, DATA, RSET, NOOP, QUIT. No STARTTLS is offered, so
- *  nodemailer stays on plain TCP to localhost. */
+ *  MAIL, RCPT, DATA, RSET, NOOP, QUIT. No STARTTLS is offered, and a
+ *  STARTTLS command is refused, so a sender that requires TLS gets
+ *  nothing; mig reaches it only with SMTP_ALLOW_PLAINTEXT=true. */
 export function startSmtpSink(): {
   port: number
   mails: CapturedMail[]
@@ -73,6 +74,10 @@ export function startSmtpSink(): {
           } else {
             await say("235 Authenticated")
           }
+        } else if (verb === "STARTTLS") {
+          // What a relay without TLS answers. nodemailer sends STARTTLS
+          // unasked when STARTTLS is required (lib/email.test.ts).
+          await say("502 5.5.1 STARTTLS not supported")
         } else if (verb === "RCPT") {
           rcpt = line.match(/<([^>]*)>/)?.[1] ?? ""
           await say("250 OK")

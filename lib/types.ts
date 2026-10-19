@@ -57,6 +57,10 @@ export interface Config {
     user: string
     pass: string
     from: string
+    /** `SMTP_ALLOW_PLAINTEXT`: send without TLS when the relay offers
+     *  no STARTTLS. Absent counts as false: STARTTLS is required on
+     *  every port but 465, which uses implicit TLS. */
+    allowPlaintext?: boolean
   }
   cancelSecret: string
   port: number

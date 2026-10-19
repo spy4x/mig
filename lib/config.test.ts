@@ -442,6 +442,45 @@ Deno.test("config: HIDE_BRANDING absent shows the branding", async () => {
   assertEquals(value, false)
 })
 
+// mig#98: STARTTLS is required unless the operator opts out on purpose.
+Deno.test("config: SMTP_ALLOW_PLAINTEXT absent requires STARTTLS", async () => {
+  const env = { ...VALID_ENV }
+  delete env.SMTP_ALLOW_PLAINTEXT
+  assertEquals(await runConfigField(env, "smtp.allowPlaintext"), false)
+})
+
+for (const raw of ["true", "1", " YES "]) {
+  Deno.test(`config: SMTP_ALLOW_PLAINTEXT=${JSON.stringify(raw)} allows plain text`, async () => {
+    const value = await runConfigField(
+      { ...VALID_ENV, SMTP_ALLOW_PLAINTEXT: raw },
+      "smtp.allowPlaintext",
+    )
+    assertEquals(value, true)
+  })
+}
+
+for (const raw of ["false", "0", "no", ""]) {
+  Deno.test(`config: SMTP_ALLOW_PLAINTEXT=${JSON.stringify(raw)} requires STARTTLS`, async () => {
+    const value = await runConfigField(
+      { ...VALID_ENV, SMTP_ALLOW_PLAINTEXT: raw },
+      "smtp.allowPlaintext",
+    )
+    assertEquals(value, false)
+  })
+}
+
+Deno.test("config: SMTP_ALLOW_PLAINTEXT=on stops startup with the accepted values", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    SMTP_ALLOW_PLAINTEXT: "on",
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(
+    stderr,
+    "SMTP_ALLOW_PLAINTEXT: must be true, false, 1, 0, yes, no or empty",
+  )
+})
+
 // Each raw value here doubles as its own marker: it must be rejected
 // verbatim (not just "some invalid string"), so the test can't swap in an
 // unrelated random marker without losing coverage of that exact spelling —
