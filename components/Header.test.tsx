@@ -20,6 +20,6 @@ Deno.test("the header without its theme button keeps the brand", () => {
   const html = renderToString(
     <Header defaultTheme="dark" themeToggle={false} />,
   )
-  assert(html.includes('href="/"'))
+  assert(/<a\b[^>]*href="\/"[^>]*>[\s\S]*mig[\s\S]*<\/a>/.test(html), html)
   assertFalse(html.includes('aria-label="Theme: '))
 })
