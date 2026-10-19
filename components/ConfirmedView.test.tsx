@@ -1,6 +1,6 @@
 // mig#119 — /confirmed's three states on the library's parts.
 
-import { assert, assertEquals } from "@std/assert"
+import { assert, assertEquals, assertFalse } from "@std/assert"
 import { renderToString } from "preact-render-to-string"
 import { ConfirmedView, type ConfirmedViewProps } from "./ConfirmedView.tsx"
 import type { ConfirmedBooking } from "../lib/confirmed-data.ts"
@@ -86,5 +86,28 @@ Deno.test("every /confirmed state's main content is the skip link's focusable ta
     assert(main.includes('id="main"'), `${name}: ${main}`)
     assert(main.includes('tabindex="-1"'), `${name}: ${main}`)
     assert(main.includes("outline-hidden"), `${name}: ${main}`)
+  }
+})
+
+Deno.test("the booked page's two buttons sit together: centred from sm, stacked full width on a phone", () => {
+  const html = render({})
+  const row = html.match(
+    /<div class="([^"]*)"><a\b[^>]*>Book another time<\/a><a\b[^>]*>Cancel booking<\/a><\/div>/,
+  )
+  assert(row, "Book another time, then Cancel booking, side by side in one row")
+  const classes = row[1].split(" ")
+  for (
+    const c of ["flex", "flex-col", "gap-2", "sm:flex-row", "sm:justify-center"]
+  ) {
+    assert(classes.includes(c), `row: ${row[1]}`)
+  }
+  assertFalse(classes.includes("sm:justify-between"), row[1])
+  for (const label of ["Book another time", "Cancel booking"]) {
+    const link = html.match(new RegExp(`<a\\b[^>]*>${label}</a>`))?.[0]
+    assert(link?.includes("min-h-11"), `${label}: ${link}`)
+    assertFalse(
+      /\bw-full\b/.test(link ?? ""),
+      `${label} is as wide as its label from sm`,
+    )
   }
 })

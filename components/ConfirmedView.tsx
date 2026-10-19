@@ -182,7 +182,10 @@ export function ConfirmedView(props: ConfirmedViewProps) {
           </p>
         )}
 
-        <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-between">
+        {
+          /* Stacked and full width on a phone, one centred row from sm. */
+        }
+        <div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
           <Button href={backHref} variant="outline" class="min-h-11 sm:min-h-9">
             Book another time
           </Button>
