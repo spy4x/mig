@@ -159,7 +159,7 @@ export default define.page(function Index(ctx) {
     <div class="min-h-dvh flex flex-col">
       <Header defaultTheme={cfg.theme} />
 
-      <main id="main" class="flex-1">
+      <main id="main" tabIndex={-1} class="flex-1 outline-hidden">
         <div class="mx-auto w-full max-w-2xl px-4 pt-8 sm:px-6 sm:pt-12">
           <Hero
             hostName={cfg.hostName}

@@ -580,3 +580,12 @@ Deno.test("standalone / marks a day whose every slot is booked as full", async (
     "a fully booked day offers no link",
   )
 })
+
+// ─── mig#125 ──────────────────────────────────────────────────────────
+
+Deno.test("the booking page's main content is the skip link's focusable target", async () => {
+  const main = (await renderIndex("http://localhost/")).match(/<main\b[^>]*>/)
+    ?.[0] ?? ""
+  assert(main.includes('id="main"'), main)
+  assert(main.includes('tabindex="-1"'), main)
+})

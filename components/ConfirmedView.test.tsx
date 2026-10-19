@@ -72,3 +72,19 @@ Deno.test("on a phone, the not-found and cancelled pages' buttons are at least 4
     assert(link?.includes("min-h-11"), `${label}: ${link}`)
   }
 })
+
+// mig#125 — "Skip to content" (routes/_app.tsx, href="#main") lands on
+// the page's main content in every state, on /confirmed and /embed/confirmed.
+Deno.test("every /confirmed state's main content is the skip link's focusable target", () => {
+  const states: Array<[string, Partial<ConfirmedViewProps>]> = [
+    ["not found", { state: "missing", booking: null }],
+    ["cancelled", { mode: "cancelled" }],
+    ["booked", {}],
+  ]
+  for (const [name, overrides] of states) {
+    const main = render(overrides).match(/<main\b[^>]*>/)?.[0] ?? ""
+    assert(main.includes('id="main"'), `${name}: ${main}`)
+    assert(main.includes('tabindex="-1"'), `${name}: ${main}`)
+    assert(main.includes("outline-hidden"), `${name}: ${main}`)
+  }
+})

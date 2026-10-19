@@ -267,7 +267,11 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
       <script
         dangerouslySetInnerHTML={{ __html: heightReportScript() }}
       />
-      <main id="main" class="px-4 sm:px-5 py-4 sm:py-5">
+      <main
+        id="main"
+        tabIndex={-1}
+        class="px-4 py-4 outline-hidden sm:px-5 sm:py-5"
+      >
         {
           /* A plain <div>, not a <header> element — /embed must not
              contain the site's chrome, and a bare landmark heading

@@ -84,3 +84,18 @@ Deno.test("404 and 500: Book a time is at least 44 px tall on a phone", () => {
     assert(link?.includes("min-h-11"), `Book a time: ${link}`)
   }
 })
+
+// mig#125 — "Skip to content" (routes/_app.tsx, href="#main") lands here.
+Deno.test("the not-found and error pages' main content is the skip link's focusable target", () => {
+  for (
+    const [page, html] of [
+      ["404", render404("/nope", "auto")],
+      ["500", render500("/", "auto")],
+    ]
+  ) {
+    const main = html.match(/<main\b[^>]*>/)?.[0] ?? ""
+    assert(main.includes('id="main"'), `${page}: ${main}`)
+    assert(main.includes('tabindex="-1"'), `${page}: ${main}`)
+    assert(main.includes("outline-hidden"), `${page}: ${main}`)
+  }
+})

@@ -5,7 +5,7 @@
 // route's default component directly with hand-built props, the same
 // pattern routes/embed/embed.test.tsx uses.
 
-import { assert, assertFalse } from "@std/assert"
+import { assert, assertEquals, assertFalse } from "@std/assert"
 import { renderToString } from "preact-render-to-string"
 import type { PageProps } from "fresh"
 import type { State } from "../lib/utils.ts"
@@ -176,4 +176,39 @@ Deno.test("already-cancelled falls back to the host's dated, labelled clock plus
     html.includes("Times are shown in the host&#39;s timezone."),
     "expected the host-timezone fallback note",
   )
+})
+
+// mig#125 — "Skip to content" (routes/_app.tsx, href="#main") lands here.
+Deno.test("both /cancel pages' main content is the skip link's focusable target", () => {
+  const ok = {
+    state: "ok" as const,
+    booking: {
+      id: "01JBOOKINGFAKE00000000000",
+      date: "2026-10-06",
+      time: "09:00",
+      hostTz: "Europe/Berlin",
+      guestTz: null,
+      guestName: "Visitor",
+    },
+    token: "faketoken",
+    cancelledAt: null,
+    hostTz: "Europe/Berlin",
+    guestTz: null,
+  }
+  const invalid = {
+    state: "invalid" as const,
+    booking: null,
+    token: null,
+    cancelledAt: null,
+    hostTz: null,
+    guestTz: null,
+  }
+  for (const data of [ok, invalid]) {
+    const html = renderToString(<CancelPage {...fakePageProps(data)} />)
+    const main = html.match(/<main\b[^>]*>/g)
+    assertEquals(main?.length, 1, data.state)
+    assert(main![0].includes('id="main"'), `${data.state}: ${main}`)
+    assert(main![0].includes('tabindex="-1"'), `${data.state}: ${main}`)
+    assert(main![0].includes("outline-hidden"), `${data.state}: ${main}`)
+  }
 })
