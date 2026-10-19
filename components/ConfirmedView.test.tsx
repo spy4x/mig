@@ -45,14 +45,14 @@ Deno.test("the cancelled page says so and offers a new time", () => {
   assert(/<a\b[^>]*href="\/"[^>]*>Book a new time<\/a>/.test(html))
 })
 
-Deno.test("a missing, tampered or unknown link gets one message and a way to book", () => {
+Deno.test("a missing, tampered or unknown link gets one heading, one message and a way to book", () => {
   for (const state of ["missing", "invalid", "expired"] as const) {
     const html = render({ state, booking: null })
     assert(
-      /We couldn(&#39;|')t find this booking\. Check the link in your email\./
-        .test(html),
-      `${state}: ${html}`,
+      /<h1\b[^>]*>\s*We couldn(&#39;|')t find this booking\s*<\/h1>/.test(html),
+      `${state}: the heading names the problem: ${html}`,
     )
+    assert(html.includes("Check the link in your email."), state)
     assertEquals(
       html.match(/<a\b[^>]*href="\/"[^>]*>Book a time<\/a>/)?.length,
       1,

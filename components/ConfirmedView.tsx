@@ -74,7 +74,12 @@ export function ConfirmedView(props: ConfirmedViewProps) {
     return (
       <main id={mainId} class="flex-1 px-4 py-12 sm:px-6">
         <div class="mx-auto w-full max-w-md text-center">
-          <ErrorState message="We couldn't find this booking. Check the link in your email." />
+          <h1 class="text-2xl font-semibold tracking-tight text-balance text-foreground">
+            We couldn't find this booking
+          </h1>
+          <div class="mt-4">
+            <ErrorState message="Check the link in your email." />
+          </div>
           <div class="mt-6">
             <Button href={backHref}>Book a time</Button>
           </div>
