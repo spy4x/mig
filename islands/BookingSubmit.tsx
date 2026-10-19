@@ -30,6 +30,8 @@ import { Button } from "@spy4x/preact-ui/button"
 export interface FieldErrors {
   name?: string
   email?: string
+  /** Only ever the server's message (`?field=notes`); the button checks name and email. */
+  notes?: string
 }
 
 interface Props {

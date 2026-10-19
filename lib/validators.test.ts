@@ -189,7 +189,7 @@ Deno.test("booking validator: name and email both invalid — name's message win
   }
 })
 
-Deno.test("booking validator: name at exactly 100 chars is accepted, 101 is rejected with the Zod-parity message", () => {
+Deno.test("booking validator: name at exactly 100 chars is accepted, 101 is rejected in the submit button's words", () => {
   const at100 = BookingSchema.safeParse({
     ...validBooking,
     name: "B".repeat(100),
@@ -204,12 +204,12 @@ Deno.test("booking validator: name at exactly 100 chars is accepted, 101 is reje
   if (!at101.success) {
     assertEquals(
       at101.error.issues[0]?.message,
-      "String must contain at most 100 character(s)",
+      "Enter a name of 100 characters or fewer.",
     )
   }
 })
 
-Deno.test("booking validator: notes at exactly 500 chars is accepted, 501 is rejected", () => {
+Deno.test("booking validator: notes at exactly 500 chars is accepted, 501 is rejected with a plain message", () => {
   const at500 = BookingSchema.safeParse({
     ...validBooking,
     notes: "N".repeat(500),
@@ -221,6 +221,12 @@ Deno.test("booking validator: notes at exactly 500 chars is accepted, 501 is rej
     notes: "N".repeat(501),
   })
   assertEquals(at501.success, false)
+  if (!at501.success) {
+    assertEquals(
+      at501.error.issues[0]?.message,
+      "Enter notes of 500 characters or fewer.",
+    )
+  }
 })
 
 Deno.test("booking validator: name is trimmed before the length check", () => {

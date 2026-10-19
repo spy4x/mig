@@ -132,8 +132,13 @@ export async function handleBookingSubmit(
   function errRedirect(
     message: string,
     state?: { date?: string; slot?: string; tz?: string; theme?: string },
+    field?: string,
   ): Response {
     const params = new URLSearchParams({ err: message })
+    // The form shows a message about one of its fields under that field.
+    if (field === "name" || field === "email" || field === "notes") {
+      params.set("field", field)
+    }
     if (state?.date) params.set("date", state.date)
     if (state?.slot) params.set("slot", state.slot)
     if (state?.tz) params.set("tz", state.tz)
@@ -209,9 +214,11 @@ export async function handleBookingSubmit(
     website: form.get("website") ?? "",
   })
   if (!parsed.success) {
+    const issue = parsed.error.issues[0]
     return errRedirect(
-      parsed.error.issues[0]?.message ?? "Invalid form data.",
+      issue?.message ?? "Invalid form data.",
       redirectState,
+      issue?.path[0],
     )
   }
   const input = parsed.data
