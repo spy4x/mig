@@ -21,6 +21,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The confirmation page names the host, and a cancelled booking shows the reason
   given. The floating date chip on phones is gone.
 
+## [2.0.0] - 2026-10-19
+
+A major version because an owner whose mail relay offers no STARTTLS must set
+`SMTP_ALLOW_PLAINTEXT=true` after this upgrade, or every booking fails. Nothing
+else in the configuration, the data file or the routes changed.
+
+### Security
+
+- mig now requires STARTTLS when it sends email on any port but 465, which keeps
+  implicit TLS. Before, it upgraded only when the relay offered STARTTLS, so
+  anyone on the network path who removed the offer could read the SMTP password
+  and every guest's name, email and booking in plain text, and nobody noticed. A
+  relay that offers no STARTTLS now gets nothing, and the logged error names
+  STARTTLS, never the password (#98).
+
+### Added
+
+- `SMTP_ALLOW_PLAINTEXT` (default `false`): `true` sends without TLS when the
+  relay offers no STARTTLS, as mig did before. Use it only for a relay on the
+  same host or a private network (#98).
+
+### Upgrade notes
+
+- If your relay does not offer STARTTLS (a local postfix without TLS, for
+  example), booking emails fail after this upgrade, and so does every booking,
+  since mig removes a booking whose emails could not be sent. Set
+  `SMTP_ALLOW_PLAINTEXT=true` to keep it working, or turn on TLS in the relay.
+
 ## [1.0.0] - 2026-10-16
 
 The first stable release. The configuration, the data file and the routes,
@@ -615,7 +643,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/spy4x/mig/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/spy4x/mig/compare/v0.13.0...v1.0.0
 [0.13.0]: https://github.com/spy4x/mig/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/spy4x/mig/compare/v0.12.0...v0.12.1

@@ -53,7 +53,7 @@ const toProxyHeader = (raw: string): string => raw.trim().toLowerCase()
 // including "false" and "0", into true. This coerces case-insensitively
 // and trims first (whitespace-only counts as empty), and leaves anything
 // else as the raw string so the schema's `"boolean"` check rejects it.
-function toHideBranding(raw: string): boolean | string {
+function toBoolean(raw: string): boolean | string {
   const v = raw.trim().toLowerCase()
   if (v === "true" || v === "1" || v === "yes") return true
   if (v === "false" || v === "0" || v === "no" || v === "") return false
@@ -89,10 +89,13 @@ const ConfigSchema = type({
   // Homelab convention is SMTP_PASSWORD (matches servers/{cloud,home}/.env).
   SMTP_PASSWORD: "string > 0",
   SMTP_FROM: SmtpFrom,
+  // mig#98: true sends in plain text when the relay offers no STARTTLS,
+  // for a relay on the same host or a private network that has no TLS.
+  SMTP_ALLOW_PLAINTEXT: converted(toBoolean, type("boolean")),
   CANCEL_SECRET: CancelSecret,
   PORT: converted(toNumber, type("number.integer > 0")),
   DATA_PATH: "string",
-  HIDE_BRANDING: converted(toHideBranding, type("boolean")),
+  HIDE_BRANDING: converted(toBoolean, type("boolean")),
   GITHUB_URL: "string.url",
   MIG_VERSION: converted((raw) => raw.trim(), type("string <= 64")),
 })
@@ -107,6 +110,7 @@ const DEFAULTS: Record<string, string> = {
   TRUSTED_PROXY_HEADER: "",
   THEME: "auto",
   SMTP_PORT: "587",
+  SMTP_ALLOW_PLAINTEXT: "false",
   PORT: "8080",
   DATA_PATH: "./data/bookings.json",
   HIDE_BRANDING: "false",
@@ -218,6 +222,7 @@ function parseConfig(): Config {
       user: r.SMTP_USER,
       pass: r.SMTP_PASSWORD,
       from: r.SMTP_FROM,
+      allowPlaintext: r.SMTP_ALLOW_PLAINTEXT,
     },
     cancelSecret: r.CANCEL_SECRET,
     port: r.PORT,

@@ -56,7 +56,7 @@ day.
 # compose.yml
 services:
   mig:
-    image: antonshubin/mig:v1.0.0
+    image: antonshubin/mig:v2.0.0
     restart: unless-stopped
     ports: ["8080:8080"]
     volumes: ["./data:/data:z"]
@@ -91,6 +91,10 @@ The ones you must set:
 | `PUBLIC_URL`          | `https://meet.example.com`                |
 | `CANCEL_SECRET`       | output of `openssl rand -base64 32`       |
 | `SMTP_*`              | host, port, user, password, from          |
+
+mig requires STARTTLS from the SMTP relay on every port but 465. For a relay
+without TLS on the same host or a private network, set
+`SMTP_ALLOW_PLAINTEXT=true`.
 
 Blocked dates, notice period, booking horizon, rate limit, theme, branding and
 NTFY are optional: see [configuration.md](docs/configuration.md).

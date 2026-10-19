@@ -70,10 +70,11 @@ export async function sendEmail(
         user: config.smtp.user,
         pass: config.smtp.pass,
         from: config.smtp.from,
-        // mig has always upgraded to TLS only when the relay offers
-        // STARTTLS. Requiring it would stop every booking on a relay
-        // without it (a local postfix, the screenshot script's sink).
-        requireTls: false,
+        // mig#98: a relay that offers no STARTTLS (or a path that strips
+        // the offer) gets nothing, not the password and the guest's
+        // details in plain text. SMTP_ALLOW_PLAINTEXT=true opts out, for
+        // a relay without TLS on the same host or a private network.
+        requireTls: config.smtp.allowPlaintext !== true,
       },
       testTransport === null ? undefined : () => testTransport,
     )
