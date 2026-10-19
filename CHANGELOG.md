@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-10-20
+
 ### Fixed
 
 - "Skip to content" now moves focus to the page's main content on every page,
@@ -663,7 +665,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/spy4x/mig/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/spy4x/mig/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/spy4x/mig/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/spy4x/mig/compare/v0.13.0...v1.0.0
