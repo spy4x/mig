@@ -87,6 +87,28 @@ Deno.test("a day whose every time is taken says so and links back to the calenda
   assertFalse(time.includes("data-grid-day"), "no empty grid")
 })
 
+Deno.test("a booked time does not decide which day the times are under", () => {
+  // Berlin host, Tokyo visitor: the booked 15:00 is still Monday in
+  // Tokyo, the free 17:00 is already Tuesday. The heading follows the
+  // time the visitor can pick, not the one already taken.
+  const html = renderToString(
+    <BookingFlow
+      {...BASE}
+      tz="Asia/Tokyo"
+      selectedDate="2027-01-04"
+      slots={[
+        { time: "15:00", available: false },
+        { time: "17:00", available: true },
+      ]}
+      error={null}
+    />,
+  )
+  const heading = section(html, "step-time").match(
+    /<h3\b[^>]*\bdata-grid-day=""[^>]*>([^<]*)<\/h3>/,
+  )?.[1]
+  assertEquals(heading, "Tuesday, 5 January 2027")
+})
+
 Deno.test("on a phone, Choose another date and Confirm are at least 44 px tall", () => {
   const empty = renderToString(
     <BookingFlow
