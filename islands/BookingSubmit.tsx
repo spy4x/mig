@@ -112,7 +112,7 @@ export default function BookingSubmit({ label, onFieldErrors }: Props) {
         onClick={onClick}
         busy={busy}
         busyLabel="Confirming…"
-        class="w-full"
+        class="w-full min-h-11 sm:min-h-9"
       >
         {label}
       </Button>

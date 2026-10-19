@@ -29,7 +29,9 @@ export default define.page(function NotFound({ state, url }) {
           </h1>
           <EmptyState
             description="The page you're looking for doesn't exist."
-            action={<Button href="/">Book a time</Button>}
+            action={
+              <Button href="/" class="min-h-11 sm:min-h-9">Book a time</Button>
+            }
           />
         </div>
       </main>

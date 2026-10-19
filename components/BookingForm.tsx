@@ -205,7 +205,7 @@ export function BookingForm({
 */
 function PlainSubmitButton({ label }: { label: string }) {
   return (
-    <Button type="submit" class="w-full">
+    <Button type="submit" class="w-full min-h-11 sm:min-h-9">
       {label}
     </Button>
   )

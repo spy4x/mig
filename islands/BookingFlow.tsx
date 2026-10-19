@@ -567,7 +567,11 @@ export default function BookingFlow(props: BookingFlowProps) {
                     title={`No times left on ${dateLabel ?? date.value}.`}
                     action={interactive
                       ? (
-                        <Button variant="outline" onClick={clearDate}>
+                        <Button
+                          variant="outline"
+                          onClick={clearDate}
+                          class="min-h-11 sm:min-h-9"
+                        >
                           Choose another date
                         </Button>
                       )
@@ -583,6 +587,7 @@ export default function BookingFlow(props: BookingFlowProps) {
                           // Fresh would mark this link to the page's
                           // own path as current (mig#50).
                           aria-current="false"
+                          class="min-h-11 sm:min-h-9"
                         >
                           Choose another date
                         </Button>

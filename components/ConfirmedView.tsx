@@ -81,7 +81,9 @@ export function ConfirmedView(props: ConfirmedViewProps) {
             <ErrorState message="Check the link in your email." />
           </div>
           <div class="mt-6">
-            <Button href={backHref}>Book a time</Button>
+            <Button href={backHref} class="min-h-11 sm:min-h-9">
+              Book a time
+            </Button>
           </div>
         </div>
       </main>
@@ -129,7 +131,9 @@ export function ConfirmedView(props: ConfirmedViewProps) {
             Both you and {hostName} have been notified.
           </p>
           <div class="mt-6">
-            <Button href={backHref}>Book a new time</Button>
+            <Button href={backHref} class="min-h-11 sm:min-h-9">
+              Book a new time
+            </Button>
           </div>
         </div>
       </main>

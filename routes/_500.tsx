@@ -27,7 +27,9 @@ export default define.page(function Error(
           </h1>
           <EmptyState
             description={message}
-            action={<Button href="/">Book a time</Button>}
+            action={
+              <Button href="/" class="min-h-11 sm:min-h-9">Book a time</Button>
+            }
           />
         </div>
       </main>

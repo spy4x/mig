@@ -186,7 +186,9 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
               </p>
             )}
             <div class="mt-6">
-              <Button href="/">Book a time</Button>
+              <Button href="/" class="min-h-11 sm:min-h-9">
+                Book a time
+              </Button>
             </div>
           </div>
         </main>

@@ -77,3 +77,10 @@ Deno.test("500: the page has exactly one h1, the title", () => {
   assertEquals(h1Count(html), 1)
   assert(/<h1[^>]*>\s*Something went wrong\s*<\/h1>/.test(html))
 })
+
+Deno.test("404 and 500: Book a time is at least 44 px tall on a phone", () => {
+  for (const html of [render404("/nope", "auto"), render500("/boom", "auto")]) {
+    const link = html.match(/<a\b[^>]*>Book a time<\/a>/)?.[0]
+    assert(link?.includes("min-h-11"), `Book a time: ${link}`)
+  }
+})

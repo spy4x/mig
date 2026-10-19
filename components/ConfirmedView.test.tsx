@@ -60,3 +60,15 @@ Deno.test("a missing, tampered or unknown link gets one heading, one message and
     )
   }
 })
+
+Deno.test("on a phone, the not-found and cancelled pages' buttons are at least 44 px tall", () => {
+  for (
+    const [html, label] of [
+      [render({ state: "missing", booking: null }), "Book a time"],
+      [render({ mode: "cancelled" }), "Book a new time"],
+    ]
+  ) {
+    const link = html.match(new RegExp(`<a\\b[^>]*>\\s*${label}\\s*</a>`))?.[0]
+    assert(link?.includes("min-h-11"), `${label}: ${link}`)
+  }
+})

@@ -86,3 +86,29 @@ Deno.test("a day whose every time is taken says so and links back to the calenda
   assertEquals(link.match(/href="([^"]*)"/)?.[1], "/embed")
   assertFalse(time.includes("data-grid-day"), "no empty grid")
 })
+
+Deno.test("on a phone, Choose another date and Confirm are at least 44 px tall", () => {
+  const empty = renderToString(
+    <BookingFlow
+      {...BASE}
+      selectedDate="2027-01-04"
+      slots={[{ time: "09:00", available: false }]}
+      error={null}
+      basePath="/embed"
+    />,
+  )
+  const choose = empty.match(/<a\b[^>]*>Choose another date<\/a>/)?.[0]
+  assert(choose?.includes("min-h-11"), `Choose another date: ${choose}`)
+
+  const form = renderToString(
+    <BookingFlow
+      {...BASE}
+      selectedDate="2027-01-04"
+      selectedSlot="09:30"
+      slots={[{ time: "09:30", available: true }]}
+      error={null}
+    />,
+  )
+  const confirm = form.match(/<button\b[^>]*type="submit"[^>]*>/)?.[0]
+  assert(confirm?.includes("min-h-11"), `Confirm: ${confirm}`)
+})
