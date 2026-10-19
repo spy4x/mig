@@ -37,7 +37,6 @@
     "@spy4x/preact-system": "jsr:@spy4x/preact-system@8.3.0",
     "@spy4x/preact-icons": "jsr:@spy4x/preact-icons@8.4.0",
     "@spy4x/preact-theme": "jsr:@spy4x/preact-theme@8.4.0",
-    "@spy4x/preact-cn": "jsr:@spy4x/preact-cn@8.4.0",
     "@tailwindcss/vite": "npm:@tailwindcss/vite@^4.1.18",
     "@fresh/plugin-vite": "jsr:@fresh/plugin-vite@^1.0.8",
     "fresh": "jsr:@fresh/core@^2.3.3",
