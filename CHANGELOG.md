@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- mig now wears one teal brand colour, on the Confirm button, the picked day,
+  the logo and the favicon, in place of three different oranges. The
+  confirmation emails' links are teal too.
+- Every page is built from the house component library: the same buttons, cards,
+  form fields, messages and theme toggle as the owner's other apps, the Geist
+  typeface (served by mig itself, no font CDN) and a near-black dark mode.
+- A booked time is no longer shown struck through: only times a visitor can pick
+  are listed, and a day with none says so and offers another date.
+- A form mistake shows under its field, and focus moves there; a time taken just
+  before you confirmed shows its message above the remaining times.
+- The confirmation page names the host, and a cancelled booking shows the reason
+  given. The floating date chip on phones is gone.
+
 ## [1.0.0] - 2026-10-16
 
 The first stable release. The configuration, the data file and the routes,
