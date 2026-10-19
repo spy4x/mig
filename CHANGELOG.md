@@ -23,6 +23,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The confirmation page names the host, and a broken link gets a clear title.
   The floating date chip on phones is gone, and the main buttons are 44 px tall
   on a phone.
+- The owner's shared libraries move from 1.63.0 to 1.80.0 and the design-system
+  packages from 1.0.0 to 8.6.0; `@spy4x/preact-cn` is no longer used.
 
 ## [2.0.0] - 2026-10-19
 
