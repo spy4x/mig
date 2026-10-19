@@ -10,9 +10,8 @@
   separate chip. Pass either "0.2.0" or "v0.2.0" — the `v` prefix
   is normalised at render time.
 
-  `pb-6` keeps the footer text off the screen edge on short pages
-  where the layout doesn't push it down naturally — small enough
-  that the footer still feels attached to the content, not floating.
+  Each link is a 44 px touch target on a phone, so the row needs no
+  extra padding to sit off the screen edge.
 */
 
 interface FooterProps {
@@ -37,24 +36,24 @@ export function Footer(
   if (hidden) return null
   const v = formatVersion(version)
   return (
-    <footer class="mt-16 pt-6 pb-6 border-t border-line">
-      <div class="mx-auto max-w-2xl px-4 sm:px-6 flex items-center justify-between text-xs text-ink-subtle">
+    <footer class="mt-16 border-t border-subtle">
+      <div class="mx-auto flex max-w-2xl items-center justify-between px-4 py-2 text-xs text-muted sm:px-6">
         <a
           href={githubUrl}
           target="_blank"
           rel="noopener noreferrer"
-          class="hover:text-ink transition-colors"
+          class={LINK}
         >
           Powered by mig {v}
         </a>
-        <a
-          href="/embed"
-          class="hover:text-ink transition-colors"
-          title="Use this on your own site"
-        >
+        <a href="/embed" class={LINK} title="Use this on your own site">
           Embed
         </a>
       </div>
     </footer>
   )
 }
+
+/** A quiet footer link: 44 px tall on a phone, 36 px with a pointer, the library's focus ring. */
+const LINK =
+  "inline-flex min-h-11 items-center rounded-md px-1 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-focus focus-visible:outline-hidden sm:min-h-9"

@@ -1,19 +1,15 @@
-import { Logo } from "./Logo.tsx"
+import { BrandMark } from "@spy4x/preact-ui/brand-mark"
+import { IconCalendar } from "@spy4x/preact-icons"
 import ThemeToggle from "../islands/ThemeToggle.tsx"
 import type { ThemeParam } from "../lib/theme.ts"
 
 /*
-  Top app chrome. Slim, sticky, hairline bottom border, blurred
-  background so content scrolls under it cleanly.
-
-  No host name / tz in here — those belong in the hero, not the
-  chrome. The header is brand-only: mark on the left, theme toggle
-  on the right.
+  Top bar of a single-page tool (design-language.md, "Layout
+  patterns"): the brand mark on the left, the theme toggle on the
+  right, nothing else. Host name and zone belong in the page, not here.
 */
 
 interface HeaderProps {
-  /** Used by the embed variant to swap to a tighter header. */
-  compact?: boolean
   /** False hides the theme button, for pages rendered without the theme script (mig#63). */
   themeToggle?: boolean
   /** The owner's `THEME`, the toggle's default when nothing is stored. */
@@ -22,9 +18,14 @@ interface HeaderProps {
 
 export function Header({ themeToggle = true, defaultTheme }: HeaderProps) {
   return (
-    <header class="sticky top-0 z-40 w-full border-b border-line bg-(--color-canvas)/80 backdrop-blur-md backdrop-saturate-150">
-      <div class="mx-auto flex w-full max-w-2xl items-center justify-between px-4 sm:px-6 py-4 sm:py-5">
-        <Logo size={28} href="/" />
+    <header class="w-full border-b border-subtle">
+      <div class="mx-auto flex w-full max-w-2xl items-center justify-between px-4 py-3 sm:px-6">
+        <a
+          href="/"
+          class="-m-1 rounded-card p-1 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-focus focus-visible:outline-hidden"
+        >
+          <BrandMark Icon={IconCalendar} name="mig" />
+        </a>
         {themeToggle && <ThemeToggle defaultTheme={defaultTheme} />}
       </div>
     </header>

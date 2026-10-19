@@ -36,6 +36,9 @@ function bookableDate(): string {
   return futureWeekday(2, HOST_TZ)
 }
 
+/** Hours of notice that put the fixed test dates, now in the past, back inside the bookable window. */
+const PAST_DATES_BOOKABLE = -24 * 366 * 100
+
 function fakeConfig(): Config {
   return {
     hostName: "Jane Doe",
@@ -45,7 +48,11 @@ function fakeConfig(): Config {
     publicUrl: "https://mig.example.com",
     weeklyAvailability: parseWeeklyAvailability("MON-FRI 09:00-17:00"),
     slotDurationMin: 30,
-    minNoticeHours: 1,
+    // A notice reaching a century back keeps every slot of the fixed,
+    // already past test dates bookable: the picker hides a time that
+    // cannot be booked (mig#119), and these tests read the labels of
+    // the times it shows, whatever day the suite runs on.
+    minNoticeHours: PAST_DATES_BOOKABLE,
     bookingHorizonDays: 60,
     blockedDates: new Set<string>(),
     rateLimitPer5Min: 10,
@@ -104,12 +111,14 @@ interface RenderedLabels {
 function renderedLabels(html: string): RenderedLabels {
   return {
     selectedDateLabel: html.match(
-      /<p class="text-sm font-medium text-ink truncate tnum">([^<]*)<\/p>/,
+      /<p\b[^>]*\bdata-date-label=""[^>]*>([^<]*)<\/p>/,
     )?.[1] ?? null,
     zoneLabel:
-      html.match(/<p class="text-xs text-ink-subtle mt-0\.5">([^<]*)<\/p>/)
+      html.match(/<p\b[^>]*\bdata-grid-zone=""[^>]*>Times in ([^<]*)<\/p>/)
         ?.[1] ?? null,
-    slotDateLabel: html.match(/· ([^<]+)</)?.[1] ?? null,
+    slotDateLabel:
+      html.match(/<span\b[^>]*\bdata-slot-date=""[^>]*>([^<]*)<\/span>/)
+        ?.[1] ?? null,
   }
 }
 

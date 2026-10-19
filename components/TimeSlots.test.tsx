@@ -1,16 +1,14 @@
-// Issue #33 — the hovered slot's date note ("Wed 23 Sep") measured
-// 4.21:1 in the light theme, below the 4.5:1 floor for normal text.
-// The note reused opacity-70 against the hover surface (brand-700 text
-// on brand-50); opacity-80 clears 4.5:1 in all four states (light/dark
-// x idle/hover) while staying visibly lighter than the slot time next
-// to it — see the PR body for the four contrast numbers.
+// Issue #33 — the hovered slot's date note ("Wed 23 Sep") once read
+// 4.21:1 because it was faded with an opacity class. Since mig#119 the
+// note takes the slot's own text colour, which the library's outline
+// button keeps at 4.5:1 or better in both palettes, idle and hovered.
 
 import { assert, assertEquals, assertFalse } from "@std/assert"
 import { renderToString } from "preact-render-to-string"
 import { App } from "fresh"
 import { TimeSlots } from "./TimeSlots.tsx"
 
-Deno.test("renders a slot's date note at opacity-80, not opacity-70", () => {
+Deno.test("renders a slot's date note in the slot's own text colour, never faded", () => {
   const html = renderToString(
     <TimeSlots
       date="2026-09-23"
@@ -26,14 +24,11 @@ Deno.test("renders a slot's date note at opacity-80, not opacity-70", () => {
     />,
   )
 
-  assert(html.includes("Wed 23 Sep"), "expected the date note to render")
-  assert(
-    html.includes("opacity-80"),
-    "expected the date note to use opacity-80 for 4.5:1 contrast on hover",
-  )
+  const note = html.match(/<span class="([^"]*)">Wed 23 Sep<\/span>/)
+  assert(note, "expected the date note to render in its own span")
   assertFalse(
-    html.includes("opacity-70"),
-    "opacity-70 measured 4.21:1 on hover in the light theme — below 4.5:1",
+    /\b(opacity|text)-/.test(note[1].replace(/\btext-xs\b/, "")),
+    `the note must inherit the slot's colour, got "${note[1]}"`,
   )
 })
 
@@ -47,7 +42,7 @@ Deno.test("renders no date note when the slot's day matches the picked date", ()
     />,
   )
 
-  assertEquals(html.includes("opacity-80"), false)
+  assertFalse(html.includes("Wed 23 Sep"))
 })
 
 // ─── mig#48 review: accessible name includes the date note ──────────
@@ -114,36 +109,22 @@ Deno.test("the selected slot's full time is in visually hidden text, not just ar
   )
 })
 
-Deno.test("a booked (unavailable) slot's full time is in visually hidden text, not just aria-label", () => {
+Deno.test("hides a booked slot: neither its time nor a way to pick it is shown", () => {
+  // mig#119: a struck-through booked time told every visitor when the
+  // host is busy and offered nothing to click, so it is left out.
   const html = renderToString(
     <TimeSlots
       date="2026-09-23"
       dateLabel="Wednesday, 23 September 2026"
-      slots={[{
-        time: "09:00",
-        available: false,
-        displayHHMM: "23:00",
-        ariaZoneLabel: "Auckland, UTC+13",
-      }]}
-      onSelectSlot={() => {}}
+      slots={[
+        { time: "09:00", available: false, displayHHMM: "09:00" },
+        { time: "09:30", available: true, displayHHMM: "09:30" },
+      ]}
     />,
   )
 
-  assertFalse(
-    html.includes("aria-label="),
-    "expected no aria-label on the booked chip (unreliable on a <span>)",
-  )
-  assert(
-    /class="sr-only">23:00, Auckland, UTC\+13</.test(html),
-    "expected the hidden text to carry the full clock",
-  )
-  // Same double-announcement guard as the selected chip: the visible
-  // "23:00" must be aria-hidden, since the sr-only text above already
-  // carries the full time.
-  assert(
-    /aria-hidden="true"[^>]*>\s*<span>23:00<\/span>/.test(html),
-    "expected the visible chip to be aria-hidden (not read twice alongside the sr-only text)",
-  )
+  assertFalse(html.includes("09:00"), "the booked time is not on the page")
+  assert(html.includes("slot=09%3A30"), "the free time is still a link")
 })
 
 // ─── mig#50: Fresh's active-link marking ─────────────────────────────

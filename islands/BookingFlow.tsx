@@ -1,14 +1,17 @@
 import { useEffect } from "preact/hooks"
 import { useSignal } from "@preact/signals"
+import { Button } from "@spy4x/preact-ui/button"
+import { Card } from "@spy4x/preact-ui/card"
 import { EmptyState } from "@spy4x/preact-ui/empty-state"
 import { LoadingSpinner } from "@spy4x/preact-ui/loading-spinner"
+import { Notice } from "@spy4x/preact-ui/notice"
+import { useFocusOnError } from "@spy4x/preact-ui/use-focus-on-error"
 import { PickerCalendar } from "../components/PickerCalendar.tsx"
 import { gridDay, TimeSlots } from "../components/TimeSlots.tsx"
 import { DateCard } from "../components/DateCard.tsx"
 import { TimeCard } from "../components/TimeCard.tsx"
 import { BookingForm } from "../components/BookingForm.tsx"
-import { SummaryBar } from "../components/SummaryBar.tsx"
-import { pickerLinks } from "../lib/picker-links.ts"
+import { pickerHref, pickerLinks } from "../lib/picker-links.ts"
 import { isoDateInTz, zonedDateTime } from "@spy4x/time/tz"
 import {
   formatClockAt,
@@ -159,7 +162,6 @@ function formatConfirmLabelWithClock(
 export default function BookingFlow(props: BookingFlowProps) {
   const hostTz = props.hostTz
   const basePath = props.basePath ?? ""
-  const embed = basePath !== ""
 
   // Signal-based state. Each signal is read inline below — Preact
   // re-renders the component when any signal changes.
@@ -380,8 +382,12 @@ export default function BookingFlow(props: BookingFlowProps) {
   // — cheap even pre-mount (`zonedDateTime` needs no visitor zone),
   // and the basis for both the display order and the grid header
   // below.
+  //
+  // Booked times are left out here, before anything is derived from
+  // them: the grid shows only times a visitor can pick, and the header
+  // and the picked day come from those times alone.
   const slotsWithInstant = date.value
-    ? slots.value.map((s) => ({
+    ? slots.value.filter((s) => s.available).map((s) => ({
       ...s,
       instant: zonedDateTime(date.value!, s.time, hostTz),
     }))
@@ -421,7 +427,6 @@ export default function BookingFlow(props: BookingFlowProps) {
     )
     : null
   const dateLabel: string | null = day?.long ?? null
-  const dateLabelShort: string | null = day?.short ?? null
 
   // Re-derive every slot's visitor-TZ HH:MM + own offset for display
   // (mig#15, mig#48). Before mount the route's own `displayHHMM` is
@@ -443,7 +448,7 @@ export default function BookingFlow(props: BookingFlowProps) {
           : undefined,
       }
     }).map(({ instant: _instant, ...s }) => s)
-    : slots.value
+    : slots.value.filter((s) => s.available)
 
   // ─── Render ──────────────────────────────────────────────────────
 
@@ -454,6 +459,17 @@ export default function BookingFlow(props: BookingFlowProps) {
   // (slots fetch failed). Both shown inline so the user knows the
   // picker is in a degraded state.
   const error = serverError.value ?? fetchError.value
+  // A failed booking or slot fetch lands focus on its message, so a
+  // keyboard or screen reader visitor hears it at once (mig#119).
+  const errorBox = useFocusOnError<HTMLDivElement>(error)
+  // The message sits at the top of the step the visitor is on: above the
+  // times after a slot conflict, above the form after a refused form.
+  const errorStep = !date.value ? 1 : !slot.value ? 2 : 3
+  const notice = error && (
+    <div ref={errorBox} tabIndex={-1} class="mb-3 outline-hidden">
+      <Notice tone="danger" urgent>{error}</Notice>
+    </div>
+  )
 
   // Gate the interactive handlers on mounted.value. On the SSR pass
   // (and in any pre-hydration render) mounted is false, so Calendar
@@ -466,24 +482,15 @@ export default function BookingFlow(props: BookingFlowProps) {
   const interactive = mounted.value
 
   return (
-    <div class="space-y-5 sm:space-y-7">
-      {error && (
-        <div
-          role="alert"
-          class="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
-        >
-          {error}
-        </div>
-      )}
-
+    <div class="space-y-8">
       {/* Step 1 — date */}
       <section aria-labelledby="step-date">
         <StepHeader
           step={1}
           label={hasDate ? "Date" : "Choose a date"}
-          active
         />
         <div class="mt-3">
+          {errorStep === 1 && notice}
           {hasDate
             ? (
               <DateCard
@@ -516,14 +523,14 @@ export default function BookingFlow(props: BookingFlowProps) {
       {hasDate && (
         <section
           aria-labelledby="step-time"
-          class="scroll-mt-20 step-in"
+          class="scroll-mt-20"
         >
           <StepHeader
             step={2}
             label={hasSlot ? "Time" : "Choose a time"}
-            active
           />
           <div class="mt-3">
+            {errorStep === 2 && notice}
             {hasSlot
               ? (
                 <TimeCard
@@ -554,9 +561,34 @@ export default function BookingFlow(props: BookingFlowProps) {
                 />
               )
               : (
-                <EmptyState
-                  title={`No available times on ${dateLabel ?? date.value}.`}
-                />
+                <Card>
+                  <EmptyState
+                    inset
+                    title={`No times left on ${dateLabel ?? date.value}.`}
+                    action={interactive
+                      ? (
+                        <Button variant="outline" onClick={clearDate}>
+                          Choose another date
+                        </Button>
+                      )
+                      : (
+                        <Button
+                          variant="outline"
+                          href={pickerHref(
+                            links.basePath,
+                            undefined,
+                            links.tz,
+                            links.theme,
+                          )}
+                          // Fresh would mark this link to the page's
+                          // own path as current (mig#50).
+                          aria-current="false"
+                        >
+                          Choose another date
+                        </Button>
+                      )}
+                  />
+                </Card>
               )}
           </div>
         </section>
@@ -566,10 +598,11 @@ export default function BookingFlow(props: BookingFlowProps) {
       {hasDate && hasSlot && (
         <section
           aria-labelledby="step-details"
-          class="scroll-mt-20 step-in"
+          class="scroll-mt-20"
         >
-          <StepHeader step={3} label="Your details" active />
+          <StepHeader step={3} label="Your details" />
           <div class="mt-3">
+            {errorStep === 3 && notice}
             <BookingForm
               date={date.value!}
               slot={slot.value!}
@@ -584,23 +617,6 @@ export default function BookingFlow(props: BookingFlowProps) {
             />
           </div>
         </section>
-      )}
-
-      {
-        /* Mobile sticky CTA — appears only between date-pick and
-          slot-pick (SummaryBar handles `state === "date"` by hiding
-          itself on step 3 already). Renders inside the island so the
-          date label updates to visitor TZ after hydration. Not on
-          /embed (mig#85): the iframe grows to its content, so a bar
-          fixed to the frame's bottom would cover the last slots. */
-      }
-      {!embed && (
-        <SummaryBar
-          state={hasSlot ? "slot" : hasDate ? "date" : "none"}
-          date={date.value}
-          dateLabel={dateLabelShort ?? dateLabel}
-          slot={slotLabelVisitorTz ?? slot.value}
-        />
       )}
     </div>
   )
@@ -629,29 +645,20 @@ function maxDate(dates: DateCell[], hostTz: string): string {
   return max || isoDateInTz(new Date(), hostTz)
 }
 
-function StepHeader(
-  { step, label, active }: {
-    step: number
-    label: string
-    active?: boolean
-  },
-) {
+// A step's number and title. The number is neutral: the brand colour is
+// kept for the one primary action and the picked day (design-language.md).
+function StepHeader({ step, label }: { step: number; label: string }) {
   return (
-    <div class="flex items-center gap-2.5">
+    <div class="flex items-center gap-2">
       <span
-        class={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold tnum ${
-          active
-            ? "bg-brand-500 text-white"
-            : "bg-surface-sunken text-ink-subtle"
-        }`}
+        aria-hidden="true"
+        class="inline-flex size-6 items-center justify-center rounded-full border border-control text-xs font-medium text-muted tabular-nums"
       >
         {step}
       </span>
       <h2
         id={`step-${step === 1 ? "date" : step === 2 ? "time" : "details"}`}
-        class={`text-sm font-semibold tracking-(--tracking-tight) ${
-          active ? "text-ink" : "text-ink-subtle"
-        }`}
+        class="text-base font-medium text-foreground"
       >
         {label}
       </h2>

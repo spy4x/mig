@@ -229,8 +229,6 @@ export const handler = define.handlers({
       param keeps today's behaviour. Every link and the confirm form
       carry the forced theme forward the same way `tz` does — see
       lib/picker-links.ts and BookingForm's hidden `theme` field.
-    - No mobile summary bar: it's fixed to the frame's bottom, and the
-      frame grows to its content, so it would cover the last slots.
 
   Auto-sizing (mig#44): every /embed page posts its content height to
   `window.parent` via `postMessage` (lib/height-report-script.ts) —
@@ -249,7 +247,7 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
     // Change back to the date step) reports a smaller height instead
     // of a high-water mark. See lib/height-report-script.ts's header
     // comment for the full reasoning.
-    <div class="bg-canvas text-ink" {...{ [HEIGHT_ATTR]: "" }}>
+    <div class="bg-canvas text-foreground" {...{ [HEIGHT_ATTR]: "" }}>
       {
         /* mig#15 — always emitted; the script itself only redirects
            when the browser's detected zone doesn't already match the
@@ -277,11 +275,11 @@ export default define.page<typeof handler>(function Embed({ data, state }) {
              out of a <header> tag keeps that easy to verify. */
         }
         <div class="mb-4">
-          <h1 class="text-base font-semibold tracking-(--tracking-tight) text-ink">
+          <h1 class="text-lg font-semibold tracking-tight text-foreground">
             Book {cfg.hostName}
           </h1>
           {!tz && (
-            <p class="text-xs text-ink-subtle mt-1">
+            <p class="mt-1 text-sm text-muted">
               Times are shown in the host's timezone.
             </p>
           )}

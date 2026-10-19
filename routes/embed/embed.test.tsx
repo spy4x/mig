@@ -218,13 +218,13 @@ Deno.test("embed picker: time step — date-card and slot links stay under /embe
 })
 
 // mig#48 review: scoped to TimeSlots.tsx's own header element
-// (`<p class="text-xs text-ink-subtle mt-0.5">{zoneLabel}</p>`) — never
+// (`<p data-grid-zone>Times in {zoneLabel}</p>`) — never
 // a whole-page `html.includes(...)`, since the same zone string also
 // appears (correctly) inside every slot's `aria-label`; an `includes`
 // check would keep passing even if the header itself were removed.
 function gridHeaderZoneLabel(html: string): string | null {
   const m = html.match(
-    /<p class="text-xs text-ink-subtle mt-0\.5">([^<]*)<\/p>/,
+    /<p\b[^>]*\bdata-grid-zone=""[^>]*>Times in ([^<]*)<\/p>/,
   )
   return m ? m[1] : null
 }
@@ -456,7 +456,9 @@ Deno.test("the time card shows the slot's own converted date, not the picked hos
     state: { config: cfg } as unknown as State,
   }
   const html = renderToString(<EmbedPage {...props} />)
-  const timeCardDate = html.match(/· ([^<]+)</)?.[1]
+  const timeCardDate = html.match(
+    /<span\b[^>]*\bdata-slot-date=""[^>]*>([^<]*)<\/span>/,
+  )?.[1]
   assertEquals(timeCardDate, "Monday, 5 October 2026")
 })
 
@@ -680,7 +682,7 @@ Deno.test("embed pages render no header, footer, or theme toggle", () => {
   for (const html of [pickerHtml, confirmedHtml]) {
     assertFalse(html.includes("<header"))
     assertFalse(html.includes("<footer"))
-    assertFalse(html.includes('aria-label="Toggle theme"'))
+    assertFalse(html.includes('aria-label="Theme: '))
   }
 })
 
@@ -879,21 +881,16 @@ Deno.test("standalone confirmed page keeps header, footer, and same-tab cancel l
   assert(back, "expected a link back to /")
 })
 
-Deno.test("standalone confirmed page's cancelled state keeps its original padding", () => {
-  // Regression guard: the ConfirmedView extraction briefly changed the
-  // cancelled state's <main> from px-6 py-16 (its original class,
-  // matching the not-ok state) to px-4 sm:px-6 py-12 (the booked
-  // state's class) — a visible, unintended behaviour change on the
-  // standalone page a "no behaviour change" refactor must not make.
-  const html = renderToString(
-    <ConfirmedPage
-      {...fakePageProps(confirmedData({ mode: "cancelled" }))}
-    />,
-  )
-  assert(html.includes('class="flex-1 grid place-items-center px-6 py-16"'))
-  assertFalse(
-    html.includes('class="flex-1 grid place-items-center px-4 sm:px-6 py-12"'),
-  )
+Deno.test("standalone confirmed page: the cancelled and booked states share one column", () => {
+  // mig#119: /confirmed is one centred column whatever the booking's
+  // state, so a cancellation doesn't move the page around.
+  const mainTag = (mode: "booked" | "cancelled") =>
+    renderToString(
+      <ConfirmedPage {...fakePageProps(confirmedData({ mode }))} />,
+    ).match(/<main\b[^>]*>/)?.[0]
+  const cancelled = mainTag("cancelled")
+  assert(cancelled, "expected a <main> on the cancelled state")
+  assertEquals(cancelled, mainTag("booked"))
 })
 
 // ─── mig#44 review round 3: height-report wiring ──────────────────────
@@ -994,32 +991,27 @@ Deno.test("embed routes import no island except BookingFlow on the picker", asyn
   assertEquals(await islandImports("./book.ts"), [])
 })
 
-Deno.test("embed picker: the mobile summary bar is not rendered inside the frame", () => {
-  // SummaryBar is fixed to the viewport's bottom; the frame grows to
-  // its content, so the bar would sit over the last row of slots.
-  const html = renderToString(
-    <EmbedPage
-      {...fakePageProps(embedData({ date: "2027-01-04", slots: SLOTS }))}
-    />,
-  )
-  assertFalse(html.includes("fixed inset-x-0 bottom-0"))
-  // The same step on / does render it, so the check above can't pass
-  // just because SummaryBar's classes changed.
-  const standalone = renderToString(
-    <BookingFlow
-      dates={DATES}
-      slots={SLOTS}
-      selectedDate="2027-01-04"
-      selectedSlot={null}
-      monthAnchor="2027-01-01"
-      durationMin={30}
-      hostName="Jane Doe"
-      hostTz="Europe/Berlin"
-      error={null}
-      tz={null}
-    />,
-  )
-  assert(standalone.includes("fixed inset-x-0 bottom-0"))
+Deno.test("the booking flow draws no floating bar over the times, on / or in the frame", () => {
+  // mig#119: the floating date chip on phones repeated the date card
+  // and covered the last row of times. Nothing in the flow is fixed to
+  // the viewport any more, on either page.
+  const props = {
+    dates: DATES,
+    slots: SLOTS,
+    selectedDate: "2027-01-04",
+    selectedSlot: null,
+    monthAnchor: "2027-01-01",
+    durationMin: 30,
+    hostName: "Jane Doe",
+    hostTz: "Europe/Berlin",
+    error: null,
+    tz: null,
+  }
+  const fixed = /class="[^"]*\bfixed\b/
+  for (const basePath of ["", "/embed"]) {
+    const html = renderToString(<BookingFlow {...props} basePath={basePath} />)
+    assertFalse(fixed.test(html), `basePath "${basePath}"`)
+  }
 })
 
 Deno.test("mig#44: the time card's Change link carries theme once forced", () => {

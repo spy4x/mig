@@ -6,7 +6,9 @@
   progression, not a state change.
 */
 
-import { IconArrowRight, IconClock } from "@spy4x/preact-icons"
+import { Button } from "@spy4x/preact-ui/button"
+import { Card } from "@spy4x/preact-ui/card"
+import { IconClock } from "@spy4x/preact-icons"
 import { pickerHref } from "../lib/picker-links.ts"
 
 interface TimeCardProps {
@@ -38,52 +40,48 @@ export function TimeCard(
     TimeCardProps,
 ) {
   const shownSlot = displaySlot ?? slot
-  // Focus styles live on the outer <button>/<a> — same reason as
-  // DateCard: the inner <span> never receives focus.
-  const changeClass =
-    "shrink-0 inline-flex items-center gap-1 text-xs font-medium text-ink-muted hover:text-brand-600 dark:hover:text-brand-300 transition-colors focus:outline-none focus-visible:underline"
-
   return (
-    <div class="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
-      <div class="flex items-center gap-3 min-w-0">
-        <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-300">
-          <IconClock class="size-4" />
-        </span>
-        <div class="min-w-0">
-          <p class="text-[11px] font-medium uppercase tracking-wider text-ink-subtle">
-            Time
-          </p>
-          <p class="text-sm font-medium text-ink truncate tnum">
-            {shownSlot}{" "}
-            <span class="text-ink-subtle font-normal">· {dateLabel}</span>
-          </p>
-        </div>
+    <Card class="flex items-center justify-between gap-3 py-1 ps-4 pe-2">
+      <div class="flex min-w-0 items-center gap-3">
+        <IconClock class="size-5 text-muted" />
+        <p class="min-w-0 text-sm tabular-nums">
+          <span class="block truncate font-medium text-foreground">
+            {shownSlot}
+          </span>
+          <span class="block truncate text-muted" data-slot-date="">
+            {dateLabel}
+          </span>
+        </p>
       </div>
       {onClear
         ? (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onClear}
             aria-label="Change time"
-            class={changeClass}
+            class={CHANGE}
           >
             Change
-            <IconArrowRight class="size-3" />
-          </button>
+          </Button>
         )
         : (
-          <a
+          <Button
             href={pickerHref(basePath, { date }, tz, theme)}
+            variant="ghost"
+            size="sm"
             // Fresh would mark this link to the page's own path as
             // current (mig#50, see SlotButton in TimeSlots.tsx).
             aria-current="false"
             aria-label="Change time"
-            class={changeClass}
+            class={CHANGE}
           >
             Change
-            <IconArrowRight class="size-3" />
-          </a>
+          </Button>
         )}
-    </div>
+    </Card>
   )
 }
+
+/** "Change": a ghost button, 44 px tall on a phone and 36 px with a pointer. */
+const CHANGE = "shrink-0 min-h-11 sm:min-h-9"

@@ -25,8 +25,8 @@ function fakeProps(path: string, theme: Config["theme"]) {
   }
 }
 
-// The unhydrated ThemeToggle island renders this placeholder label.
-const TOGGLE = `aria-label="Toggle theme"`
+// The library's ThemeToggle names itself "Theme: …" in every state.
+const TOGGLE = `aria-label="Theme: `
 
 function render404(path: string, theme: Config["theme"]): string {
   // deno-lint-ignore no-explicit-any

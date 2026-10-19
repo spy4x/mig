@@ -1,4 +1,5 @@
 import { Button } from "@spy4x/preact-ui/button"
+import { Card, CardBody } from "@spy4x/preact-ui/card"
 import { Field } from "@spy4x/preact-ui/field"
 import { Textarea } from "@spy4x/preact-ui/input"
 import { define } from "../lib/utils.ts"
@@ -169,33 +170,24 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
       cancelledAtLabel && !cancelKnownGuestTz
     return (
       <div class="min-h-dvh flex flex-col">
-        <Header compact defaultTheme={cfg.theme} />
-        <main class="flex-1 grid place-items-center px-6 py-16">
-          <div class="max-w-sm text-center">
-            <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface-sunken text-ink-subtle mb-4">
-              <IconInformationCircle class="size-5.5" />
+        <Header defaultTheme={cfg.theme} />
+        <main class="flex-1 px-4 py-12 sm:px-6">
+          <div class="mx-auto w-full max-w-md text-center">
+            <div class="mb-4 inline-flex size-12 items-center justify-center rounded-full border border-subtle bg-surface text-muted">
+              <IconInformationCircle class="size-6" />
             </div>
-            <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
+            <h1 class="text-2xl font-semibold tracking-tight text-balance text-foreground">
               {msg.title}
             </h1>
-            <p
-              class={`text-sm text-ink-muted ${
-                showCancelTzNote ? "mb-1" : "mb-6"
-              }`}
-            >
-              {msg.body}
-            </p>
+            <p class="mt-2 text-sm text-pretty text-muted">{msg.body}</p>
             {showCancelTzNote && (
-              <p class="text-xs text-ink-subtle mb-6">
+              <p class="mt-1 text-sm text-muted">
                 Times are shown in the host's timezone.
               </p>
             )}
-            <a
-              href="/"
-              class="inline-flex items-center justify-center rounded-lg bg-brand-500 hover:bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-(--color-canvas)"
-            >
-              Back to booking
-            </a>
+            <div class="mt-6">
+              <Button href="/">Book a time</Button>
+            </div>
           </div>
         </main>
         <Footer
@@ -222,55 +214,66 @@ export default define.page<typeof handler>(function Cancel({ data, state }) {
 
   return (
     <div class="min-h-dvh flex flex-col">
-      <Header compact defaultTheme={cfg.theme} />
-      <main class="flex-1 grid place-items-center px-4 sm:px-6 py-12">
-        <div class="max-w-md w-full">
-          <div class="rounded-2xl border border-line bg-surface overflow-hidden">
-            <div class="px-6 pt-6 pb-5 border-b border-line">
-              <h1 class="text-xl font-semibold tracking-(--tracking-tight) text-ink mb-2">
+      <Header defaultTheme={cfg.theme} />
+      <main class="flex-1 px-4 py-12 sm:px-6">
+        <div class="mx-auto w-full max-w-md">
+          <Card>
+            <div class="border-b border-subtle px-4 py-4 sm:px-6">
+              <h1 class="text-xl font-semibold tracking-tight text-foreground">
                 Cancel your booking?
               </h1>
-              <p class="text-sm text-ink-muted tnum">{whenDate}</p>
-              <p class="text-sm text-ink tnum">{whenTime}</p>
-              <p class="text-xs text-ink-subtle mt-1">
-                with {cfg.hostName}
+              <p class="mt-2 text-sm text-foreground tabular-nums">
+                {whenDate}
               </p>
+              <p class="text-sm text-foreground tabular-nums">{whenTime}</p>
+              <p class="mt-1 text-sm text-muted">with {cfg.hostName}</p>
               {!knownGuestTz && (
-                <p class="text-xs text-ink-subtle mt-1">
+                <p class="mt-1 text-sm text-muted">
                   Times are shown in the host's timezone.
                 </p>
               )}
             </div>
 
-            <form
-              method="POST"
-              action="/api/cancel"
-              class="px-6 py-5 space-y-4"
-            >
-              <input type="hidden" name="id" value={b.id} />
-              <input type="hidden" name="token" value={token} />
+            <CardBody>
+              <form method="POST" action="/api/cancel" class="space-y-4">
+                <input type="hidden" name="id" value={b.id} />
+                <input type="hidden" name="token" value={token} />
 
-              <Field id="reason" label="Reason" hint="Optional">
-                <Textarea
-                  name="reason"
-                  rows={3}
-                  maxLength={NOTES_MAX_LENGTH}
-                  placeholder="Let the other person know why."
-                  class="resize-y"
-                />
-              </Field>
+                <Field id="reason" label="Reason" hint="Optional">
+                  <Textarea
+                    name="reason"
+                    rows={3}
+                    maxLength={NOTES_MAX_LENGTH}
+                    placeholder="Let the other person know why."
+                    class="resize-y"
+                  />
+                </Field>
 
-              <div class="flex items-center justify-end pt-2">
-                <Button type="submit" variant="danger">
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </div>
+                <p class="text-sm text-muted">
+                  We'll let {cfg.hostName} know, and email you both.
+                </p>
 
-          <p class="text-xs text-ink-subtle text-center mt-4">
-            This will notify both you and {cfg.hostName}.
-          </p>
+                <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    href={`/confirmed?id=${encodeURIComponent(b.id)}&token=${
+                      encodeURIComponent(token)
+                    }`}
+                    variant="ghost"
+                    class="min-h-11 sm:min-h-9"
+                  >
+                    Keep booking
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="danger"
+                    class="min-h-11 sm:min-h-9"
+                  >
+                    Cancel booking
+                  </Button>
+                </div>
+              </form>
+            </CardBody>
+          </Card>
         </div>
       </main>
       <Footer
