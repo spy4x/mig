@@ -2,6 +2,12 @@ import { useEffect, useState } from "preact/hooks"
 import { captureTimeZone } from "@spy4x/platform/browser/embed"
 import { isAddress } from "@spy4x/email/address"
 import { Button } from "@spy4x/preact-ui/button"
+import {
+  EMAIL_INVALID,
+  EMAIL_MISSING,
+  NAME_MISSING,
+  NAME_TOO_LONG,
+} from "../lib/field-messages.ts"
 
 /*
   Booking submit island.
@@ -60,14 +66,10 @@ export function validateBooking(name: string, email: string): FieldErrors {
   const errors: FieldErrors = {}
   const n = name.trim()
   const e = email.trim()
-  if (n.length < NAME_MIN) errors.name = "Enter your name."
-  else if (n.length > NAME_MAX) {
-    errors.name = "Enter a name of 100 characters or fewer."
-  }
-  if (!e) errors.email = "Enter your email."
-  else if (!isAddress(e)) {
-    errors.email = "Enter an email address like name@example.com."
-  }
+  if (n.length < NAME_MIN) errors.name = NAME_MISSING
+  else if (n.length > NAME_MAX) errors.name = NAME_TOO_LONG
+  if (!e) errors.email = EMAIL_MISSING
+  else if (!isAddress(e)) errors.email = EMAIL_INVALID
   return errors
 }
 

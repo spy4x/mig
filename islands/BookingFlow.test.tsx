@@ -60,7 +60,7 @@ Deno.test("a refused form shows its message in the details step", () => {
       selectedDate="2027-01-04"
       selectedSlot="09:30"
       slots={[{ time: "09:30", available: true }]}
-      error="Please enter a valid email."
+      error="Enter an email address like name@example.com."
     />,
   )
   assertFalse(section(html, "step-time").includes('role="alert"'))

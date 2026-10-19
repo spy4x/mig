@@ -316,7 +316,7 @@ Deno.test("POST /api/book: an address the mail sender would refuse is turned bac
     assertEquals(location.pathname, "/")
     assertEquals(
       location.searchParams.get("err"),
-      "Please enter a valid email.",
+      "Enter an email address like name@example.com.",
     )
     assertEquals(bookings.list().length, 0)
     assertEquals(sentTo, [])

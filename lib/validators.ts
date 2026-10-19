@@ -21,6 +21,13 @@ import {
   hasTextControlCharacters,
 } from "@spy4x/platform/validation/predicates"
 import { isCalendarDateTime } from "./clock.ts"
+import {
+  EMAIL_INVALID,
+  EMAIL_MISSING,
+  NAME_MISSING,
+  NAME_TOO_LONG,
+  TIME_ZONE_UNREADABLE,
+} from "./field-messages.ts"
 
 export interface BookingData {
   name: string
@@ -57,11 +64,10 @@ function expectString(
 const NameRule = type("string").pipe((s: string, ctx) => {
   const trimmed = s.trim()
   if (trimmed.length < 2) {
-    return ctx.reject({ message: "Please enter your name." })
+    return ctx.reject({ message: NAME_MISSING })
   }
   if (trimmed.length > 100) {
-    // The same words the submit button uses (islands/BookingSubmit.tsx).
-    return ctx.reject({ message: "Enter a name of 100 characters or fewer." })
+    return ctx.reject({ message: NAME_TOO_LONG })
   }
   if (hasHeaderControlCharacters(trimmed)) {
     return ctx.reject({ message: "Name contains unsupported characters." })
@@ -75,10 +81,9 @@ const NameRule = type("string").pipe((s: string, ctx) => {
 // before the `@` over 64 characters, the limit mail servers use
 // (mig#113); plus-tags stay, since a guest may really use one.
 const EmailRule = type("string").pipe((s: string, ctx) => {
+  if (s.trim() === "") return ctx.reject({ message: EMAIL_MISSING })
   const address = parseBareAddress(s)
-  if (address === null) {
-    return ctx.reject({ message: "Please enter a valid email." })
-  }
+  if (address === null) return ctx.reject({ message: EMAIL_INVALID })
   return address
 })
 
@@ -118,15 +123,12 @@ const SlotRule = type("string").pipe((s: string, ctx) => {
   return s
 })
 
+// The browser fills this hidden field, so the visitor cannot fix it by
+// hand: an over-long value is just another zone mig cannot read.
 const GuestTzRule = type("string").pipe((s: string, ctx) => {
   const trimmed = s.trim()
-  if (trimmed.length > 100) {
-    return ctx.reject({
-      message: "String must contain at most 100 character(s)",
-    })
-  }
-  if (!isValidTimeZone(trimmed)) {
-    return ctx.reject({ message: "Bad timezone." })
+  if (trimmed.length > 100 || !isValidTimeZone(trimmed)) {
+    return ctx.reject({ message: TIME_ZONE_UNREADABLE })
   }
   return canonicalTimeZone(trimmed)
 })

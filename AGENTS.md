@@ -89,6 +89,7 @@ src/
 │   ├── invite.ts            — booking → .ics invite (writer: @spy4x/time/ics)
 │   ├── clock.ts             — mig's zone labels, slot instants (zone helpers: @spy4x/time/tz)
 │   ├── validators.ts        — shared arktype schema for booking submission (email: @spy4x/platform)
+│   ├── field-messages.ts    — one wording per form mistake, shared by validators.ts and BookingSubmit
 │   ├── book.ts              — POST /api/book + POST /embed/book handler
 │   ├── confirmed-data.ts    — shared /confirmed + /embed/confirmed lookup
 │   ├── picker-links.ts      — basePath-aware hrefs + pushed addresses for the picker
