@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- "Skip to content" now moves focus to the page's main content on every page,
+  including the confirmation, cancel, not-found and error pages.
+- After you pick a day or a time, or press "Change", focus moves to the heading
+  of the step now showing, so a screen reader says where you are. Without
+  JavaScript, a page that opens on a later step starts there too.
+- A name, email or notes the server refuses shows its message under that field,
+  with focus on it, instead of above the form. The name and notes limits read in
+  plain words.
+- A day the host does not work says "{host} isn't taking meetings on …"; "No
+  times left on …" is kept for a day whose times are all taken.
+- On the confirmation page, "Book another time" and "Cancel booking" sit
+  together under the card instead of at its two edges.
+
 ## [2.1.0] - 2026-10-19
 
 ### Changed
