@@ -81,14 +81,26 @@ export function cueSeconds(text: string): number {
   return Math.max(MIN_CUE_SECONDS, text.length / READ_CHARS_PER_SECOND)
 }
 
-/** Every caption that leaves the screen before it can be read, as a sentence each. */
+/** The longest caption: one line that stays readable where the video plays small. */
+export const MAX_CUE_CHARS = 64
+
+/** Every caption too long for one line or gone before it can be read, as a sentence each. */
 export function paceProblems(cues: Cue[]): string[] {
   return cues.flatMap((c) => {
     const shown = c.end - c.start
     const need = cueSeconds(c.text)
-    return shown + 0.001 < need
-      ? [`"${c.text}" shows ${shown.toFixed(2)} s, needs ${need.toFixed(2)} s`]
-      : []
+    return [
+      ...(c.text.length > MAX_CUE_CHARS
+        ? [
+          `"${c.text}" has ${c.text.length} characters, at most ${MAX_CUE_CHARS}`,
+        ]
+        : []),
+      ...(shown + 0.001 < need
+        ? [
+          `"${c.text}" shows ${shown.toFixed(2)} s, needs ${need.toFixed(2)} s`,
+        ]
+        : []),
+    ]
   })
 }
 

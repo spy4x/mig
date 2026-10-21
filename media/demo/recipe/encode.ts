@@ -289,7 +289,9 @@ export async function encode() {
   const cues = parseVtt(await Deno.readTextFile(CAPTIONS))
   const late = paceProblems(cues)
   if (late.length) {
-    throw new Error(`captions leave too soon:\n${late.join("\n")}`)
+    throw new Error(
+      `captions break the pace or length rules:\n${late.join("\n")}`,
+    )
   }
   const shots = take.segments.reduce((s, x) => s + x.end - x.frames[0].at, 0)
   const seconds = HOLD.title + shots + HOLD.split + HOLD.end

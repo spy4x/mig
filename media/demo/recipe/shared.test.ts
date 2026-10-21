@@ -39,3 +39,11 @@ Deno.test("the take plays back in real time at a steady frame rate", () => {
   ], 10)
   assertEquals(files, ["a", "b", "b", "b", "c", "d", "d", "d"])
 })
+
+Deno.test("a caption longer than one line is reported", () => {
+  assertEquals(paceProblems([{ start: 0, end: 10, text: "x".repeat(64) }]), [])
+  assertEquals(
+    paceProblems([{ start: 0, end: 10, text: "x".repeat(65) }]).length,
+    1,
+  )
+})
