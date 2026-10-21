@@ -21,6 +21,7 @@
 import { freePort, waitForHealth } from "../../../scripts/local-app.ts"
 import {
   BAND,
+  type Box,
   type Browser,
   type BrowserContext,
   CAPTIONS,
@@ -49,14 +50,20 @@ const MEET = "http://meet.example.com"
 const MAIL = "http://mail.example.com"
 const GUEST = { name: "John Doe", email: "john@example.com" }
 const SLOT = "15:30"
-/** One half of the closing split frame; the encoder puts an 8 px gap between the halves. */
-const HALF = { width: 636, height: 800 }
+/**
+ * The page's own size in CSS pixels, drawn at {@link ZOOM}× into the 1280×800 frame, so its text
+ * stays readable where the video plays small (about 528 px wide on antonshubin.com).
+ */
+const VIEW = { width: 720, height: 450 }
+const ZOOM = SIZE.width / VIEW.width
+/** One half of the closing split frame, in CSS pixels; the encoder puts an 8 px gap between the halves. */
+const HALF = { width: 358, height: 450 }
 /** Where the pointer rests before its first move. */
-const POINTER_START = { x: 980, y: 600 }
+const POINTER_START = { x: 560, y: 340 }
 /** Milliseconds between keystrokes: a calm human pace. */
 const TYPING_DELAY = 90
 /** A click target nearer the bottom than this is scrolled up, clear of the caption band. */
-const BOTTOM_LIMIT = SIZE.height - BAND - 48
+const BOTTOM_LIMIT = VIEW.height - (BAND + 32) / ZOOM
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const now = () => Date.now() / 1000
@@ -309,8 +316,10 @@ async function clickLike(
   await target.waitFor()
   let box = await target.boundingBox()
   if (!box) throw new Error("the click target has no box")
-  if (box.y < 96 || box.y + box.height > BOTTOM_LIMIT) {
-    const delta = Math.round(box.y + box.height / 2 - (SIZE.height - BAND) / 2)
+  if (box.y < 48 || box.y + box.height > BOTTOM_LIMIT) {
+    const delta = Math.round(
+      box.y + box.height / 2 - (VIEW.height - BAND / ZOOM) / 2,
+    )
     await page.evaluate(`scrollBy({ top: ${delta}, behavior: "smooth" })`)
     await page.waitForTimeout(800)
     box = await target.boundingBox()
@@ -328,6 +337,21 @@ async function clickLike(
   await page.waitForTimeout(200)
 }
 
+/** Wheels down over the pointer in small steps, like a hand on a mouse wheel,
+ *  until `done` holds for the target's box (at most 40 steps). */
+async function wheelUntil(
+  page: Page,
+  target: Locator,
+  done: (box: Box) => boolean,
+) {
+  for (let i = 0; i < 40; i++) {
+    const box = await target.boundingBox()
+    if (box && done(box)) return
+    await page.mouse.wheel(0, 25)
+    await page.waitForTimeout(40)
+  }
+}
+
 async function typeLike(
   page: Page,
   pointer: { x: number; y: number },
@@ -340,11 +364,12 @@ async function typeLike(
 
 function contextFor(
   browser: Browser,
-  viewport = SIZE,
+  viewport = VIEW,
 ): Promise<BrowserContext> {
   return browser.newContext({
     viewport,
-    deviceScaleFactor: 2,
+    // Screenshots and screencast frames come out at twice the 1280×800 frame.
+    deviceScaleFactor: ZOOM * 2,
     timezoneId: "Europe/Berlin",
     locale: "en-US",
     colorScheme: "dark",
@@ -388,7 +413,7 @@ async function still(
   browser: Browser,
   url: string,
   file: string,
-  viewport = SIZE,
+  viewport = VIEW,
 ) {
   const ctx = await contextFor(browser, viewport)
   try {
@@ -459,7 +484,7 @@ async function recordBooking(
     await page.waitForLoadState("networkidle")
     await page.waitForTimeout(1200)
     await timeline.say("Booked, without signing up for anything")
-    await moveLike(page, pointer, { x: 1180, y: 640 })
+    await moveLike(page, pointer, { x: 680, y: 400 })
     await page.waitForTimeout(1800)
     await timeline.end()
     await rec.stop()
@@ -499,28 +524,31 @@ async function recordMail(
     await page.locator("iframe[data-demo-ready]").first().waitFor({
       timeout: 30_000,
     })
-    await page.waitForTimeout(600)
+    const email = page.locator("iframe[data-demo-ready]").first()
+    await page.waitForTimeout(800)
+    // Mailpit's narrow layout puts the email under its headers: wheel it up into view.
+    await moveLike(page, pointer, { x: 420, y: 300 })
+    await wheelUntil(page, email, (b) => b.y <= 70)
+    await page.waitForTimeout(400)
     await timeline.say("It has the time, the meeting link and a cancel link")
     await page.waitForTimeout(2500)
     // The invite is listed at the bottom, so this caption sits at the top.
     await timeline.say("A calendar invite comes attached", true)
-    await clickLike(
-      page,
-      pointer,
-      page.getByRole("button", { name: /Show attachment details/ }).filter({
-        visible: true,
-      }),
-    )
-    await page.getByText("meeting.ics").filter({ visible: true }).first()
-      .waitFor()
+    const details = page.getByRole("button", {
+      name: /Show attachment details/,
+    }).filter({
+      visible: true,
+    })
+    await wheelUntil(page, details, (b) => b.y + b.height <= VIEW.height - 40)
+    await clickLike(page, pointer, details)
+    const invite = page.getByText("meeting.ics").filter({ visible: true })
+      .first()
+    await invite.waitFor()
     await page.waitForTimeout(300)
-    // The message pane scrolls on its own: wheel over it in small steps.
-    for (let i = 0; i < 12; i++) {
-      await page.mouse.wheel(0, 25)
-      await page.waitForTimeout(40)
-    }
+    await moveLike(page, pointer, { x: 600, y: 200 })
+    await wheelUntil(page, invite, (b) => b.y <= VIEW.height - 170)
     await page.waitForTimeout(600)
-    await moveLike(page, pointer, { x: 1180, y: 420 })
+    await moveLike(page, pointer, { x: 680, y: 250 })
     await page.waitForTimeout(1800)
     await timeline.end()
     await rec.stop()

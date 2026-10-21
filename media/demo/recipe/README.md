@@ -47,6 +47,12 @@ Europe/Berlin. Nothing leaves the machine.
 
 4. Commit `media/demo/` (the take stays out of git).
 
+## Readable when small
+
+The pages are recorded at 720×450 CSS pixels and drawn 1.78 times larger into
+the 1280×800 frame, so their text stays readable where the video plays about 528
+px wide (antonshubin.com/tools/mig). Captions stay at 64 characters or fewer.
+
 ## What the encoder checks
 
 It refuses to write the video when a caption leaves the screen before it can be
