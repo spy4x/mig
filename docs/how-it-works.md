@@ -59,8 +59,8 @@ admin UI.
 ![The guest's confirmation email: subject "Booking confirmed", the meeting's date and time in Berlin time, the meeting link, a note about the attached calendar invite, and a cancel link.](screenshots/email-confirmation.png)
 _The confirmation email the guest receives, with the `.ics` invite attached._
 
-`deno task screenshots` regenerates the demo video and this picture from
-placeholder data.
+`deno task screenshots` regenerates this picture from placeholder data; the demo
+video has its own recipe in `media/demo/recipe/`.
 
 ## Architecture
 
