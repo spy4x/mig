@@ -34,3 +34,6 @@ _fresh.bak/
 
 # Playwright MCP browser output
 .playwright-mcp/
+
+# The demo video's last raw take (media/demo/recipe/README.md)
+media/demo/take/

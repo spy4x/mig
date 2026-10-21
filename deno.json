@@ -12,7 +12,9 @@
     "smoke:binary": "deno run -A scripts/smoke-binary.ts",
     "typecheck": "deno check",
     "screenshots": "deno run -A --node-modules-dir=none --no-lock scripts/screenshots.ts",
-    "embed:check": "deno run -A --node-modules-dir=none --no-lock scripts/embed-check.ts"
+    "embed:check": "deno run -A --node-modules-dir=none --no-lock scripts/embed-check.ts",
+    "demo-video": "deno task build && deno run -A --node-modules-dir=none --no-lock media/demo/recipe/record.ts",
+    "demo-video:encode": "deno run -A --node-modules-dir=none --no-lock media/demo/recipe/encode.ts"
   },
   "lint": {
     "rules": {

@@ -99,6 +99,7 @@ src/
 ├── components/              — server-side Preact components (no hydration); PickerCalendar wires
 │                              the library's Calendar to the picker links; Header: SiteHeader, BrandMark
 ├── scripts/screenshots.ts   — writes the README pictures (see "Screenshots")
+├── media/demo/              — the demo video, its captions and music; recipe/ remakes it (see "Demo video")
 ├── scripts/embed-check.ts   — /embed in a real browser, with and without JS
 ├── scripts/local-app.ts     — SMTP sink + server helpers for both scripts
 └── data/.gitkeep            — runtime mount point
@@ -196,6 +197,8 @@ deno task check        # fmt + lint + type-check
 deno task test         # unit tests
 deno task compile      # build + deno compile (binary.ts) → ./mig
 deno task smoke:binary # start ./mig and check it serves pages
+deno task demo-video   # build, record and encode the demo video → media/demo/
+deno task demo-video:encode # re-encode media/demo/ from the last raw take
 ```
 
 ## Screenshots
@@ -204,15 +207,14 @@ deno task smoke:binary # start ./mig and check it serves pages
 deno task build && deno task screenshots
 ```
 
-`scripts/screenshots.ts` writes only the pictures in use: the README's two under
-`docs/screenshots/` (the booking-flow GIF, shown first under the title, and the
-confirmation email in a dark mail-client frame) and `docs/social-preview.png`,
-which the owner uploads by hand in the GitHub repository settings. The social
-preview's hero, the dark booking page, is taken into the throwaway directory,
-not the repository. The pictures are placeholders only: "Jane Doe", example.com
-addresses and Europe/Berlin, never real data, so rerunning the command is always
-safe to commit. How the email's mail-client frame is built is in
-`.claude/skills/email-screenshot-frame/SKILL.md`.
+`scripts/screenshots.ts` writes only the pictures in use: the README's
+confirmation email in a dark mail-client frame (`docs/screenshots/`) and
+`docs/social-preview.png`, which the owner uploads by hand in the GitHub
+repository settings. The social preview's hero, the dark booking page, is taken
+into the throwaway directory, not the repository. The pictures are placeholders
+only: "Jane Doe", example.com addresses and Europe/Berlin, never real data, so
+rerunning the command is always safe to commit. How the email's mail-client
+frame is built is in `.claude/skills/email-screenshot-frame/SKILL.md`.
 
 It serves the existing `_fresh/` build on a free port with a throwaway data file
 and its own in-process SMTP sink, so the booking it makes succeeds and no mail
@@ -220,13 +222,8 @@ leaves the machine. Chromium maps `meet.example.com` to that server and every
 other host name to nothing. Browser time zone and locale are fixed
 (`Europe/Berlin`, `en-US`), never the machine's own; the picked date is the
 first full weekday after today, so the dates in the pictures move with the day
-the command runs. The booking-flow GIF is recorded in the dark theme, the
-README's default; headless Chromium records no cursor, so the script draws its
-own pointer into the page (`pointerScript`, re-run on every page load and
-remembering its position in `sessionStorage`), glides it along eased paths and
-shows a ripple on each click. The recording is trimmed to the first painted page
-and encoded at a steady 20 fps. The GIF needs `ffmpeg` (otherwise it keeps the
-WebM), and PNGs over 400 KB are quantised with ImageMagick when it is installed.
+the command runs. PNGs over 400 KB are quantised with ImageMagick when it is
+installed.
 
 Playwright is pinned inside the script (`npm:playwright@1.63.0`), not in
 `deno.json`'s imports: it is a dev-only tool outside the dependency budget. The
@@ -234,7 +231,24 @@ task runs with `--node-modules-dir=none --no-lock`, so neither `node_modules`
 nor `deno.lock` changes. It launches Playwright 1.63.0's own Chromium build from
 `~/.cache/ms-playwright`; install it once with
 `deno run -A --node-modules-dir=none --no-lock npm:playwright@1.63.0 install chromium`
-(Chromium 1243 plus Playwright's ffmpeg for the video) if it is missing.
+(Chromium 1243) if it is missing.
+
+## Demo video
+
+```bash
+deno task demo-video
+```
+
+`media/demo/` holds the one canonical demo video (`demo.webm`, `demo.mp4`), its
+posters, `captions.vtt` (the burned-in captions and the transcript other sites
+read), `music.opus` and `MUSIC.md`. The README shows `poster.webp` linked to
+https://antonshubin.com/tools/mig; other sites copy these files at a pinned
+commit and never re-record. `media/demo/recipe/README.md` has the steps and
+requirements: the recorder books a meeting on the built app against a throwaway
+Mailpit container, with the same placeholder data as the screenshots, and the
+encoder (`deno task demo-video:encode`, runnable alone from the last raw take in
+the gitignored `media/demo/take/`) adds the cards, captions and music. Remake it
+after a change to the booking page, the confirmation page or the email.
 
 ## Embed browser check
 

@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The README opens with a still of the new demo video, linked to the video: a
+  booking from the calendar to the confirmation email, with captions and quiet
+  music. The video, its captions and the recipe that remakes it live in
+  `media/demo/`; the old silent booking-flow GIF is gone.
+
 ## [2.1.1] - 2026-10-20
 
 ### Fixed
