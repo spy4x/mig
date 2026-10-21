@@ -13,7 +13,7 @@ only if you want to talk) · [Self-hosting](docs/self-hosting.md) ·
 [Configuration](docs/configuration.md) · [Embedding](docs/embedding.md) ·
 [How it works](docs/how-it-works.md) · [Changelog](CHANGELOG.md)
 
-[![Demo video, 48 seconds: a guest picks a day and 15:30 in the calendar, types a name and an email, confirms and lands on "You're booked"; then the confirmation email with its calendar invite opens. Opens the video on antonshubin.com.](media/demo/poster.webp)](https://antonshubin.com/tools/mig)
+[![Demo video, 49 seconds: a guest picks a day and 15:30 in the calendar, types a name and an email, confirms and lands on "You're booked"; then the confirmation email with its calendar invite opens. Opens the video on antonshubin.com.](media/demo/poster.webp)](https://antonshubin.com/tools/mig)
 
 </div>
 
