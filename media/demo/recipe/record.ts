@@ -495,6 +495,10 @@ async function recordMail(
     await clickLike(page, pointer, row)
     await page.waitForURL(new RegExp(`/view/${messageId}`))
     await page.waitForLoadState("networkidle")
+    // The email's preview frame stays hidden until it has loaded (HIDE_BLANK_IFRAMES).
+    await page.locator("iframe[data-demo-ready]").first().waitFor({
+      timeout: 30_000,
+    })
     await page.waitForTimeout(600)
     await timeline.say("It has the time, the meeting link and a cancel link")
     await page.waitForTimeout(2500)
