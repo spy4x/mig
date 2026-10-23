@@ -34,6 +34,7 @@
     "@spy4x/integrations": "jsr:@spy4x/integrations@1.80.0",
     "@spy4x/net": "jsr:@spy4x/net@1.80.0",
     "@spy4x/server": "jsr:@spy4x/server@1.80.0",
+    "@spy4x/caldav": "jsr:@spy4x/caldav@1.91.0",
     "@spy4x/preact-signals": "jsr:@spy4x/preact-signals@8.6.0",
     "@spy4x/preact-ui": "jsr:@spy4x/preact-ui@8.6.0",
     "@spy4x/preact-system": "jsr:@spy4x/preact-system@8.6.0",

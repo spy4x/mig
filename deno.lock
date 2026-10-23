@@ -15,14 +15,17 @@
     "jsr:@libs/qrcode@3.1.0": "3.1.0",
     "jsr:@negrel/http-ece@0.7.0": "0.7.0",
     "jsr:@negrel/webpush@0.5.0": "0.5.0",
+    "jsr:@spy4x/caldav@1.91.0": "1.91.0",
     "jsr:@spy4x/email@1.80.0": "1.80.0",
     "jsr:@spy4x/email@^1.80.0": "1.80.0",
     "jsr:@spy4x/integrations@1.80.0": "1.80.0",
     "jsr:@spy4x/net@1.80.0": "1.80.0",
-    "jsr:@spy4x/net@^1.80.0": "1.80.0",
+    "jsr:@spy4x/net@^1.80.0": "1.91.0",
+    "jsr:@spy4x/net@^1.91.0": "1.91.0",
     "jsr:@spy4x/platform@1.79.0": "1.79.0",
     "jsr:@spy4x/platform@1.80.0": "1.80.0",
-    "jsr:@spy4x/platform@^1.80.0": "1.80.0",
+    "jsr:@spy4x/platform@^1.80.0": "1.91.0",
+    "jsr:@spy4x/platform@^1.91.0": "1.91.0",
     "jsr:@spy4x/preact-cn@^8.6.0": "8.6.0",
     "jsr:@spy4x/preact-icons@8.6.0": "8.6.0",
     "jsr:@spy4x/preact-icons@^8.6.0": "8.6.0",
@@ -35,11 +38,13 @@
     "jsr:@spy4x/server@1.80.0": "1.80.0",
     "jsr:@spy4x/time@1.79.0": "1.79.0",
     "jsr:@spy4x/time@1.80.0": "1.80.0",
-    "jsr:@spy4x/time@^1.79.0": "1.80.0",
+    "jsr:@spy4x/time@^1.79.0": "1.91.0",
     "jsr:@spy4x/time@^1.80.0": "1.80.0",
+    "jsr:@spy4x/time@^1.91.0": "1.91.0",
     "jsr:@spy4x/validation@1.79.0": "1.79.0",
     "jsr:@spy4x/validation@^1.79.0": "1.80.0",
     "jsr:@spy4x/validation@^1.80.0": "1.80.0",
+    "jsr:@spy4x/validation@^1.91.0": "1.91.0",
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/bytes@1": "1.0.6",
     "jsr:@std/bytes@^1.0.6": "1.0.6",
@@ -205,6 +210,15 @@
         "jsr:@std/encoding@1"
       ]
     },
+    "@spy4x/caldav@1.91.0": {
+      "integrity": "6e46d212db50e8c960821ca0d33d48fe6e86b813250e637fe9c382d95673fe03",
+      "dependencies": [
+        "jsr:@spy4x/net@^1.91.0",
+        "jsr:@spy4x/platform@^1.91.0",
+        "jsr:@spy4x/time@^1.91.0",
+        "jsr:@std/encoding@1.0.11"
+      ]
+    },
     "@spy4x/email@1.80.0": {
       "integrity": "96230c826ad09424ee1d9d6f811f8ebd50e060ddf8cdfc635c2cabbfbfe77009",
       "dependencies": [
@@ -227,6 +241,9 @@
     "@spy4x/net@1.80.0": {
       "integrity": "cf9140b0267cb7bfeac88e2577b0eae7cef0d3c1842d2b03eaf2bb9775dae350"
     },
+    "@spy4x/net@1.91.0": {
+      "integrity": "2d4789d5bbe5b918d7e578408c2b407abc4144e04cc398364ce53414eacf7118"
+    },
     "@spy4x/platform@1.79.0": {
       "integrity": "b2d1b727860980d3e219876eac1e58bf107b0fbac1bd74869a5d045908744907",
       "dependencies": [
@@ -244,6 +261,21 @@
         "jsr:@spy4x/net@^1.80.0",
         "jsr:@spy4x/time@^1.80.0",
         "jsr:@spy4x/validation@^1.80.0",
+        "jsr:@std/crypto",
+        "jsr:@std/encoding@1.0.11",
+        "jsr:@std/path@1.1.6",
+        "jsr:@std/ulid",
+        "jsr:@std/uuid@1.1.2",
+        "npm:arktype@2.2.3"
+      ]
+    },
+    "@spy4x/platform@1.91.0": {
+      "integrity": "6f4658214f429d610de3fa573742489b16bd0b937e4a3ccdb7c688dd23ad0f76",
+      "dependencies": [
+        "jsr:@hono/hono",
+        "jsr:@spy4x/net@^1.91.0",
+        "jsr:@spy4x/time@^1.91.0",
+        "jsr:@spy4x/validation@^1.91.0",
         "jsr:@std/crypto",
         "jsr:@std/encoding@1.0.11",
         "jsr:@std/path@1.1.6",
@@ -335,6 +367,9 @@
     "@spy4x/time@1.80.0": {
       "integrity": "46f9cf55dbe6a5842847d0f9b9c1ee10875aa53ef541f5c7a65b062fb5e3a12e"
     },
+    "@spy4x/time@1.91.0": {
+      "integrity": "db82633aa82deb84ce874d5d377b16fcffb85b5ed459290d12e36499f7bde9e5"
+    },
     "@spy4x/validation@1.79.0": {
       "integrity": "f30422f2e093dd48301dfc689bd6b964192b66546dd6d179acbae62c40ec44ca",
       "dependencies": [
@@ -343,6 +378,12 @@
     },
     "@spy4x/validation@1.80.0": {
       "integrity": "bde4e2bcaab9a6beb6eb8412e695a4e62f109691035d2f5ca85f674707028545",
+      "dependencies": [
+        "npm:arktype@2.2.3"
+      ]
+    },
+    "@spy4x/validation@1.91.0": {
+      "integrity": "06efaae0d49269509ba1e187f11ae8edf4ce10784951f2abf8189d2282682728",
       "dependencies": [
         "npm:arktype@2.2.3"
       ]
@@ -1796,6 +1837,7 @@
     "dependencies": [
       "jsr:@fresh/core@^2.3.3",
       "jsr:@fresh/plugin-vite@^1.0.8",
+      "jsr:@spy4x/caldav@1.91.0",
       "jsr:@spy4x/email@1.80.0",
       "jsr:@spy4x/integrations@1.80.0",
       "jsr:@spy4x/net@1.80.0",
