@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Every booking can land in your own CalDAV calendar, such as a Stalwart
+  "Meetings" calendar, and cancelling it from either link deletes the event. Set
+  `CALDAV_CALENDAR_URL`, `CALDAV_USERNAME` and `CALDAV_PASSWORD` to turn it on.
+  If the calendar cannot be reached, the booking still goes through and your
+  "New booking" email says the event was not added.
+
 ### Changed
 
 - The README opens with a still of the new demo video, linked to the video: a

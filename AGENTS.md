@@ -86,6 +86,7 @@ src/
 │   ├── cancel-token.ts      — whose cancel link (guest's or owner's) a token is
 │   ├── email.ts             — email content; sending via @spy4x/email
 │   ├── notify.ts            — ntfy pushes (client: @spy4x/integrations), NTFY_MODE
+│   ├── calendar.ts          — booking → owner's CalDAV calendar, CALDAV_* (client: @spy4x/caldav)
 │   ├── invite.ts            — booking → .ics invite (writer: @spy4x/time/ics)
 │   ├── clock.ts             — mig's zone labels, slot instants (zone helpers: @spy4x/time/tz)
 │   ├── validators.ts        — shared arktype schema for booking submission (email: @spy4x/platform)
@@ -126,6 +127,7 @@ src/
   input predicates, `Result`), `@spy4x/email` (SMTP sender, HTML shell),
   `@spy4x/integrations` (ntfy client), `@spy4x/net` (bounded request body),
   `@spy4x/server` (`loadConfig`, the startup error's per-variable reasons),
+  `@spy4x/caldav` (the CalDAV client that writes the owner's calendar),
   `@spy4x/preact-signals` (the theme store and its first-paint script) and the
   design-system packages `@spy4x/preact-ui` (`Button`, `Card`, `BrandMark`,
   `ThemeToggle`, `Notice`, `EmptyState`, `ErrorState`, `Field`, `Input`,
