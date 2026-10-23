@@ -9,6 +9,7 @@ import { ConfigError, loadConfig } from "@spy4x/server/config"
 import { formatConfigIssues } from "./config-issue.ts"
 import { parseAddress } from "@spy4x/email/address"
 import { MIN_SECRET_LENGTH } from "@spy4x/platform/tokens"
+import { isAllowedCalendarUrl } from "./calendar.ts"
 import type { Config } from "./types.ts"
 
 // @spy4x/platform/tokens refuses a secret that is shorter than 32
@@ -31,6 +32,15 @@ const SmtpFrom = type("string").narrow((value) => {
     return false
   }
 })
+
+// mig#139: the owner's calendar. Empty means unset; the three are set
+// together or not at all (checked in parseConfig: loadConfig takes no
+// cross-field rule on a schema whose fields convert their values).
+const CalDavCalendarUrl = type("string").narrow((value) =>
+  value === "" || isAllowedCalendarUrl(value)
+)
+// HTTP Basic cannot carry a username with a colon (RFC 7617).
+const CalDavUsername = type("string").narrow((value) => !value.includes(":"))
 
 // A variable read from the environment as a string, converted by `parse`
 // and then checked against `rule`. `Number` is what `z.coerce.number()`
@@ -98,6 +108,9 @@ const ConfigSchema = type({
   HIDE_BRANDING: converted(toBoolean, type("boolean")),
   GITHUB_URL: "string.url",
   MIG_VERSION: converted((raw) => raw.trim(), type("string <= 64")),
+  CALDAV_CALENDAR_URL: CalDavCalendarUrl,
+  CALDAV_USERNAME: CalDavUsername,
+  CALDAV_PASSWORD: "string",
 })
 
 // What a variable is when the operator leaves it unset or blank. The
@@ -119,6 +132,9 @@ const DEFAULTS: Record<string, string> = {
   // --build-arg (see AGENTS.md "Build version"). Defaults to "dev" so
   // local `deno task dev` always shows something sensible.
   MIG_VERSION: "dev",
+  CALDAV_CALENDAR_URL: "",
+  CALDAV_USERNAME: "",
+  CALDAV_PASSWORD: "",
 }
 
 function loadEnv(): Record<string, string> {
@@ -181,6 +197,21 @@ function parseConfig(): Config {
     Deno.exit(1)
   }
 
+  // mig#139: the calendar needs all three settings. Fixed wording, never
+  // a value: CALDAV_PASSWORD may be the one that is set.
+  const caldavSet = [
+    r.CALDAV_CALENDAR_URL,
+    r.CALDAV_USERNAME,
+    r.CALDAV_PASSWORD,
+  ].filter((value) => value !== "").length
+  if (caldavSet !== 0 && caldavSet !== 3) {
+    console.error(
+      "mig: CALDAV_*: set CALDAV_CALENDAR_URL, CALDAV_USERNAME and " +
+        "CALDAV_PASSWORD together, or none of them",
+    )
+    Deno.exit(1)
+  }
+
   // Parse availability + blocked dates (throw on bad syntax). Both throw a
   // ConfigSyntaxError (lib/availability.ts) whose `.message` already names
   // the entry's position and a value-free reason — never the raw value.
@@ -223,6 +254,11 @@ function parseConfig(): Config {
       pass: r.SMTP_PASSWORD,
       from: r.SMTP_FROM,
       allowPlaintext: r.SMTP_ALLOW_PLAINTEXT,
+    },
+    caldav: r.CALDAV_CALENDAR_URL === "" ? undefined : {
+      calendarUrl: r.CALDAV_CALENDAR_URL,
+      username: r.CALDAV_USERNAME,
+      password: r.CALDAV_PASSWORD,
     },
     cancelSecret: r.CANCEL_SECRET,
     port: r.PORT,
