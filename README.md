@@ -34,7 +34,8 @@ I built it for my own site and book my calls through it at
 - **Both clocks, everywhere.** Guests see times in their own time zone. Your
   emails show your time and the guest's side by side.
 - **Invite and cancel built in.** Every confirmation carries an `.ics` invite
-  and a signed cancel link. Optional push notifications through NTFY.
+  and a signed cancel link. Optional push notifications through NTFY, and every
+  booking written straight into your CalDAV calendar.
 - **No stranger's text in the guest's inbox.** Anyone can type any address into
   the form, so mail to that address says only when the meeting is, with whom,
   where and how to cancel. The name, the notes and the cancel reason reach you
@@ -96,8 +97,9 @@ mig requires STARTTLS from the SMTP relay on every port but 465. For a relay
 without TLS on the same host or a private network, set
 `SMTP_ALLOW_PLAINTEXT=true`.
 
-Blocked dates, notice period, booking horizon, rate limit, theme, branding and
-NTFY are optional: see [configuration.md](docs/configuration.md).
+Blocked dates, notice period, booking horizon, rate limit, theme, branding, NTFY
+and your CalDAV calendar (`CALDAV_CALENDAR_URL`, `CALDAV_USERNAME`,
+`CALDAV_PASSWORD`) are optional: see [configuration.md](docs/configuration.md).
 
 ## Embed it
 

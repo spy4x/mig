@@ -24,6 +24,9 @@ services:
     # SELinux.
     volumes:
       - ./data:/data:z
+    # Optional: CALDAV_CALENDAR_URL, CALDAV_USERNAME and CALDAV_PASSWORD
+    # in .env write every booking into your CalDAV calendar (all three or
+    # none; see .env.example and docs/configuration.md).
     env_file:
       - .env
     healthcheck:

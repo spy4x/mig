@@ -5,6 +5,7 @@ import { cancelTokenHolder } from "../../lib/cancel-token.ts"
 import { capRedirectField, readBoundedForm } from "../../lib/book.ts"
 import { sendCancellationEmails } from "../../lib/email.ts"
 import { notifyBookingCancelled } from "../../lib/notify.ts"
+import { removeBookingFromCalendar } from "../../lib/calendar.ts"
 import { NOTES_MAX_LENGTH } from "../../lib/validators.ts"
 
 /** The reason as it is stored and mailed to the owner: trimmed and cut
@@ -91,6 +92,10 @@ export const handler = define.handlers({
     if (!sent.ok) {
       console.error("mig: cancellation email failed:", sent.error)
     }
+
+    // mig#139: take the event out of the owner's calendar. A failure is
+    // logged and pushed by lib/calendar.ts and never stops the cancel.
+    await removeBookingFromCalendar(cfg, updated)
 
     // NTFY push for the cancellation (subject to NTFY_MODE).
     await notifyBookingCancelled(cfg, updated, cancelledBy, reason)

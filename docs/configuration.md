@@ -32,7 +32,10 @@ or malformed required variable stops the process.
 | `NTFY_URL`             | no       | —       | NTFY server base URL (e.g. `https://ntfy.example.com`). All four NTFY vars must be set to enable.                                                                                                                                                        |
 | `NTFY_TOPIC`           | no       | —       | NTFY topic to publish to.                                                                                                                                                                                                                                |
 | `NTFY_TOKEN`           | no       | —       | NTFY bearer token.                                                                                                                                                                                                                                       |
-| `NTFY_MODE`            | no       | `all`   | Which events push: `all`, `errors`, `booking`, or `cancel`.                                                                                                                                                                                              |
+| `NTFY_MODE`            | no       | `all`   | Which events push: `all`, `errors`, `booking`, or `cancel`. `errors` covers failed emails and failed calendar writes.                                                                                                                                    |
+| `CALDAV_CALENDAR_URL`  | no       | —       | Full URL of the CalDAV calendar every booking is written to, such as a "Meetings" calendar. `https://`, or `http://` on localhost only, with no username or password in it. Set all three `CALDAV_*` or none.                                            |
+| `CALDAV_USERNAME`      | no       | —       | CalDAV login. No colon.                                                                                                                                                                                                                                  |
+| `CALDAV_PASSWORD`      | no       | —       | CalDAV password; an app password is best. Never logged, mailed or shown.                                                                                                                                                                                 |
 
 `DATA_PATH` (where bookings are stored) and `MIG_VERSION` (the version shown in
 the footer) are described in [`.env.example`](../.env.example).
@@ -59,3 +62,21 @@ on both ends. Comma-separated, whitespace tolerant.
 01.01.2027-10.01.2027                    # a date range
 01.01.2027-10.01.2027,04.07.2027        # range + single
 ```
+
+## The owner's calendar (CalDAV)
+
+With `CALDAV_CALENDAR_URL`, `CALDAV_USERNAME` and `CALDAV_PASSWORD` set, mig
+writes every new booking into that calendar as an event named after the guest,
+with the guest's address, notes, the meeting link and your cancel link in its
+description. Cancelling the booking, from either cancel link, deletes the event.
+
+The calendar URL is the calendar collection itself, not the server's root: on
+Stalwart, `https://mail.example.com/dav/cal/<account>/<calendar id>/`. A
+dedicated calendar keeps bookings apart from your own events.
+
+A calendar failure never stops a booking or a cancellation. mig logs it, and
+your "New booking" email says the event was not added, so you can add it from
+the attached `.ics` file; an ntfy push goes out too when ntfy is set up. mig
+does not retry. The event carries no organizer or attendees, so a calendar
+server that sends invitations itself (Stalwart does) never mails the guest a
+second one.

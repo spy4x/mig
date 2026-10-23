@@ -817,3 +817,77 @@ Deno.test("config: an invalid THEME lists the accepted values", async () => {
   const { stderr } = await runConfig({ ...VALID_ENV, THEME: "blue" })
   assertStringIncludes(stderr, '  THEME: must be "auto", "dark" or "light"')
 })
+
+// mig#139: the owner's CalDAV calendar, all three settings or none.
+const CALDAV_ENV = {
+  CALDAV_CALENDAR_URL: "https://dav.example.com/dav/cal/jane/meetings/",
+  CALDAV_USERNAME: "jane@example.com",
+  CALDAV_PASSWORD: "CALDAV-PASSWORD-MARKER-p4",
+}
+
+Deno.test("config: the three CALDAV_* settings together turn the calendar on", async () => {
+  const value = await runConfigField({ ...VALID_ENV, ...CALDAV_ENV }, "caldav")
+  assertEquals(value, {
+    calendarUrl: CALDAV_ENV.CALDAV_CALENDAR_URL,
+    username: CALDAV_ENV.CALDAV_USERNAME,
+    password: CALDAV_ENV.CALDAV_PASSWORD,
+  })
+})
+
+Deno.test("config: no CALDAV_* setting leaves the calendar off", async () => {
+  assertEquals(await runConfigField(VALID_ENV, "caldav ?? null"), null)
+})
+
+Deno.test("config: two of the three CALDAV_* settings stop startup, naming all three", async () => {
+  for (const left of Object.keys(CALDAV_ENV)) {
+    const env: Record<string, string> = { ...VALID_ENV, ...CALDAV_ENV }
+    delete env[left]
+    const { code, stderr } = await runConfig(env)
+    assertEquals(code, 1, left)
+    assertStringIncludes(
+      stderr,
+      "mig: CALDAV_*: set CALDAV_CALENDAR_URL, CALDAV_USERNAME and CALDAV_PASSWORD together, or none of them",
+    )
+    assertRawValueNotLeaked(stderr, "CALDAV-PASSWORD-MARKER")
+  }
+})
+
+Deno.test("config: a CALDAV_CALENDAR_URL on plain http, or with a login in it, stops startup", async () => {
+  for (
+    const url of [
+      "http://dav.example.com/dav/cal/jane/",
+      "https://jane:URL-PASSWORD-MARKER@dav.example.com/dav/cal/jane/",
+    ]
+  ) {
+    const { code, stderr } = await runConfig({
+      ...VALID_ENV,
+      ...CALDAV_ENV,
+      CALDAV_CALENDAR_URL: url,
+    })
+    assertEquals(code, 1, url)
+    assertStringIncludes(
+      stderr,
+      "  CALDAV_CALENDAR_URL: must be an https:// URL",
+    )
+    assertRawValueNotLeaked(stderr, "URL-PASSWORD-MARKER")
+  }
+})
+
+Deno.test("config: a CALDAV_CALENDAR_URL on http://localhost is accepted", async () => {
+  const value = await runConfigField({
+    ...VALID_ENV,
+    ...CALDAV_ENV,
+    CALDAV_CALENDAR_URL: "http://localhost:8080/dav/cal/jane/",
+  }, "caldav.calendarUrl")
+  assertEquals(value, "http://localhost:8080/dav/cal/jane/")
+})
+
+Deno.test("config: a CALDAV_USERNAME with a colon stops startup", async () => {
+  const { code, stderr } = await runConfig({
+    ...VALID_ENV,
+    ...CALDAV_ENV,
+    CALDAV_USERNAME: "jane:x",
+  })
+  assertEquals(code, 1)
+  assertStringIncludes(stderr, "  CALDAV_USERNAME: must not contain a colon")
+})
