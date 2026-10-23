@@ -135,10 +135,11 @@ export function sendOwnerBookingEmail(
   config: Config,
   booking: Booking,
   cancelUrl: string,
+  opts: BookingEmailOpts = {},
 ): Promise<SendOutcome> {
   return buildAndSend(
     config,
-    () => buildBookingEmails(config, booking, cancelUrl).owner,
+    () => buildBookingEmails(config, booking, cancelUrl, opts).owner,
   )
 }
 
@@ -297,10 +298,19 @@ function correctionHtml(
 // HTML or the invite (mig#108). The owner's mails keep all three.
 const GUEST_GREETING = "Hello,"
 
+/** What the owner's "New booking" email says besides the booking. */
+export interface BookingEmailOpts {
+  /** The event could not be written to the owner's CalDAV calendar
+   *  (lib/calendar.ts, mig#139): the email says so, so the owner adds it
+   *  from the attached invite. */
+  calendarFailed?: boolean
+}
+
 export function buildBookingEmails(
   config: Config,
   booking: Booking,
   cancelUrl: string,
+  opts: BookingEmailOpts = {},
 ): RecipientEmails {
   const guestTz = guestTimeZone(booking)
   const guestIcs = inviteAttachment(
@@ -341,8 +351,8 @@ export function buildBookingEmails(
     owner: {
       to: config.hostEmail,
       subject: `New booking: ${booking.guestName} on ${ownerWhen}`,
-      text: ownerText(config, booking, cancelUrl),
-      html: ownerHtml(config, booking, cancelUrl),
+      text: ownerText(config, booking, cancelUrl, opts),
+      html: ownerHtml(config, booking, cancelUrl, opts),
       attachments: [ownerIcs],
     },
   }
@@ -508,10 +518,16 @@ function guestHtml(
   )
 }
 
+// mig#139: the line the owner's email carries when the calendar write
+// failed. Fixed text: the failure's own detail goes to the log and ntfy.
+const CALENDAR_FAILED_TEXT =
+  "This booking was NOT added to your calendar. Add it from the attached .ics file."
+
 function ownerText(
   _config: Config,
   booking: Booking,
   cancelUrl: string,
+  opts: BookingEmailOpts,
 ): string {
   const lines = [
     `New booking received.`,
@@ -534,6 +550,9 @@ function ownerText(
     `Booked at: ${
       formatClockShortAt(new Date(booking.createdAt), booking.hostTz)
     }`,
+  )
+  if (opts.calendarFailed) lines.push("", CALENDAR_FAILED_TEXT)
+  lines.push(
     "",
     `Cancel: ${cancelUrl}`,
     "",
@@ -546,6 +565,7 @@ function ownerHtml(
   config: Config,
   booking: Booking,
   cancelUrl: string,
+  opts: BookingEmailOpts,
 ): string {
   const notesHtml = booking.notes?.trim()
     ? `<tr><td style="padding:4px 12px 4px 0;color:#94a3b8">Notes</td>
@@ -580,6 +600,7 @@ function ownerHtml(
       esc(formatClockShortAt(new Date(booking.createdAt), booking.hostTz))
     }</td></tr>
     </table>
+    ${opts.calendarFailed ? `<p>${esc(CALENDAR_FAILED_TEXT)}</p>` : ""}
     <p><a href="${
       esc(cancelUrl)
     }" style="color:${LINK_COLOR}">Cancel this booking</a></p>
