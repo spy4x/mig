@@ -60,7 +60,7 @@ Deno.test("a refused form shows its message in the details step", () => {
       selectedDate="2027-01-04"
       selectedSlot="09:30"
       slots={[{ time: "09:30", available: true }]}
-      error="Please enter a valid email."
+      error="Enter an email address like name@example.com."
     />,
   )
   assertFalse(section(html, "step-time").includes('role="alert"'))
@@ -203,7 +203,7 @@ Deno.test("without JavaScript, a page opened on a step starts with focus on its 
   }
 })
 
-Deno.test("a server message about one field shows under it, focused, with no notice", () => {
+Deno.test("a server message about one field shows under it, marked invalid and focused, with no notice", () => {
   for (const field of ["name", "email", "notes"] as const) {
     const html = renderToString(
       <BookingFlow
@@ -222,6 +222,13 @@ Deno.test("a server message about one field shows under it, focused, with no not
     )?.[0]
     assert(control, `${field}: expected the control`)
     assert(/\bautofocus\b/.test(control), `${field}: ${control}`)
+    // The library's preset draws the danger border on `aria-invalid`.
+    assert(control.includes('aria-invalid="true"'), `${field}: ${control}`)
+    assertEquals(
+      details.match(/aria-invalid="true"/g)?.length,
+      1,
+      `${field}: only that field is marked invalid`,
+    )
     const describedBy = control.match(/aria-describedby="([^"]*)"/)?.[1]
     assert(describedBy, `${field}: the message describes the control`)
     const message = details.match(

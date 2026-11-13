@@ -1,5 +1,7 @@
 import { assertEquals } from "@std/assert"
 import { BookingSchema } from "./validators.ts"
+import { TIME_ZONE_UNREADABLE } from "./field-messages.ts"
+import { validateBooking } from "../islands/BookingSubmit.tsx"
 
 // mig#3: BookingSchema moved from Zod to arktype. These cover the field
 // checks that previously had no direct test — bad email, missing fields,
@@ -28,13 +30,43 @@ Deno.test("booking validator allows missing visitor timezone", () => {
   assertEquals(BookingSchema.safeParse(validBooking).success, true)
 })
 
-Deno.test("booking validator rejects unknown visitor timezone", () => {
+Deno.test("booking validator rejects unknown visitor timezone in plain words", () => {
   const result = BookingSchema.safeParse({
     ...validBooking,
     guestTz: "Not/A_Timezone",
   })
 
   assertEquals(result.success, false)
+  if (!result.success) {
+    assertEquals(result.error.issues[0]?.message, TIME_ZONE_UNREADABLE)
+  }
+})
+
+// mig#125: the submit button and the server word each name and email
+// mistake the same way, so a visitor never sees two messages for one.
+Deno.test("booking validator words each name and email mistake as the submit button does", () => {
+  const cases: [field: "name" | "email", name: string, email: string][] = [
+    ["name", "", "visitor@example.com"],
+    ["name", " J ", "visitor@example.com"],
+    ["name", "x".repeat(101), "visitor@example.com"],
+    ["email", "Visitor", ""],
+    ["email", "Visitor", "   "],
+    ["email", "Visitor", "not-an-email"],
+    ["email", "Visitor", "visitor@"],
+  ]
+  for (const [field, name, email] of cases) {
+    const server = BookingSchema.safeParse({ ...validBooking, name, email })
+    const client = validateBooking(name, email)
+    assertEquals(server.success, false, `${field}: ${name} / ${email}`)
+    if (!server.success) {
+      assertEquals(server.error.issues[0]?.path, [field])
+      assertEquals(
+        server.error.issues[0]?.message,
+        client[field],
+        `${field}: ${name} / ${email}`,
+      )
+    }
+  }
 })
 
 Deno.test("booking validator rejects a bad email with the visitor-facing message", () => {
@@ -47,7 +79,7 @@ Deno.test("booking validator rejects a bad email with the visitor-facing message
   if (!result.success) {
     assertEquals(
       result.error.issues[0]?.message,
-      "Please enter a valid email.",
+      "Enter an email address like name@example.com.",
     )
   }
 })
@@ -185,7 +217,7 @@ Deno.test("booking validator: name and email both invalid — name's message win
 
   assertEquals(result.success, false)
   if (!result.success) {
-    assertEquals(result.error.issues[0]?.message, "Please enter your name.")
+    assertEquals(result.error.issues[0]?.message, "Enter your name.")
   }
 })
 
@@ -251,7 +283,7 @@ Deno.test("booking validator: name is trimmed before the min-length check too", 
 
   assertEquals(result.success, false)
   if (!result.success) {
-    assertEquals(result.error.issues[0]?.message, "Please enter your name.")
+    assertEquals(result.error.issues[0]?.message, "Enter your name.")
   }
 })
 
@@ -267,7 +299,7 @@ Deno.test("booking validator: guestTz canonicalizes a legacy alias (Japan -> Asi
   }
 })
 
-Deno.test("booking validator: guestTz over 100 chars is rejected with the Zod-parity message", () => {
+Deno.test("booking validator says the time zone could not be read for a guestTz over 100 characters, never the raw limit", () => {
   const result = BookingSchema.safeParse({
     ...validBooking,
     guestTz: "A".repeat(101),
@@ -275,10 +307,7 @@ Deno.test("booking validator: guestTz over 100 chars is rejected with the Zod-pa
 
   assertEquals(result.success, false)
   if (!result.success) {
-    assertEquals(
-      result.error.issues[0]?.message,
-      "String must contain at most 100 character(s)",
-    )
+    assertEquals(result.error.issues[0]?.message, TIME_ZONE_UNREADABLE)
   }
 })
 
@@ -308,7 +337,7 @@ Deno.test("booking validator rejects a too-short name with the visitor-facing me
 
   assertEquals(result.success, false)
   if (!result.success) {
-    assertEquals(result.error.issues[0]?.message, "Please enter your name.")
+    assertEquals(result.error.issues[0]?.message, "Enter your name.")
   }
 })
 

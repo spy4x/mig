@@ -104,3 +104,15 @@ export function forcedThemeFor(
   if (parsed !== "auto") return parsed
   return configured === "auto" ? null : configured
 }
+
+/** Whether `<html>` renders the library's `THEME_AUTO_ATTRIBUTE`, so a
+ *  visitor without JavaScript on a dark system gets the dark palette.
+ *  Only when nothing forces a theme and the owner's `THEME` is `auto`:
+ *  on a `THEME=light` or `THEME=dark` site the script paints the owner's
+ *  choice, and the marker would follow the system instead. */
+export function followsSystemWithoutScript(
+  forcedTheme: "light" | "dark" | null,
+  configured: ThemeParam,
+): boolean {
+  return forcedTheme === null && parseThemeParam(configured) === "auto"
+}

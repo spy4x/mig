@@ -112,6 +112,27 @@ async function fillForm(
   await frame.locator(`${FORM} button[type="submit"]`).click({ force })
 }
 
+/** Whether the page body is drawn dark: the lightness of its
+ *  background, whatever colour syntax the browser reports, under 0.3. */
+const PAINTS_DARK = `(() => {
+  const c = document.createElement("canvas").getContext("2d")
+  c.fillStyle = getComputedStyle(document.body).backgroundColor
+  c.fillRect(0, 0, 1, 1)
+  const [r, g, b] = c.getImageData(0, 0, 1, 1).data
+  return (r + g + b) / 3 / 255 < 0.3
+})()`
+
+/** Whether the email field's border is the theme's danger colour. */
+const EMAIL_BORDER_IS_DANGER = `(() => {
+  const probe = document.createElement("div")
+  probe.style.color = "var(--color-danger)"
+  document.body.append(probe)
+  const danger = getComputedStyle(probe).color
+  probe.remove()
+  const email = document.querySelector('${FORM} input[name="email"]')
+  return email !== null && getComputedStyle(email).borderTopColor === danger
+})()`
+
 /** The parent page: frames /embed and sizes it from `mig:height`,
  *  keeping every reported height in `window.heights`. */
 function parentPage(src: string): string {
@@ -275,6 +296,8 @@ async function withoutJavaScript(browser: Browser, local: string, smtp: {
     javaScriptEnabled: false,
     timezoneId: VISITOR_TZ,
     locale: "en-US",
+    // mig#125: a dark system gets the dark palette with no script.
+    colorScheme: "dark",
     viewport: { width: 800, height: 900 },
   })
   try {
@@ -292,6 +315,19 @@ async function withoutJavaScript(browser: Browser, local: string, smtp: {
       new URL(page.url()).pathname === "/embed",
       "without JavaScript, links stay under /embed",
     )
+    check(
+      await page.evaluate(PAINTS_DARK) === true,
+      "without JavaScript, a dark system gets the dark palette",
+    )
+    const slotUrl = page.url()
+    await page.goto(
+      `${slotUrl}&field=email&err=${encodeURIComponent("Enter your email.")}`,
+    )
+    check(
+      await page.evaluate(EMAIL_BORDER_IS_DANGER) === true,
+      "a field the server rejected draws the danger border",
+    )
+    await page.goto(slotUrl)
     const before = smtp.mails.length
     await fillForm(page, "Jane Roe", "jane.roe@example.com", true)
     await page.waitForURL(/\/embed\/confirmed\?/, { timeout: 30_000 })

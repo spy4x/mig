@@ -1,7 +1,9 @@
 import { SEOHead } from "@spy4x/preact-system/seo-head"
 import { buttonClasses } from "@spy4x/preact-ui/button"
+import { THEME_AUTO_ATTRIBUTE } from "@spy4x/preact-signals/theme"
 import { define } from "../lib/utils.ts"
 import {
+  followsSystemWithoutScript,
   forcedThemeFor,
   pageHasNoThemeToggle,
   themeScript,
@@ -31,6 +33,11 @@ export default define.page(function App({ Component, state, url }) {
     `${cfg.hostName} — ${cfg.slotDurationMin}-minute video call. Pick a time that works for you.`
   const canonical = new URL(url.pathname, cfg.publicUrl).toString()
   const forcedTheme = forcedThemeFor(url, cfg.theme)
+  // Dark on a dark system before, or without, any script (mig#125). The
+  // theme script removes it as its first statement.
+  const autoMarker = followsSystemWithoutScript(forcedTheme, cfg.theme)
+    ? { [THEME_AUTO_ATTRIBUTE]: "" }
+    : {}
 
   return (
     <html
@@ -42,6 +49,7 @@ export default define.page(function App({ Component, state, url }) {
       // attribute.
       data-theme="ink"
       data-forced-theme={forcedTheme ?? undefined}
+      {...autoMarker}
       // mig#44 review: the meta color-scheme tag below stays "light
       // dark" (the page's default supported schemes); this inline
       // style is what actually pins native UI — scrollbars, form
@@ -87,7 +95,9 @@ export default define.page(function App({ Component, state, url }) {
         <style
           dangerouslySetInnerHTML={{
             __html:
-              `html{background:${CANVAS_LIGHT}}html.dark{background:${CANVAS_DARK}}body{margin:0}`,
+              `html{background:${CANVAS_LIGHT}}html.dark{background:${CANVAS_DARK}}` +
+              `@media (prefers-color-scheme:dark){html[${THEME_AUTO_ATTRIBUTE}]{background:${CANVAS_DARK}}}` +
+              `body{margin:0}`,
           }}
         />
         {
