@@ -65,9 +65,16 @@
   --color-primary-muted: var(--color-accent-900);
 }
 
-/* The dark ring is the step ink and the default dark palette both use. */
+/* The dark ring is the step ink and the default dark palette both use.
+   The same under the no-JavaScript marker (`data-theme-auto`, routes/
+   _app.tsx) on a dark system, where the library's dark tokens apply too. */
 .dark {
   --color-primary-muted: var(--color-accent-400);
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme-auto] {
+    --color-primary-muted: var(--color-accent-400);
+  }
 }
 
 @layer base {

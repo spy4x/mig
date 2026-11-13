@@ -255,6 +255,46 @@ Deno.test("App: only /embed pages render a theme script that follows a live OS c
   }
 })
 
+// ─── mig#125: dark mode without JavaScript ─────────────────────────
+
+Deno.test("App: THEME=auto marks <html> so a dark system is dark without JavaScript", () => {
+  for (
+    const path of [
+      "/",
+      "/confirmed",
+      "/cancel",
+      "/nope",
+      "/embed",
+      "/embed?theme=auto",
+    ]
+  ) {
+    const html = renderToString(<App {...fakeAppProps(path)} />)
+    assert(htmlTag(html).includes("data-theme-auto"), path)
+    // The canvas before the stylesheet arrives follows the marker too.
+    assert(
+      html.includes("html[data-theme-auto]{background:#080b10}"),
+      `${path}: dark canvas under the marker`,
+    )
+  }
+})
+
+Deno.test("App: no marker when a theme is forced or THEME is light or dark", () => {
+  const cases: [string, Config["theme"]][] = [
+    ["/embed?theme=light", "auto"],
+    ["/embed?theme=dark", "auto"],
+    ["/", "light"],
+    ["/", "dark"],
+    ["/embed", "light"],
+  ]
+  for (const [path, theme] of cases) {
+    const tag = htmlTag(renderToString(<App {...fakeAppProps(path, theme)} />))
+    assertFalse(
+      tag.includes("data-theme-auto"),
+      `${path} THEME=${theme}: ${tag}`,
+    )
+  }
+})
+
 // ─── mig#119: the house palettes ────────────────────────────────────
 
 Deno.test("App: every page opts into the library's ink dark palette, forced or not", () => {
