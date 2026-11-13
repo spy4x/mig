@@ -1,7 +1,8 @@
 // Optional NTFY notifier. Pushes are gated by NTFY_MODE:
 //
-//   all     (default) → push on booking success, cancellation, email fail
-//   errors            → push only on email-send failures
+//   all     (default) → push on booking success, cancellation, email or
+//                       calendar failure
+//   errors            → push only on email-send and calendar failures
 //   booking           → push only on successful bookings
 //   cancel            → push only on cancellations
 //
@@ -229,5 +230,45 @@ export function notifyBookingEmailFailed(
     tags: rolledBack
       ? ["mig", "email-failed", "warning"]
       : ["mig", "email-failed", "rollback-failed", "warning"],
+  })
+}
+
+/** Which calendar call failed: writing a new booking's event, or deleting
+ *  a cancelled (or rolled-back) booking's event. */
+export type CalendarAction = "add" | "remove"
+
+// mig#139: a failed CalDAV write or delete (lib/calendar.ts). The booking
+// or cancellation itself went through; only the owner's calendar is out
+// of step, so the push says what to fix by hand. `error` is
+// lib/calendar.ts's log line, which never carries the password.
+export function notifyCalendarFailed(
+  config: Config,
+  booking: Booking,
+  action: CalendarAction,
+  error: string,
+): Promise<void> {
+  if (!isEventEnabled("error")) return Promise.resolve()
+  const add = action === "add"
+  return notify({
+    severity: NotificationSeverity.Failure,
+    title: add
+      ? `mig: not in calendar - ${booking.guestName}`
+      : `mig: still in calendar - ${booking.guestName}`,
+    message: [
+      add
+        ? `mig: a booking for ${booking.guestName} was made, but it could ` +
+          `not be added to ${config.hostName}'s calendar. Add it from the ` +
+          `.ics file in the "New booking" email.`
+        : `mig: a booking for ${booking.guestName} is gone, but its event ` +
+          `could not be deleted from ${config.hostName}'s calendar. ` +
+          `Delete it by hand.`,
+      "",
+      `Error: ${error}`,
+      "",
+      `Guest:  ${booking.guestName} <${booking.guestEmail}>`,
+      `When:   ${ownerWhenLabel(booking)}`,
+    ].join("\n"),
+    priority: 4,
+    tags: ["mig", "calendar-failed", "warning"],
   })
 }

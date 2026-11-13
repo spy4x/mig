@@ -23,6 +23,9 @@ const FIXED_MESSAGES: Record<string, string> = {
   CANCEL_SECRET:
     "must be at least 32 printable ASCII characters, not counting spaces at either end",
   SMTP_FROM: "must be an address or Name <address>, with no control characters",
+  CALDAV_CALENDAR_URL:
+    "must be an https:// URL (http:// only on localhost), with no username or password in it",
+  CALDAV_USERNAME: "must not contain a colon",
 }
 
 /** Renders the issues of a `ConfigError` as startup-log lines, one per

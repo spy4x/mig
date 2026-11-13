@@ -25,6 +25,7 @@ import { futureWeekday } from "./test-dates.ts"
 import { setTransportForTesting } from "./email.ts"
 import { handleBookingSubmit } from "./book.ts"
 import { tempDataFile } from "./test-temp.ts"
+import { fakeCalDav, TEST_CALDAV } from "./test-caldav.ts"
 import { addDays, isoDateInTz } from "@spy4x/time/tz"
 
 // ─── Fixtures ──────────────────────────────────────────────────────
@@ -2191,4 +2192,124 @@ Deno.test("a failure that is not about a form field names no field", async () =>
     assert(url.searchParams.get("err"), slot)
     assertEquals(url.searchParams.get("field"), null, slot)
   }
+})
+
+// ─── The owner's calendar (mig#139) ──────────────────────────────────
+
+/** Records every mail as `to`, text and HTML, and resolves at once. */
+function mailRecorder(
+  sent: Array<{ to: string; text: string; html: string }>,
+): SmtpTransport {
+  return {
+    sendMail(message) {
+      sent.push({
+        to: String(message.to),
+        text: String(message.text ?? ""),
+        html: String(message.html ?? ""),
+      })
+      return Promise.resolve({})
+    },
+  }
+}
+
+async function bookWithCalendar(
+  caldav: Config["caldav"],
+): Promise<{ res: Response; bookings: BookingsStore }> {
+  const cfg = { ...fakeConfig(), caldav }
+  // The store answers list() from memory, so its data file can go as
+  // soon as this returns.
+  await using file = await tempDataFile()
+  const bookings = new BookingsStore({ filePath: file.path })
+  await bookings.init()
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    fields: validFields(futureWeekday(3, HOST_TZ), "09:00", {
+      name: "Sam Guest",
+      notes: "Talk about the roadmap",
+    }),
+  })
+  return { res: await handleBookingSubmit(ctx, ""), bookings }
+}
+
+const CALENDAR_FAILED_LINE = "This booking was NOT added to your calendar."
+
+Deno.test("mig#139: a booking writes its event to the owner's calendar under the booking's id", async () => {
+  const sent: Array<{ to: string; text: string; html: string }> = []
+  setTransportForTesting(mailRecorder(sent))
+  using dav = fakeCalDav()
+  try {
+    const { res, bookings } = await bookWithCalendar(TEST_CALDAV)
+    assertStringIncludes(locationPath(res), "/confirmed?")
+    const [booking] = bookings.list()
+    assertEquals(
+      dav.requests.map((r) => `${r.method} ${r.url}`),
+      [`PUT ${TEST_CALDAV.calendarUrl}${booking.id}.ics`],
+    )
+    const ics = dav.requests[0].body.replace(/\r\n[ \t]/g, "")
+    assertStringIncludes(ics, "Sam Guest")
+    assertStringIncludes(ics, "Talk about the roadmap")
+    const owner = sent.find((m) => m.to === "jane@example.com")
+    assert(owner, "owner mail")
+    assertFalse(owner.text.includes(CALENDAR_FAILED_LINE), owner.text)
+  } finally {
+    setTransportForTesting(defaultTransport())
+  }
+})
+
+Deno.test("mig#139: a failed calendar write still books, and the owner's email says the event was not added", async () => {
+  const sent: Array<{ to: string; text: string; html: string }> = []
+  setTransportForTesting(mailRecorder(sent))
+  using _dav = fakeCalDav(() => new Response(null, { status: 503 }))
+  try {
+    let result: { res: Response; bookings: BookingsStore } | undefined
+    const logged = await captureConsoleError(async () => {
+      result = await bookWithCalendar(TEST_CALDAV)
+    })
+    assertStringIncludes(locationPath(result!.res), "/confirmed?")
+    assertEquals(result!.bookings.list().length, 1)
+    const owner = sent.find((m) => m.to === "jane@example.com")
+    const guest = sent.find((m) => m.to === "visitor@example.com")
+    assert(owner && guest, "both mails sent")
+    assertStringIncludes(owner.text, CALENDAR_FAILED_LINE)
+    assertStringIncludes(owner.html, CALENDAR_FAILED_LINE)
+    assertFalse(guest.text.includes(CALENDAR_FAILED_LINE), guest.text)
+    assertFalse(
+      JSON.stringify(logged).includes(TEST_CALDAV.password),
+      "password logged",
+    )
+  } finally {
+    setTransportForTesting(defaultTransport())
+  }
+})
+
+Deno.test("mig#139: a booking rolled back after a failed email takes its event out of the calendar", async () => {
+  setTransportForTesting(failingTransport("SMTP send failed (mig#139 test)"))
+  using dav = fakeCalDav((request) =>
+    request.method === "GET"
+      ? new Response("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n", {
+        status: 200,
+        headers: { ETag: '"etag-1"' },
+      })
+      : new Response(null, { status: request.method === "PUT" ? 201 : 204 })
+  )
+  try {
+    let result: { res: Response; bookings: BookingsStore } | undefined
+    await captureConsoleError(async () => {
+      result = await bookWithCalendar(TEST_CALDAV)
+    })
+    assertEquals(result!.bookings.list().length, 0)
+    assertEquals(dav.requests.map((r) => r.method), ["PUT", "GET", "DELETE"])
+    assertEquals(dav.requests[0].url, dav.requests[2].url)
+  } finally {
+    setTransportForTesting(defaultTransport())
+  }
+})
+
+Deno.test("mig#139: without CalDAV settings a booking sends no calendar request", async () => {
+  using dav = fakeCalDav()
+  const { res } = await bookWithCalendar(undefined)
+  assertStringIncludes(locationPath(res), "/confirmed?")
+  assertEquals(dav.requests.length, 0)
 })

@@ -20,6 +20,7 @@ import { tempDataFile } from "../../lib/test-temp.ts"
 import { NOTES_MAX_LENGTH } from "../../lib/validators.ts"
 import { handleBookingSubmit, MAX_BOOKING_BODY_BYTES } from "../../lib/book.ts"
 import { futureWeekday } from "../../lib/test-dates.ts"
+import { fakeCalDav, TEST_CALDAV } from "../../lib/test-caldav.ts"
 
 const SECRET = "fake-cancel-secret-only-for-tests"
 
@@ -605,4 +606,63 @@ Deno.test("mig#113: the cancel redirect keeps id and token whole and caps their 
   const long = await post("i".repeat(5000), "t".repeat(5000))
   assertEquals(long.searchParams.get("id"), "i".repeat(100))
   assertEquals(long.searchParams.get("token"), "t".repeat(100))
+})
+
+// mig#139: the owner's calendar.
+function calendarAnswer(request: { method: string }): Response {
+  return request.method === "GET"
+    ? new Response("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n", {
+      status: 200,
+      headers: { ETag: '"etag-1"' },
+    })
+    : new Response(null, { status: 204 })
+}
+
+Deno.test("mig#139: cancelling from either link deletes the booking's calendar event", async () => {
+  for (const holder of ["guest", "owner"] as const) {
+    await using file = await tempDataFile()
+    try {
+      const { state, id, guestLink, ownerLink } = await bookThroughRoute(
+        file.path,
+      )
+      state.config = { ...state.config, caldav: TEST_CALDAV }
+      using dav = fakeCalDav(calendarAnswer)
+
+      await cancelWith(state, holder === "guest" ? guestLink : ownerLink)
+
+      assertEquals(state.bookings.get(id)?.status, "cancelled", holder)
+      const objectUrl = `${TEST_CALDAV.calendarUrl}${id}.ics`
+      assertEquals(
+        dav.requests.map((r) => `${r.method} ${r.url}`),
+        [`GET ${objectUrl}`, `DELETE ${objectUrl}`],
+        holder,
+      )
+    } finally {
+      setTransportForTesting({ sendMail: () => Promise.resolve({}) })
+    }
+  }
+})
+
+Deno.test("mig#139: a failed calendar delete still cancels the booking and mails both", async () => {
+  await using file = await tempDataFile()
+  const originalError = console.error
+  console.error = () => {}
+  try {
+    const { state, id, guestLink, mails } = await bookThroughRoute(file.path)
+    state.config = { ...state.config, caldav: TEST_CALDAV }
+    using _dav = fakeCalDav(() => new Response(null, { status: 500 }))
+
+    const res = await cancelWith(state, guestLink)
+
+    assertEquals(res.status, 303)
+    assertEquals(
+      new URL(res.headers.get("location")!).searchParams.get("cancelled"),
+      "1",
+    )
+    assertEquals(state.bookings.get(id)?.status, "cancelled")
+    assertEquals(mails.length, 2)
+  } finally {
+    console.error = originalError
+    setTransportForTesting({ sendMail: () => Promise.resolve({}) })
+  }
 })

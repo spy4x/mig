@@ -13,7 +13,7 @@ only if you want to talk) · [Self-hosting](docs/self-hosting.md) ·
 [Configuration](docs/configuration.md) · [Embedding](docs/embedding.md) ·
 [How it works](docs/how-it-works.md) · [Changelog](CHANGELOG.md)
 
-![A visitor books a meeting: picks a date in the calendar, picks 15:30, types a name and email, confirms, and lands on the "You're booked" page.](docs/screenshots/booking-flow.gif)
+[![Demo video, 49 seconds: a guest picks a day and 15:30 in the calendar, types a name and an email, confirms and lands on "You're booked"; then the confirmation email with its calendar invite opens. Opens the video on antonshubin.com.](media/demo/poster.webp)](https://antonshubin.com/tools/mig)
 
 </div>
 
@@ -34,7 +34,8 @@ I built it for my own site and book my calls through it at
 - **Both clocks, everywhere.** Guests see times in their own time zone. Your
   emails show your time and the guest's side by side.
 - **Invite and cancel built in.** Every confirmation carries an `.ics` invite
-  and a signed cancel link. Optional push notifications through NTFY.
+  and a signed cancel link. Optional push notifications through NTFY, and every
+  booking written straight into your CalDAV calendar.
 - **No stranger's text in the guest's inbox.** Anyone can type any address into
   the form, so mail to that address says only when the meeting is, with whom,
   where and how to cancel. The name, the notes and the cancel reason reach you
@@ -56,7 +57,7 @@ day.
 # compose.yml
 services:
   mig:
-    image: antonshubin/mig:v2.1.1
+    image: antonshubin/mig:v2.2.0
     restart: unless-stopped
     ports: ["8080:8080"]
     volumes: ["./data:/data:z"]
@@ -96,8 +97,9 @@ mig requires STARTTLS from the SMTP relay on every port but 465. For a relay
 without TLS on the same host or a private network, set
 `SMTP_ALLOW_PLAINTEXT=true`.
 
-Blocked dates, notice period, booking horizon, rate limit, theme, branding and
-NTFY are optional: see [configuration.md](docs/configuration.md).
+Blocked dates, notice period, booking horizon, rate limit, theme, branding, NTFY
+and your CalDAV calendar (`CALDAV_CALENDAR_URL`, `CALDAV_USERNAME`,
+`CALDAV_PASSWORD`) are optional: see [configuration.md](docs/configuration.md).
 
 ## Embed it
 

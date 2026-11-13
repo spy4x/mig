@@ -18,6 +18,11 @@ import {
   sendOwnerBookingEmail,
 } from "./email.ts"
 import { notifyBookingEmailFailed, notifyBookingSucceeded } from "./notify.ts"
+import {
+  addBookingToCalendar,
+  CalendarOutcome,
+  removeBookingFromCalendar,
+} from "./calendar.ts"
 import { clientIp, humanRetry } from "@spy4x/platform/rate-limit/client-ip"
 import { EARLIEST_DATE } from "./clock.ts"
 import { isDateOpen, offeredSlots } from "./availability.ts"
@@ -380,10 +385,16 @@ export async function handleBookingSubmit(
   // the failure branch below knows whether it needs to correct that
   // email rather than just roll the booking back silently.
   const cancelUrl = cancelLink(cfg.publicUrl, bookingId, tokenRaw)
+  const ownerCancelUrl = cancelLink(cfg.publicUrl, bookingId, ownerTokenRaw)
+  // mig#139: the event goes into the owner's calendar before the owner's
+  // email, so that email can say when it did not. A calendar failure
+  // never stops the booking (lib/calendar.ts).
+  const calendar = await addBookingToCalendar(cfg, booking, ownerCancelUrl)
   const ownerSent = await sendOwnerBookingEmail(
     cfg,
     booking,
-    cancelLink(cfg.publicUrl, bookingId, ownerTokenRaw),
+    ownerCancelUrl,
+    { calendarFailed: calendar === CalendarOutcome.Failed },
   )
   const ownerEmailSucceeded = ownerSent.ok
   const sent = ownerSent.ok
@@ -423,6 +434,12 @@ export async function handleBookingSubmit(
     // already logs its own failures and bounds its retries to a few
     // seconds, so awaiting it adds latency but no new failure mode.
     await notifyBookingEmailFailed(cfg, booking, msg, { rolledBack })
+    // The guest never got a confirmation, so the meeting is off whether
+    // or not the rollback's own write held: take its event back out of
+    // the owner's calendar too.
+    if (calendar === CalendarOutcome.Done) {
+      await removeBookingFromCalendar(cfg, booking)
+    }
     // mig#19 review round 3: the owner's "New booking" email (and
     // calendar invite) already went out above — correct it, since the
     // NTFY push just above is optional and off unless NTFY_* is

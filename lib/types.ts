@@ -62,6 +62,14 @@ export interface Config {
      *  every port but 465, which uses implicit TLS. */
     allowPlaintext?: boolean
   }
+  /** The owner's CalDAV calendar (`CALDAV_*`, mig#139), where each
+   *  booking is written as an event. Absent: no calendar is written. */
+  caldav?: {
+    /** The calendar collection's full URL. */
+    calendarUrl: string
+    username: string
+    password: string
+  }
   cancelSecret: string
   port: number
   dataPath: string

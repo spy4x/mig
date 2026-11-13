@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-23
+
+### Added
+
+- Every booking can land in your own CalDAV calendar, such as a Stalwart
+  "Meetings" calendar, and cancelling it from either link deletes the event. Set
+  `CALDAV_CALENDAR_URL`, `CALDAV_USERNAME` and `CALDAV_PASSWORD` to turn it on.
+  If the calendar cannot be reached, the booking still goes through and your
+  "New booking" email says the event was not added.
+
+### Changed
+
+- The README opens with a still of the new demo video, linked to the video: a
+  booking from the calendar to the confirmation email, with captions and quiet
+  music. The video, its captions and the recipe that remakes it live in
+  `media/demo/`; the old silent booking-flow GIF is gone.
+
 ## [2.1.1] - 2026-10-20
 
 ### Fixed
@@ -665,7 +682,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v2.1.1...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/spy4x/mig/compare/v2.1.1...v2.2.0
 [2.1.1]: https://github.com/spy4x/mig/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/spy4x/mig/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/spy4x/mig/compare/v1.0.0...v2.0.0
