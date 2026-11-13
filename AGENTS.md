@@ -144,14 +144,17 @@ src/
   `--color-primary-muted` after the theme's `@import` lines, and nothing else.
   Neutrals are the library's: cool gray in light, the ink palette in dark
   (`<html data-theme="ink">` on every page, so `.dark` alone switches it;
-  /embed's forced theme is `data-forced-theme`). Fonts are Geist, self-hosted in
-  `static/fonts/`. The emails' links are `#46bba5`. A page background is
-  `bg-canvas`, a card is `bg-surface`; never write the library's purple or gray
-  classes in mig's own markup.
+  /embed's forced theme is `data-forced-theme`). When `THEME` is `auto` and no
+  theme is forced, `<html>` also carries `data-theme-auto`, so a dark system
+  gets the dark palette without JavaScript; every value mig sets on `.dark` is
+  set for that marker under `prefers-color-scheme: dark` too. Fonts are Geist,
+  self-hosted in `static/fonts/`. The emails' links are `#46bba5`. A page
+  background is `bg-canvas`, a card is `bg-surface`; never write the library's
+  purple or gray classes in mig's own markup.
 - **One `@preact/signals`.** `@spy4x/preact-signals` (and every other
-  `@spy4x/preact-*` package, at 8.x) imports `npm:@preact/signals@^2.5.1`. A
-  second copy next to mig's own hooks into Preact twice and server rendering
-  throws "Cycle detected", so `deno.json` maps that specifier to mig's
+  `@spy4x/preact-*` package, at 14.x) imports `npm:@preact/signals` with no
+  version. A second copy next to mig's own hooks into Preact twice and server
+  rendering throws "Cycle detected", so `deno.json` maps that specifier to mig's
   `@preact/signals`. Bumping `@spy4x/preact-signals` means checking which
   version it now imports and moving that mapping with it.
 - **Concurrency:** every mutation goes through `bookings.mutate()` which
