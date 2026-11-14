@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-11-13
+
+### Fixed
+
+- With JavaScript off, the booking page follows the system's dark or light
+  setting instead of always showing light.
+- A field the server refuses now gets the red danger border, not only its
+  message.
+- Each mistake in the booking form is worded the same whether the browser or the
+  server catches it.
+
 ## [2.2.0] - 2026-10-23
 
 ### Added
@@ -682,7 +693,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/spy4x/mig/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/spy4x/mig/compare/v2.1.1...v2.2.0
 [2.1.1]: https://github.com/spy4x/mig/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/spy4x/mig/compare/v2.0.0...v2.1.0
