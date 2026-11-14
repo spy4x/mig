@@ -6,12 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [2.2.1] - 2026-11-13
+## [2.2.1] - 2026-11-14
 
 ### Fixed
 
-- With JavaScript off, the booking page follows the system's dark or light
-  setting instead of always showing light.
+- With JavaScript off, a site on `THEME=auto` (the default) now follows the
+  system's dark or light setting instead of always showing light.
 - A field the server refuses now gets the red danger border, not only its
   message.
 - Each mistake in the booking form is worded the same whether the browser or the
