@@ -216,7 +216,9 @@ export async function handleBookingSubmit(
     date: form.get("date"),
     slot: form.get("slot"),
     guestTz: form.get("guestTz") || undefined,
-    website: form.get("website") ?? "",
+    // No default: the form always renders the field, so a post without it
+    // came from a bot that never loaded the page, and validation refuses it.
+    website: form.get("website"),
   })
   if (!parsed.success) {
     const issue = parsed.error.issues[0]
