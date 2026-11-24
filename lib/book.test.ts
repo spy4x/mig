@@ -812,6 +812,28 @@ Deno.test('handleBookingSubmit: honeypot under "" redirects to /confirmed', asyn
   assertEquals(bookings.list().length, 0, "honeypot must not create a booking")
 })
 
+Deno.test("handleBookingSubmit: a post without the honeypot field books nothing and mails no one", async () => {
+  const cfg = fakeConfig()
+  await using file = await tempDataFile()
+  const bookings = new BookingsStore({ filePath: file.path })
+  await bookings.init()
+  const date = futureWeekday(3, HOST_TZ)
+  const { website: _omitted, ...fields } = validFields(date, "09:00")
+  const ctx = stubContext({
+    config: cfg,
+    bookings,
+    rateLimiter: new MemoryRateLimiter({ windowMs: 300_000, limit: 10 }),
+    fields,
+  })
+
+  const res = await handleBookingSubmit(ctx, "")
+  assertEquals(
+    bookings.list().length,
+    0,
+    `a bot that posts without loading the form must not book (status ${res.status})`,
+  )
+})
+
 Deno.test("handleBookingSubmit: a honeypot of only spaces is rejected like any other filled one", async () => {
   const cfg = fakeConfig()
   await using file = await tempDataFile()
