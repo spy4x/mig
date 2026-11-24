@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-11-24
+
+### Security
+
+- A booking post without the hidden `website` field is now refused, so a bot
+  that posts straight to `/api/book` or `/embed/book` without loading the form
+  can no longer make mig mail a confirmation to any address.
+
 ## [2.2.1] - 2026-11-14
 
 ### Fixed
@@ -693,7 +701,8 @@ and a Debian-based Docker image published to `antonshubin/mig` on Docker Hub. A
 single-binary deploy via `deno compile` was also available as an alternative to
 the container.
 
-[Unreleased]: https://github.com/spy4x/mig/compare/v2.2.1...HEAD
+[Unreleased]: https://github.com/spy4x/mig/compare/v2.2.2...HEAD
+[2.2.2]: https://github.com/spy4x/mig/compare/v2.2.1...v2.2.2
 [2.2.1]: https://github.com/spy4x/mig/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/spy4x/mig/compare/v2.1.1...v2.2.0
 [2.1.1]: https://github.com/spy4x/mig/compare/v2.1.0...v2.1.1
